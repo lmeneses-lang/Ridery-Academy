@@ -8,7 +8,7 @@ module.exports = async (req, res) => {
   try {
     const body = req.body || {};
     if (body.accion === 'aspirante') {
-      const asp = await H.loginAspirante(store, body);
+      const asp = await H.loginAspirante(store, body, cripto);
       return responder(res, 200, { token: firmar({ rol: 'aspirante', id: asp._id }, 30), aspirante: H.vistaAspirante(asp) });
     }
     if (body.accion === 'admin') {

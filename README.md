@@ -9,16 +9,16 @@ Una plataforma de e-learning para aspirantes a agentes de CX. Funciona aparte de
 
 La página abre con dos opciones.
 
-**Postúlate** (público, sin código). Sirve como filtro:
+**Postúlate** (público, sin registro previo). Sirve como filtro:
 
 1. La persona deja sus datos: nombre, cédula, ciudad, correo y teléfono.
 2. Responde el test de perfil de selección simple. Cada opción suma puntos a una o varias células.
 3. Al enviar, ve en qué célula encaja y termina ahí. Si hay empate o nadie llega al mínimo, se le dice que su perfil será revisado.
 4. La postulación queda en el panel, en **Postulaciones → Por revisar**.
 
-**En el panel** abres la postulación, revisas los puntajes y la apruebas eligiendo **célula** y **cohorte**, o la descartas. El código de la cohorte es su **código de acceso**. El botón "Copiar mensaje con su acceso" te arma el texto para enviárselo por WhatsApp.
+**En el panel** abres la postulación, revisas los puntajes y la apruebas eligiendo su **célula** y creándole un **usuario** (por defecto, su cédula) y una **contraseña** (botón Generar), o la descartas. Al aprobar te aparece el mensaje con su acceso para copiarlo y enviarlo por WhatsApp. La contraseña se guarda cifrada y no se puede volver a ver: si la olvida, le generas una nueva desde su ficha.
 
-**Soy aspirante** (solo personas aprobadas). Entran con su cédula y su código de acceso, y ven:
+**Soy aspirante** (solo personas aprobadas). Entran con su usuario y contraseña, y ven:
 
 1. El **tronco común** y después **solo los módulos de su célula**. Los módulos se desbloquean en orden.
 2. **Lecciones** con video de YouTube, texto e imágenes. Hay que ver el 90% del video y adelantarlo no cuenta.
@@ -67,10 +67,11 @@ Usa **3 funciones serverless**. El tope de Vercel Hobby es 12.
    - las 10 células;
    - 5 preguntas del test;
    - 4 módulos;
-   - la cohorte `CX-2026-10`.
 6. Las postulaciones se ven en `/admin.html` → **Postulaciones**.
 
 ## Marca
+
+- **Logo:** `img/logo-512.png`, con versiones para la pestaña del navegador (`favicon.ico`, `favicon-64.png`) y para el ícono en el celular (`apple-touch-icon.png`).
 
 Sigue el manual de Ridery:
 
@@ -88,14 +89,14 @@ Todo está en variables al inicio de `css/styles.css`.
 | Rol | Puede |
 |---|---|
 | Admin | Todo: contenido, test, ajustes y usuarios |
-| Reclutador | Postulaciones (aprobar, descartar, agregar aspirantes), cohortes y métricas |
+| Reclutador | Postulaciones (aprobar, descartar, agregar aspirantes y darles acceso) y métricas |
 | Calidad | Ver postulaciones, aspirantes y métricas, sin editar |
 
 Las claves se guardan cifradas (scrypt) y no se pueden volver a ver: si alguien la olvida, le pones una nueva. Si desactivas o eliminas una cuenta, esa persona pierde el acceso en su siguiente acción.
 
 ## Agregar aspirantes a mano
 
-En **Postulaciones → Agregar aspirante** registras a alguien sin que haga el test (referidos o reingresos). Queda aprobado con la célula y cohorte que elijas, y entra por "Soy aspirante" con su cédula y el código de la cohorte.
+En **Postulaciones → Agregar aspirante** registras a alguien sin que haga el test (referidos o reingresos). Queda aprobado con la célula, el usuario y la contraseña que le asignes, y entra por "Soy aspirante".
 
 ## Imágenes con Lightshot
 
@@ -107,7 +108,7 @@ En **Postulaciones → Agregar aspirante** registras a alguien sin que haga el t
 
 Abre `index.html?demo=1` o `admin.html?demo=1` para probar todo sin base de datos. Los datos quedan solo en tu navegador.
 
-En la demo existe un aspirante ya aprobado (cédula `12345678`, código `CX-2026-10`) para ver la formación directamente.
+En la demo existe un aspirante ya aprobado (usuario `demo`, contraseña `demo1234`) para ver la formación directamente.
 
 Si no lo quieres en producción, borra la línea `<script src="js/demo.js">` de los dos HTML.
 

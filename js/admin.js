@@ -10,12 +10,12 @@
   const A = { usuario: null, celulas: [], reglas: {}, cohortes: [], tab: 'aspirantes', filtros: { q: '', cohorte: '', celula: '', estado: 'postulado' }, celContenido: H.COMUN, aspirantes: [] };
   const TABS = [
     ['aspirantes', 'Postulaciones', 'users'], ['test', 'Test de perfil', 'list'], ['contenido', 'Contenido', 'book'],
-    ['cohortes', 'Cohortes', 'tag'], ['metricas', 'Métricas', 'chart'], ['usuarios', 'Usuarios', 'lock'], ['ajustes', 'Ajustes', 'gear']
+    ['metricas', 'Métricas', 'chart'], ['usuarios', 'Usuarios', 'lock'], ['ajustes', 'Ajustes', 'gear']
   ];
   // Qué ve cada rol en el menú (el servidor también valida cada acción)
-  const TABS_ROL = { admin: TABS.map(t => t[0]), reclutador: ['aspirantes', 'cohortes', 'metricas'], calidad: ['aspirantes', 'metricas'] };
+  const TABS_ROL = { admin: TABS.map(t => t[0]), reclutador: ['aspirantes', 'metricas'], calidad: ['aspirantes', 'metricas'] };
   const ROL_NOMBRE = { admin: 'Admin', reclutador: 'Reclutador', calidad: 'Calidad' };
-  const ROL_TEXTO = { admin: 'Todo el panel: contenido, test, ajustes y usuarios.', reclutador: 'Postulaciones, aprobar o descartar, agregar aspirantes, cohortes y métricas.', calidad: 'Ver postulaciones, aspirantes y métricas. No puede editar.' };
+  const ROL_TEXTO = { admin: 'Todo el panel: contenido, test, ajustes y usuarios.', reclutador: 'Postulaciones: aprobar, descartar, agregar aspirantes y darles acceso. Métricas.', calidad: 'Ver postulaciones, aspirantes y métricas. No puede editar.' };
   const puede = (...roles) => roles.includes(A.yo && A.yo.perfil);
   const nombreCel = id => id === H.COMUN ? 'Tronco común' : ((A.celulas.find(c => c.id === id) || {}).nombre || id || '—');
   const opcionesCel = (sel, extra) => (extra || '') + A.celulas.map(c => '<option value="' + esc(c.id) + '"' + (c.id === sel ? ' selected' : '') + '>' + esc(c.nombre) + '</option>').join('');
@@ -29,7 +29,7 @@
 
   /* ---------- Acceso ---------- */
   function verLogin(msg) {
-    app.innerHTML = '<header class="topbar"><span class="brand"><span class="brand-mark">R</span><span>Ridery Academy <small>· Panel</small></span></span></header>' +
+    app.innerHTML = '<header class="topbar"><span class="brand"><img class="brand-mark" src="img/logo-192.png" alt="Ridery" width="32" height="32"><span>Ridery Academy <small>· Panel</small></span></span></header>' +
       '<main class="center-wrap"><form class="card stack" id="f" style="width:100%;max-width:400px" novalidate><div class="stack-sm"><h1>Panel admin</h1><p class="muted small">Gestiona aspirantes, contenido y exámenes.</p></div>' +
       '<div class="form-error" role="alert"' + (msg ? '' : ' hidden') + '>' + esc(msg || '') + '</div>' +
       '<div class="field"><label for="a-u">Usuario</label><input class="input" id="a-u" autocomplete="username"></div>' +
@@ -64,7 +64,7 @@
   }
 
   function shell() {
-    app.innerHTML = '<header class="topbar"><span class="brand"><span class="brand-mark">R</span><span>Ridery Academy <small>· Panel</small></span></span><div class="grow"></div>' +
+    app.innerHTML = '<header class="topbar"><span class="brand"><img class="brand-mark" src="img/logo-192.png" alt="Ridery" width="32" height="32"><span>Ridery Academy <small>· Panel</small></span></span><div class="grow"></div>' +
       '<div style="position:relative"><button class="user-chip" id="um" aria-haspopup="true"><span class="avatar">' + esc(iniciales(A.usuario)) + '</span><span class="hide-sm small">' + esc(A.usuario) + '</span>' + icon('chev') + '</button>' +
       '<div class="menu" id="user-menu" hidden><div style="padding:8px 10px"><b>' + esc(A.usuario) + '</b><div class="small muted">' + esc(ROL_NOMBRE[A.yo.perfil]) + (A.yo.principal ? ' · cuenta principal' : ' · @' + esc(A.yo.usuario)) + '</div></div><hr class="divider">' +
       (A.yo.principal ? '' : '<button id="mi-clave">' + icon('lock') + 'Cambiar mi clave</button>') + '<button id="salir">' + icon('out') + 'Salir</button></div></div></header>' +
@@ -84,7 +84,7 @@
     A.tab = tab;
     app.querySelectorAll('[data-tab]').forEach(b => { b.classList.toggle('active', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
     main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-    ({ aspirantes: tabAspirantes, test: tabTest, contenido: tabContenido, cohortes: tabCohortes, metricas: tabMetricas, usuarios: tabUsuarios, ajustes: tabAjustes })[tab]();
+    ({ aspirantes: tabAspirantes, test: tabTest, contenido: tabContenido, metricas: tabMetricas, usuarios: tabUsuarios, ajustes: tabAjustes })[tab]();
   }
   const encabezado = (titulo, sub, acciones) => '<div class="row-between"><div class="stack-sm" style="gap:4px"><h1>' + titulo + '</h1>' + (sub ? '<p class="muted">' + sub + '</p>' : '') + '</div><div class="row">' + (acciones || '') + '</div></div>';
 
@@ -104,14 +104,14 @@
       '<div class="seg" role="tablist">' + ESTADOS.map(([k, n]) => '<button role="tab" data-est="' + k + '" class="' + (f.estado === k ? 'active' : '') + '" aria-selected="' + (f.estado === k) + '">' + n + ' <span class="num" style="opacity:.6">' + cuenta(k) + '</span></button>').join('') + '</div>' +
       '<div class="filters"><input class="input" id="f-q" placeholder="Buscar por nombre o cédula" value="' + esc(f.q) + '">' +
       '<select class="select" id="f-cel"><option value="">Todas las células</option><option value="__sin"' + (f.celula === '__sin' ? ' selected' : '') + '>Sin célula</option>' + opcionesCel(f.celula) + '</select>' +
-      '<select class="select" id="f-coh"' + (f.estado !== 'aprobado' ? ' hidden' : '') + '><option value="">Todas las cohortes</option>' + A.cohortes.map(c => '<option value="' + esc(c._id) + '"' + (f.cohorte === c._id ? ' selected' : '') + '>' + esc(c._id) + '</option>').join('') + '</select></div>' +
+      '</div>' +
       '<div id="tabla"></div>';
     const pintar = () => {
       const q = f.q.toLowerCase();
       const lista = A.aspirantes.filter(a => a.estado === f.estado &&
         (!q || a.nombre.toLowerCase().includes(q) || a.cedula.toLowerCase().includes(q)) &&
         (!f.celula || (f.celula === '__sin' ? !a.celula : a.celula === f.celula)) &&
-        (f.estado !== 'aprobado' || !f.cohorte || a.cohorte === f.cohorte));
+        true);
       A.filtrados = lista;
       const t = main.querySelector('#tabla');
       if (!lista.length) {
@@ -120,11 +120,11 @@
       }
       const esAsp = f.estado === 'aprobado';
       t.innerHTML = '<p class="small muted num">' + lista.length + ' resultado' + (lista.length === 1 ? '' : 's') + '</p><div class="table-wrap"><table><thead><tr><th>Persona</th><th>Contacto</th><th>' + (esAsp ? 'Célula' : 'Célula sugerida') + '</th>' +
-        (esAsp ? '<th>Cohorte</th><th>Progreso</th><th>Promedio</th><th>Último acceso</th>' : '<th>Estado</th><th>Fecha</th>') + '</tr></thead><tbody>' +
+        (esAsp ? '<th>Usuario</th><th>Progreso</th><th>Promedio</th><th>Último acceso</th>' : '<th>Estado</th><th>Fecha</th>') + '</tr></thead><tbody>' +
         lista.map(a => '<tr class="click" data-id="' + esc(a._id) + '" tabindex="0"><td><b>' + esc(a.nombre) + '</b><div class="small muted num">C.I. ' + esc(a.cedula) + (a.ciudad ? ' · ' + esc(a.ciudad) : '') + '</div></td>' +
           '<td class="small">' + esc(a.telefono || '—') + '<div class="muted">' + esc(a.email || '') + '</div></td><td>' + esc(a.celula ? nombreCel(a.celula) : '—') + '</td>' +
           (esAsp
-            ? '<td>' + esc(a.cohorte || '—') + '</td><td><div class="row" style="gap:8px;flex-wrap:nowrap"><div class="bar' + (a.completo ? ' ok' : '') + '"><span style="width:' + a.progreso + '%"></span></div><span class="small num">' + a.progreso + '%</span></div></td>' +
+            ? '<td class="num">' + (a.usuario && a.tieneClave ? '@' + esc(a.usuario) : '<span class="pill pill-warn">Sin acceso</span>') + '</td><td><div class="row" style="gap:8px;flex-wrap:nowrap"><div class="bar' + (a.completo ? ' ok' : '') + '"><span style="width:' + a.progreso + '%"></span></div><span class="small num">' + a.progreso + '%</span></div></td>' +
               '<td class="num">' + (a.promedio != null ? a.promedio + '%' : '—') + '</td><td class="small muted">' + (a.ultimoAcceso ? fechaHora(a.ultimoAcceso) : 'Sin entrar') + '</td>'
             : '<td>' + pillEstado(a) + '</td><td class="small muted">' + fechaHora(a.creado) + '</td>') + '</tr>').join('') + '</tbody></table></div>';
       t.querySelectorAll('tr.click').forEach(tr => {
@@ -134,38 +134,58 @@
     };
     main.querySelectorAll('[data-est]').forEach(b => b.addEventListener('click', () => { f.estado = b.dataset.est; tabAspirantes(); }));
     main.querySelector('#f-q').addEventListener('input', e => { f.q = e.target.value; pintar(); });
-    main.querySelector('#f-coh').addEventListener('change', e => { f.cohorte = e.target.value; pintar(); });
     main.querySelector('#f-cel').addEventListener('change', e => { f.celula = e.target.value; pintar(); });
     main.querySelector('#csv').addEventListener('click', () => exportarCSV(A.filtrados || []));
     const na = main.querySelector('#nuevo-asp'); if (na) na.addEventListener('click', modalNuevoAspirante);
     pintar();
   }
 
+  // Campos de acceso del aspirante (usuario + contraseña con botón Generar)
+  function camposAcceso(pref, usuario, nueva) {
+    return '<div class="two"><div class="field"><label for="' + pref + '-usr">Usuario</label><input class="input" id="' + pref + '-usr" value="' + esc(usuario || '') + '" autocomplete="off" autocapitalize="none" spellcheck="false"><span class="hint">Sin espacios. Por defecto, su cédula.</span></div>' +
+      '<div class="field"><label for="' + pref + '-pass">' + (nueva ? 'Contraseña' : 'Nueva contraseña (opcional)') + '</label><div class="row" style="flex-wrap:nowrap"><input class="input" id="' + pref + '-pass" autocomplete="new-password" placeholder="' + (nueva ? 'Mínimo 6 caracteres' : 'Déjala vacía para no cambiarla') + '">' +
+      '<button type="button" class="btn btn-secondary" data-gen="' + pref + '">Generar</button></div></div></div>';
+  }
+  function enlazarGenerar(raiz) {
+    raiz.querySelectorAll('[data-gen]').forEach(b => b.addEventListener('click', () => { const i = raiz.querySelector('#' + b.dataset.gen + '-pass'); i.value = claveAleatoria().slice(0, 8); i.select(); }));
+  }
+  // Muestra el acceso una sola vez y permite copiar el mensaje para WhatsApp
+  async function mostrarAcceso(nombre, usuario, clave, celula) {
+    const url = location.origin + location.pathname.replace(/admin\.html$/, '');
+    const msg = 'Hola ' + nombre.split(' ')[0] + ', fuiste seleccionado para la formación de agentes CX de Ridery' + (celula ? ' (célula ' + nombreCel(celula) + ')' : '') + '.\n' +
+      'Entra en ' + url + ' → «Soy aspirante»\nUsuario: ' + usuario + '\nContraseña: ' + clave;
+    const ok = await confirmar({ titulo: 'Acceso de ' + nombre.split(' ')[0], texto: 'Usuario <b>' + esc(usuario) + '</b> · contraseña <b class="num">' + esc(clave) + '</b><br>Envíaselo ahora: la contraseña no se puede volver a ver.', ok: 'Copiar mensaje', cancelar: 'Cerrar' });
+    if (ok) navigator.clipboard.writeText(msg).then(() => toast('Mensaje copiado. Pégalo en WhatsApp.'), () => toast('No se pudo copiar. Anótalo a mano.', 'bad'));
+  }
+
   function modalNuevoAspirante() {
-    const abiertas = A.cohortes.filter(c => c.activa);
     const w = document.createElement('div'); w.className = 'modal-wrap';
     w.innerHTML = '<form class="modal" role="dialog" aria-modal="true" aria-labelledby="na-t" novalidate><div class="row-between"><h2 id="na-t">Agregar aspirante</h2><button type="button" class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
       '<p class="small muted">Queda aprobado de una vez, sin pasar por el test. Úsalo para referidos o reingresos.</p><div class="form-error" role="alert" hidden></div>' +
       '<div class="field"><label for="na-nombre">Nombre y apellido</label><input class="input" id="na-nombre" required></div>' +
       '<div class="two"><div class="field"><label for="na-cedula">Cédula</label><input class="input" id="na-cedula" inputmode="numeric" required></div><div class="field"><label for="na-ciudad">Ciudad</label><input class="input" id="na-ciudad"></div></div>' +
       '<div class="two"><div class="field"><label for="na-email">Correo</label><input class="input" id="na-email" type="email"></div><div class="field"><label for="na-tel">Teléfono</label><input class="input" id="na-tel" type="tel"></div></div>' +
-      '<div class="two"><div class="field"><label for="na-cel">Célula</label><select class="select" id="na-cel"><option value="">Elige una célula</option>' + opcionesCel('') + '</select></div>' +
-      '<div class="field"><label for="na-coh">Cohorte · código de acceso</label><select class="select" id="na-coh">' + (abiertas.length ? '' : '<option value="">No hay cohortes abiertas</option>') + abiertas.map(c => '<option value="' + esc(c._id) + '">' + esc(c._id) + '</option>').join('') + '</select></div></div>' +
+      '<div class="field"><label for="na-cel">Célula</label><select class="select" id="na-cel"><option value="">Elige una célula</option>' + opcionesCel('') + '</select></div>' +
+      camposAcceso('na', '', true) +
       '<div class="field"><label for="na-nota">Nota interna (opcional)</label><input class="input" id="na-nota" placeholder="Ej. referido por supervisor de Payments"></div>' +
       '<div class="modal-actions"><button type="button" class="btn btn-secondary" data-x>Cancelar</button><button class="btn btn-primary" type="submit">' + icon('check') + 'Agregar aspirante</button></div></form>';
     const cerrar = () => w.remove();
     w.addEventListener('click', e => { if (e.target === w || e.target.closest('[data-x]')) cerrar(); });
     document.body.appendChild(w);
     const f = w.querySelector('form'), v = id => f.querySelector('#' + id).value.trim();
+    enlazarGenerar(f);
+    f.querySelector('#na-cedula').addEventListener('input', e => { const u = f.querySelector('#na-usr'); if (!u.dataset.tocado) u.value = e.target.value.replace(/\D/g, ''); });
+    f.querySelector('#na-usr').addEventListener('input', e => { e.target.dataset.tocado = '1'; });
     f.querySelector('#na-nombre').focus();
     f.addEventListener('submit', async e => {
       e.preventDefault();
       const er = f.querySelector('.form-error'), b = f.querySelector('[type="submit"]');
       b.disabled = true;
       try {
-        const r = await call('crearAspirante', { aspirante: { nombre: v('na-nombre'), cedula: v('na-cedula'), ciudad: v('na-ciudad'), email: v('na-email'), telefono: v('na-tel'), celula: v('na-cel'), cohorte: v('na-coh'), nota: v('na-nota') } });
-        cerrar(); toast(v('na-nombre').split(' ')[0] + ' ya puede entrar con su cédula y el código ' + r.codigo);
-        A.filtros.estado = 'aprobado'; tabAspirantes();
+        const clave = v('na-pass');
+        const r = await call('crearAspirante', { aspirante: { nombre: v('na-nombre'), cedula: v('na-cedula'), ciudad: v('na-ciudad'), email: v('na-email'), telefono: v('na-tel'), celula: v('na-cel'), usuario: v('na-usr'), clave, nota: v('na-nota') } });
+        cerrar(); A.filtros.estado = 'aprobado'; tabAspirantes();
+        mostrarAcceso(v('na-nombre'), r.usuario, clave, v('na-cel'));
       } catch (x) { er.hidden = false; er.textContent = x.message; b.disabled = false; }
     });
   }
@@ -186,10 +206,10 @@
     });
   }
   function exportarCSV(lista) {
-    const cols = ['Nombre', 'Cédula', 'Correo', 'Teléfono', 'Ciudad', 'Estado', 'Célula', 'Célula sugerida', 'Cohorte', 'Progreso %', 'Promedio %', 'Completó', 'Postulación', 'Aprobado', 'Último acceso'];
+    const cols = ['Nombre', 'Cédula', 'Correo', 'Teléfono', 'Ciudad', 'Estado', 'Célula', 'Célula sugerida', 'Usuario', 'Progreso %', 'Promedio %', 'Completó', 'Postulación', 'Aprobado', 'Último acceso'];
     const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
     const est = { postulado: 'Por revisar', aprobado: 'Aspirante', descartado: 'Descartado' };
-    const filas = lista.map(a => [a.nombre, a.cedula, a.email, a.telefono, a.ciudad, est[a.estado], a.celula ? nombreCel(a.celula) : '', a.celulaSugerida ? nombreCel(a.celulaSugerida) : '', a.cohorte, a.progreso, a.promedio, a.completo ? 'Sí' : 'No', a.creado, a.aprobadoFecha, a.ultimoAcceso].map(q).join(';'));
+    const filas = lista.map(a => [a.nombre, a.cedula, a.email, a.telefono, a.ciudad, est[a.estado], a.celula ? nombreCel(a.celula) : '', a.celulaSugerida ? nombreCel(a.celulaSugerida) : '', a.usuario, a.progreso, a.promedio, a.completo ? 'Sí' : 'No', a.creado, a.aprobadoFecha, a.ultimoAcceso].map(q).join(';'));
     const blob = new Blob(['﻿' + [cols.map(q).join(';')].concat(filas).join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const el = document.createElement('a'); el.href = URL.createObjectURL(blob); el.download = 'postulaciones-' + new Date().toISOString().slice(0, 10) + '.csv';
     document.body.appendChild(el); el.click(); el.remove();
@@ -201,18 +221,18 @@
     try { d = await call('aspirante', { id }); } catch (e) { return manejar(e); }
     const a = d.aspirante, t = a.test, r = d.resumen;
     const max = t ? Math.max(1, ...Object.values(t.puntajes || {})) : 1;
-    const abiertas = A.cohortes.filter(c => c.activa);
-    const selCoh = sel => '<select class="select" id="d-coh" style="width:auto">' + (abiertas.length ? '' : '<option value="">No hay cohortes abiertas</option>') + abiertas.map(c => '<option value="' + esc(c._id) + '"' + (c._id === sel ? ' selected' : '') + '>' + esc(c._id) + ' · ' + esc(c.nombre) + '</option>').join('') + '</select>';
     let acciones;
     if (!puede('admin', 'reclutador')) acciones = '';
-    else if (r.estado === 'postulado') acciones = '<div class="card card-tight stack-sm" style="background:var(--brand-soft);border-color:transparent"><h3>Aprobar como aspirante</h3><p class="small muted">Podrá entrar a la formación con su cédula y el código de la cohorte. Envíale el código por correo o WhatsApp.</p>' +
-      '<div class="row"><div class="field"><label for="d-cel">Célula</label><select class="select" id="d-cel" style="width:auto"><option value="">Elige una célula</option>' + opcionesCel(a.celula) + '</select></div>' +
-      '<div class="field"><label for="d-coh">Cohorte</label>' + selCoh('') + '</div></div>' +
+    else if (r.estado === 'postulado') acciones = '<div class="card card-tight stack-sm" style="background:var(--brand-soft);border-color:transparent"><h3>Aprobar como aspirante</h3><p class="small muted">Elige su célula y créale un usuario y contraseña. Con eso entra por «Soy aspirante».</p>' +
+      '<div class="field"><label for="d-cel">Célula</label><select class="select" id="d-cel" style="width:auto"><option value="">Elige una célula</option>' + opcionesCel(a.celula) + '</select></div>' +
+      camposAcceso('d', a.usuario || a.cedula, !a.hash && !r.tieneClave) +
       '<div class="row"><button class="btn btn-primary" id="d-aprobar">' + icon('check') + 'Aprobar</button><button class="btn btn-danger" id="d-desc">Descartar</button></div></div>';
     else if (r.estado === 'descartado') acciones = '<div class="notice">Esta postulación fue descartada.</div><div class="row"><button class="btn btn-secondary" id="d-rev">Volver a «Por revisar»</button></div>';
-    else acciones = '<div class="row" style="align-items:flex-end"><div class="field"><label for="d-cel">Célula</label><select class="select" id="d-cel" style="width:auto">' + opcionesCel(a.celula) + '</select></div>' +
-      '<div class="field"><label for="d-coh">Cohorte · código de acceso</label>' + selCoh(a.cohorte) + '</div><button class="btn btn-primary btn-sm" id="d-save">Guardar cambios</button></div>' +
-      '<div class="row"><button class="btn btn-ghost btn-sm" id="d-copy">Copiar mensaje con su acceso</button><button class="btn btn-ghost btn-sm" id="d-rev">Quitar acceso (volver a «Por revisar»)</button></div>';
+    else acciones = '<div class="card card-tight stack-sm"><div class="row-between"><h3>Célula y acceso</h3>' + (r.tieneClave ? '<span class="small muted">Entra como <b>@' + esc(r.usuario) + '</b></span>' : '<span class="pill pill-warn">Sin contraseña: no puede entrar</span>') + '</div>' +
+      '<div class="field"><label for="d-cel">Célula</label><select class="select" id="d-cel" style="width:auto">' + opcionesCel(a.celula) + '</select></div>' +
+      camposAcceso('d', a.usuario || a.cedula, !r.tieneClave) +
+      '<div class="row"><button class="btn btn-primary btn-sm" id="d-save">Guardar cambios</button><button class="btn btn-ghost btn-sm" id="d-rev">Quitar acceso (volver a «Por revisar»)</button></div>' +
+      '<p class="small muted">Si olvidó su contraseña, genera una nueva y guárdala: te mostramos el mensaje para enviársela.</p></div>';
     const w = document.createElement('div'); w.className = 'modal-wrap';
     w.innerHTML = '<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="dt"><div class="row-between"><div class="row"><span class="avatar">' + esc(iniciales(a.nombre)) + '</span><div><h2 id="dt">' + esc(a.nombre) + '</h2><span class="small muted num">C.I. ' + esc(a.cedula) + '</span></div>' + pillEstado(r) + '</div><button class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
       '<div class="cert-grid small"><div><span class="muted">Correo</span><b>' + esc(a.email || '—') + '</b></div><div><span class="muted">Teléfono</span><b>' + esc(a.telefono || '—') + '</b></div><div><span class="muted">Ciudad</span><b>' + esc(a.ciudad || '—') + '</b></div><div><span class="muted">Postulación</span><b>' + fecha(a.creado) + '</b></div>' +
@@ -235,13 +255,17 @@
     document.addEventListener('keydown', k);
     w.addEventListener('click', e => { if (e.target === w || e.target.closest('[data-x]')) cerrar(); });
     document.body.appendChild(w);
-    const recargar = async () => { cerrar(); await tabAspirantes(); detalleAspirante(id); };
+    const recargar = async () => { cerrar(); await tabAspirantes(); await detalleAspirante(id); };
     const $ = sel => w.querySelector(sel);
+    enlazarGenerar(w);
     if ($('#d-aprobar')) $('#d-aprobar').addEventListener('click', async () => {
-      const celula = $('#d-cel').value, cohorte = $('#d-coh').value;
+      const celula = $('#d-cel').value, usuario = $('#d-usr').value.trim(), clave = $('#d-pass').value;
       if (!celula) return toast('Elige la célula antes de aprobar.', 'bad');
-      if (!cohorte) return toast('Crea o abre una cohorte en la sección Cohortes.', 'bad');
-      try { await call('aprobar', { id, celula, cohorte }); toast(a.nombre.split(' ')[0] + ' ya es aspirante. Código de acceso: ' + cohorte); A.filtros.estado = 'aprobado'; recargar(); } catch (e) { manejar(e); }
+      try {
+        const x = await call('aprobar', { id, celula, usuario, clave });
+        A.filtros.estado = 'aprobado'; await recargar();
+        if (clave) mostrarAcceso(a.nombre, x.usuario, clave, celula); else toast(a.nombre.split(' ')[0] + ' ya es aspirante (usa su contraseña anterior).');
+      } catch (e) { manejar(e); }
     });
     if ($('#d-desc')) $('#d-desc').addEventListener('click', async () => {
       if (!await confirmar({ titulo: '¿Descartar a ' + a.nombre + '?', texto: 'No podrá entrar a la formación. Puedes devolverlo a «Por revisar» después.', ok: 'Descartar', peligro: true })) return;
@@ -252,11 +276,12 @@
       try { await call('cambiarEstado', { id, estado: 'postulado' }); toast('Volvió a «Por revisar»'); A.filtros.estado = 'postulado'; recargar(); } catch (e) { manejar(e); }
     });
     if ($('#d-save')) $('#d-save').addEventListener('click', async () => {
-      try { await call('asignarCelula', { id, celula: $('#d-cel').value, cohorte: $('#d-coh').value }); toast('Cambios guardados'); recargar(); } catch (e) { manejar(e); }
-    });
-    if ($('#d-copy')) $('#d-copy').addEventListener('click', () => {
-      const msg = 'Hola ' + a.nombre.split(' ')[0] + ', fuiste seleccionado para la formación de agentes CX de Ridery (célula ' + nombreCel(a.celula) + '). Entra en ' + location.origin + location.pathname.replace(/admin\.html$/, '') + ' → «Soy aspirante» con tu cédula y el código de acceso: ' + a.cohorte;
-      navigator.clipboard.writeText(msg).then(() => toast('Mensaje copiado'), () => toast('No se pudo copiar automáticamente.', 'bad'));
+      const celula = $('#d-cel').value, usuario = $('#d-usr').value.trim(), clave = $('#d-pass').value;
+      try {
+        const x = await call('guardarAcceso', { id, celula, usuario, clave });
+        await recargar();
+        if (clave) mostrarAcceso(a.nombre, x.usuario, clave, celula); else toast('Cambios guardados');
+      } catch (e) { manejar(e); }
     });
     w.querySelectorAll('[data-reset]').forEach(b => b.addEventListener('click', async () => {
       try { await call('reiniciarIntentos', { id, moduloId: b.dataset.reset }); toast('Intentos reiniciados'); recargar(); } catch (e) { manejar(e); }
@@ -527,31 +552,6 @@
     }
     pintar();
     window.scrollTo(0, 0);
-  }
-
-  /* ============ Cohortes ============ */
-  async function tabCohortes() {
-    let asps;
-    try { const [r, a] = await Promise.all([call('resumen'), call('aspirantes')]); A.cohortes = r.cohortes; asps = a.aspirantes; } catch (e) { return manejar(e); }
-    const cuenta = id => asps.filter(a => a.cohorte === id).length;
-    main.innerHTML = encabezado('Cohortes', 'El código de la cohorte es el código de acceso del aspirante. Al aprobar una postulación eliges su cohorte. Si cierras una cohorte, sus aspirantes ya no pueden entrar.') +
-      '<form class="card card-tight row" id="f-c" style="align-items:flex-end"><div class="field grow" style="min-width:160px"><label for="c-id">Código</label><input class="input" id="c-id" placeholder="CX-2026-11" style="text-transform:uppercase"></div>' +
-      '<div class="field grow" style="min-width:200px"><label for="c-n">Nombre</label><input class="input" id="c-n" placeholder="Cohorte noviembre 2026"></div><button class="btn btn-primary" type="submit">' + icon('plus') + 'Crear cohorte</button></form>' +
-      '<div class="table-wrap"><table><thead><tr><th>Código</th><th>Nombre</th><th>Aspirantes</th><th>Creada</th><th>Estado</th><th></th></tr></thead><tbody>' +
-      A.cohortes.sort((a, b) => String(b.creado).localeCompare(String(a.creado))).map(c => '<tr><td><b class="num">' + esc(c._id) + '</b></td><td>' + esc(c.nombre) + '</td><td class="num">' + cuenta(c._id) + '</td><td class="small muted">' + fecha(c.creado) + '</td>' +
-        '<td>' + (c.activa ? '<span class="pill pill-ok">Abierta</span>' : '<span class="pill">Cerrada</span>') + '</td><td><div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn btn-ghost btn-sm" data-copy="' + esc(c._id) + '">Copiar código</button><button class="btn btn-secondary btn-sm" data-tog="' + esc(c._id) + '">' + (c.activa ? 'Cerrar' : 'Abrir') + '</button></div></td></tr>').join('') +
-      '</tbody></table></div>';
-    main.querySelector('#f-c').addEventListener('submit', async e => {
-      e.preventDefault();
-      try { await call('guardarCohorte', { cohorte: { _id: main.querySelector('#c-id').value, nombre: main.querySelector('#c-n').value, activa: true } }); toast('Cohorte creada'); tabCohortes(); } catch (er) { manejar(er); }
-    });
-    main.querySelectorAll('[data-tog]').forEach(b => b.addEventListener('click', async () => {
-      const c = A.cohortes.find(x => x._id === b.dataset.tog);
-      try { await call('guardarCohorte', { cohorte: Object.assign({}, c, { activa: !c.activa }) }); toast(c.activa ? 'Cohorte cerrada' : 'Cohorte abierta'); tabCohortes(); } catch (e) { manejar(e); }
-    }));
-    main.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', () => {
-      navigator.clipboard.writeText(b.dataset.copy).then(() => toast('Código copiado'), () => toast('No se pudo copiar. Selecciona el código y cópialo a mano.', 'bad'));
-    }));
   }
 
   /* ============ Métricas ============ */

@@ -210,30 +210,44 @@
 
   /* ---------- Acceso ----------
      Postúlate: formulario público (datos + test) que sugiere una célula y termina ahí.
-     Soy aspirante: solo entra quien fue aprobado en el panel (cédula + código de cohorte). */
-  const estadoDe = a => a.estado || (a.cohorte ? 'aprobado' : 'postulado');
+     Soy aspirante: solo entra quien fue aprobado en el panel, con el usuario y contraseña que le asignaron. */
+  const estadoDe = a => a.estado || 'postulado';
   const limpiarCedula = c => limpiar(c, 20).replace(/\D/g, ''); // V-20.111.222 y 20111222 son la misma cédula
 
-  async function loginAspirante(store, body) {
+  const limpiarUsuarioAsp = u => limpiar(u, 30).toLowerCase().replace(/\s+/g, '');
+  const USUARIO_OK = /^[a-z0-9._-]{3,30}$/;
+
+  async function loginAspirante(store, body, cripto) {
     await cargarConfig(store);
-    const cedula = limpiarCedula(body.cedula);
-    const codigo = limpiar(body.codigo, 40).toUpperCase();
-    if (!cedula || !codigo) throw err(400, 'Escribe tu cédula y tu código de acceso.');
-    const asp = await store.get('aspirantes', 'asp-' + cedula);
-    if (!asp) throw err(404, 'No encontramos esa cédula. Si aún no te postulas, vuelve y elige «Postúlate».');
+    const usuario = limpiarUsuarioAsp(body.usuario);
+    const clave = String(body.clave || '');
+    if (!usuario || !clave) throw err(400, 'Escribe tu usuario y tu contraseña.');
+    const asp = (await store.find('aspirantes', { usuario }))[0];
+    if (!asp || !asp.hash || !(await cripto.verificar(clave, asp.hash))) throw err(401, 'Usuario o contraseña incorrectos. Si no los tienes, escríbele a tu reclutador.');
     const est = estadoDe(asp);
-    if (est === 'postulado') throw err(403, 'Tu postulación está en revisión. Te contactaremos con tu código de acceso cuando seas seleccionado.');
     if (est === 'descartado') throw err(403, 'Tu postulación no continuó en este proceso. Gracias por tu interés en Ridery.');
-    if (asp.cohorte !== codigo) throw err(400, 'El código de acceso no coincide con tu cédula. Revisa el mensaje que te envió tu reclutador.');
-    const cohorte = await store.get('cohortes', codigo);
-    if (!cohorte || !cohorte.activa) throw err(403, 'Tu cohorte ya cerró. Escríbele a tu reclutador.');
+    if (est !== 'aprobado') throw err(403, 'Tu acceso está pausado. Escríbele a tu reclutador.');
     asp.ultimoAcceso = ahora();
     await store.put('aspirantes', asp);
     return asp;
   }
 
+  // Asigna usuario y contraseña a un aspirante (al aprobarlo, al agregarlo a mano o al cambiarlos)
+  async function asignarAcceso(store, asp, usuarioPedido, clave, cripto) {
+    const usuario = limpiarUsuarioAsp(usuarioPedido || asp.usuario || asp.cedula);
+    if (!USUARIO_OK.test(usuario)) throw err(400, 'El usuario debe tener de 3 a 30 caracteres: letras, números, punto, guion o guion bajo, sin espacios.');
+    const otro = (await store.find('aspirantes', { usuario })).find(x => x._id !== asp._id);
+    if (otro) throw err(409, 'El usuario «' + usuario + '» ya lo tiene ' + otro.nombre + '. Elige otro.');
+    asp.usuario = usuario;
+    if (clave) {
+      if (String(clave).length < 6) throw err(400, 'La contraseña debe tener al menos 6 caracteres.');
+      asp.hash = await cripto.hash(String(clave));
+      asp.claveFecha = ahora();
+    } else if (!asp.hash) throw err(400, 'Escribe o genera una contraseña para el aspirante.');
+  }
+
   function vistaAspirante(asp) {
-    return { _id: asp._id, nombre: asp.nombre, cedula: asp.cedula, cohorte: asp.cohorte, celula: asp.celula,
+    return { _id: asp._id, nombre: asp.nombre, cedula: asp.cedula, usuario: asp.usuario || '', celula: asp.celula,
       estado: estadoDe(asp), completadoFecha: asp.completadoFecha || null };
   }
 
@@ -361,7 +375,7 @@
   function fila(asp, modulos, cfg) {
     const p = progresoAspirante(asp, modulos, cfg.reglas);
     return { _id: asp._id, nombre: asp.nombre, cedula: asp.cedula, email: asp.email, telefono: asp.telefono, ciudad: asp.ciudad || '', cohorte: asp.cohorte,
-      celula: asp.celula, celulaSugerida: asp.test ? asp.test.celulaSugerida : null, estado: estadoDe(asp), estadoTest: asp.test ? asp.test.estado : 'pendiente',
+      usuario: asp.usuario || '', tieneClave: !!asp.hash, celula: asp.celula, celulaSugerida: asp.test ? asp.test.celulaSugerida : null, estado: estadoDe(asp), estadoTest: asp.test ? asp.test.estado : 'pendiente',
       creado: asp.creado, aprobadoFecha: asp.aprobadoFecha || null, ultimoAcceso: asp.ultimoAcceso,
       progreso: p.progreso, completo: p.completo, promedio: p.promedio };
   }
@@ -373,7 +387,7 @@
       return { celulas: cfg.celulas, reglas: cfg.reglas, cohortes, totalAspirantes: asps.length, modulos: modulos.length,
         yo: { usuario: user.usuario, nombre: user.nombre || user.usuario, perfil: user.perfil, principal: !!user.principal } };
     },
-    async crearAspirante({ store, body }) {
+    async crearAspirante({ store, body, cripto }) {
       const cfg = await cargarConfig(store);
       const d = body.aspirante || {};
       const cedula = limpiarCedula(d.cedula), nombre = limpiar(d.nombre, 80);
@@ -382,14 +396,12 @@
       const id = 'asp-' + cedula;
       if (await store.get('aspirantes', id)) throw err(409, 'Ya existe un registro con esa cédula. Búscalo en Postulaciones.');
       if (!d.celula || !cfg.celulas.some(c => c.id === d.celula)) throw err(400, 'Elige la célula.');
-      const cohorte = await store.get('cohortes', String(d.cohorte || '').toUpperCase());
-      if (!cohorte) throw err(400, 'Elige la cohorte.');
-      if (!cohorte.activa) throw err(400, 'Esa cohorte está cerrada. Ábrela o elige otra.');
       const asp = { _id: id, cedula, nombre, email: limpiar(d.email, 120), telefono: limpiar(d.telefono, 30), ciudad: limpiar(d.ciudad, 60),
-        estado: 'aprobado', creado: ahora(), aprobadoFecha: ahora(), ultimoAcceso: null, cohorte: cohorte._id, celula: d.celula,
+        estado: 'aprobado', creado: ahora(), aprobadoFecha: ahora(), ultimoAcceso: null, celula: d.celula,
         progreso: {}, examenes: {}, test: null, origen: 'manual', nota: limpiar(d.nota, 300) };
+      await asignarAcceso(store, asp, d.usuario, d.clave, cripto);
       await store.put('aspirantes', asp);
-      return { ok: true, codigo: cohorte._id };
+      return { ok: true, usuario: asp.usuario };
     },
     async aspirantes({ store }) {
       const cfg = await cargarConfig(store);
@@ -401,19 +413,18 @@
       const asp = await store.get('aspirantes', body.id);
       if (!asp) throw err(404, 'Aspirante no encontrado.');
       const modulos = await store.find('modulos', {});
-      return { aspirante: asp, resumen: fila(asp, modulos, cfg), ruta: construirRuta(modulos, asp, cfg.reglas) };
+      const { hash, ...publico } = asp;
+      return { aspirante: publico, resumen: fila(asp, modulos, cfg), ruta: construirRuta(modulos, asp, cfg.reglas) };
     },
-    async asignarCelula({ store, body }) {
+    async guardarAcceso({ store, body, cripto }) {
       const cfg = await cargarConfig(store);
       const asp = await store.get('aspirantes', body.id);
       if (!asp) throw err(404, 'Aspirante no encontrado.');
-      if (body.celula && !cfg.celulas.some(c => c.id === body.celula)) throw err(400, 'Esa célula no existe.');
-      if (!body.celula) throw err(400, 'Elige una célula.');
+      if (!body.celula || !cfg.celulas.some(c => c.id === body.celula)) throw err(400, 'Elige una célula.');
+      await asignarAcceso(store, asp, body.usuario, body.clave, cripto);
       asp.celula = body.celula;
-      if (body.cohorte) { const c = await store.get('cohortes', String(body.cohorte).toUpperCase()); if (!c) throw err(400, 'Esa cohorte no existe.'); asp.cohorte = c._id; }
-      asp.asignadoManual = { fecha: ahora(), por: body._por || 'admin' };
       await store.put('aspirantes', asp);
-      return { ok: true };
+      return { ok: true, usuario: asp.usuario };
     },
     async reiniciarIntentos({ store, body }) {
       const asp = await store.get('aspirantes', body.id);
@@ -422,24 +433,22 @@
       await store.put('aspirantes', asp);
       return { ok: true };
     },
-    async aprobar({ store, body }) {
+    async aprobar({ store, body, cripto }) {
       const cfg = await cargarConfig(store);
       const asp = await store.get('aspirantes', body.id);
       if (!asp) throw err(404, 'Postulación no encontrada.');
       if (!body.celula || !cfg.celulas.some(c => c.id === body.celula)) throw err(400, 'Elige la célula del aspirante.');
-      const cohorte = await store.get('cohortes', String(body.cohorte || '').toUpperCase());
-      if (!cohorte) throw err(400, 'Elige la cohorte del aspirante.');
-      if (!cohorte.activa) throw err(400, 'Esa cohorte está cerrada. Ábrela o elige otra.');
-      Object.assign(asp, { estado: 'aprobado', celula: body.celula, cohorte: cohorte._id, aprobadoFecha: ahora() });
+      await asignarAcceso(store, asp, body.usuario, body.clave, cripto);
+      Object.assign(asp, { estado: 'aprobado', celula: body.celula, aprobadoFecha: ahora() });
       await store.put('aspirantes', asp);
-      return { ok: true, codigo: cohorte._id };
+      return { ok: true, usuario: asp.usuario };
     },
     async cambiarEstado({ store, body }) {
       const asp = await store.get('aspirantes', body.id);
       if (!asp) throw err(404, 'Postulación no encontrada.');
       if (!['postulado', 'descartado'].includes(body.estado)) throw err(400, 'Estado no válido.');
       asp.estado = body.estado;
-      if (body.estado === 'postulado') { asp.cohorte = null; asp.aprobadoFecha = null; asp.celula = asp.test ? asp.test.celulaSugerida : null; }
+      if (body.estado === 'postulado') { asp.aprobadoFecha = null; if (!asp.progreso || !Object.keys(asp.progreso).length) asp.celula = asp.test ? asp.test.celulaSugerida : asp.celula; }
       await store.put('aspirantes', asp);
       return { ok: true };
     },
@@ -590,7 +599,7 @@
   /* ---------- Roles del panel ---------- */
   const PERFILES = {
     admin: { nombre: 'Admin', acciones: '*' },
-    reclutador: { nombre: 'Reclutador', acciones: ['resumen', 'aspirantes', 'aspirante', 'aprobar', 'cambiarEstado', 'asignarCelula', 'reiniciarIntentos', 'crearAspirante', 'guardarCohorte', 'metricas', 'cambiarMiClave'] },
+    reclutador: { nombre: 'Reclutador', acciones: ['resumen', 'aspirantes', 'aspirante', 'aprobar', 'cambiarEstado', 'guardarAcceso', 'reiniciarIntentos', 'crearAspirante', 'guardarCohorte', 'metricas', 'cambiarMiClave'] },
     calidad: { nombre: 'Calidad', acciones: ['resumen', 'aspirantes', 'aspirante', 'metricas', 'cambiarMiClave'] }
   };
   const limpiarUsuario = u => limpiar(u, 30).toLowerCase();

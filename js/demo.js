@@ -9,7 +9,7 @@
   const activo = window.ELX_DEMO === true || /[?&]demo=1\b/.test(location.search);
   if (!activo) return;
   const H = window.ElxHandlers;
-  const KEY = 'elx_demo_db_v1';
+  const KEY = 'elx_demo_db_v2';
 
   let db = null;
   function cargar() {
@@ -49,7 +49,7 @@
       await store.put('modulos', m);
     }
     if (!(await store.get('aspirantes', 'asp-12345678'))) {
-      await store.put('aspirantes', { _id: 'asp-12345678', cedula: '12345678', nombre: 'Aspirante Demo', email: 'demo@ridery.app', telefono: '', estado: 'aprobado',
+      await store.put('aspirantes', { _id: 'asp-12345678', cedula: '12345678', usuario: 'demo', hash: await cripto.hash('demo1234'), nombre: 'Aspirante Demo', email: 'demo@ridery.app', telefono: '', estado: 'aprobado',
         creado: new Date().toISOString(), aprobadoFecha: new Date().toISOString(), ultimoAcceso: null, cohorte: 'CX-2026-10', celula: 'PAYMENTS', progreso: {}, examenes: {},
         test: { fecha: new Date().toISOString(), respuestas: {}, puntajes: { PAYMENTS: 7, 'MATCH AND PRICING': 3 }, ranking: [['PAYMENTS', 7], ['MATCH AND PRICING', 3]], estado: 'asignado', motivo: '', celulaSugerida: 'PAYMENTS' } });
     }
@@ -74,7 +74,7 @@
     try {
       if (fn === 'auth') {
         if (body.accion === 'aspirante') {
-          const asp = await H.loginAspirante(store, body);
+          const asp = await H.loginAspirante(store, body, cripto);
           return { token: firmar({ rol: 'aspirante', id: asp._id }), aspirante: H.vistaAspirante(asp) };
         }
         if (body.accion === 'admin') {

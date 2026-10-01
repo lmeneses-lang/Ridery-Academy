@@ -24,7 +24,7 @@
     S.asp = r.aspirante; S.reglas = r.reglas; S.celulas = r.celulas; S.ruta = r.ruta;
   }
   function manejar(e) {
-    if (e.status === 401) { API.salir('asp'); S.asp = null; S.ruta = null; return verIngreso('Tu sesión expiró. Vuelve a entrar con tu cédula y código.'); }
+    if (e.status === 401) { API.salir('asp'); S.asp = null; S.ruta = null; return verIngreso('Tu sesión expiró. Vuelve a entrar con tu usuario y contraseña.'); }
     toast(e.message || 'Algo falló. Intenta de nuevo.', 'bad');
   }
   function cargando() { limpiar(); app.innerHTML = topbar({}) + '<div class="loading"><div class="spinner" aria-label="Cargando"></div></div>'; enlazarTop(); }
@@ -35,11 +35,11 @@
     const p = S.ruta ? S.ruta.progreso : 0;
     return '<header class="topbar">' +
       (curso ? '<button class="icon-btn drawer-toggle" data-act="drawer" aria-label="Abrir contenido del curso">' + icon('menu') + '</button>' : '') +
-      '<a class="brand" href="#" data-act="inicio"><span class="brand-mark">R</span><span>Ridery Academy <small>· Formación CX</small></span></a>' +
+      '<a class="brand" href="#" data-act="inicio"><img class="brand-mark" src="img/logo-192.png" alt="Ridery" width="32" height="32"><span>Ridery Academy <small>· Formación CX</small></span></a>' +
       '<div class="grow"></div>' +
       (curso ? '<div class="top-progress" title="Progreso del curso"><div class="bar"><span style="width:' + p + '%"></span></div><span class="small num"><b>' + p + '%</b><span class="hide-sm"> completado</span></span></div>' : '') +
       (S.asp ? '<div style="position:relative"><button class="user-chip" data-act="menu" aria-haspopup="true" aria-expanded="false"><span class="avatar">' + esc(iniciales(S.asp.nombre)) + '</span><span class="hide-sm small">' + esc(S.asp.nombre.split(' ')[0]) + '</span>' + icon('chev') + '</button>' +
-        '<div class="menu" id="user-menu" hidden><div style="padding:8px 10px"><b>' + esc(S.asp.nombre) + '</b><div class="small muted">C.I. ' + esc(S.asp.cedula) + ' · ' + esc(S.asp.cohorte) + '</div></div><hr class="divider">' +
+        '<div class="menu" id="user-menu" hidden><div style="padding:8px 10px"><b>' + esc(S.asp.nombre) + '</b><div class="small muted">@' + esc(S.asp.usuario) + ' · C.I. ' + esc(S.asp.cedula) + '</div></div><hr class="divider">' +
         '<button data-act="salir">' + icon('out') + 'Salir</button></div></div>' : '') +
       '</header>';
   }
@@ -74,7 +74,7 @@
     limpiar(); S.asp = null; S.ruta = null;
     const lado = ladoMarca('Tu camino como agente de <em>CX</em> empieza aquí', 'Elige cómo quieres entrar.', [
       ['plus', 'Postúlate', 'Cuéntanos de ti y responde un test corto. Te diremos en qué célula encajas mejor.'],
-      ['book', 'Soy aspirante', 'Si ya te seleccionaron, entra con tu cédula y tu código de acceso para empezar la formación.']]);
+      ['book', 'Soy aspirante', 'Si ya te seleccionaron, entra con el usuario y la contraseña que te envió tu reclutador.']]);
     app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="login">' + lado +
       '<div class="login-form"><div class="stack-sm"><h2>¿Cómo quieres entrar?</h2><p class="muted small">Elige una opción para continuar.</p></div><div class="choices">' +
       '<button class="choice" data-ir="postulate"><span class="ic">' + icon('plus') + '</span><span><b>Postúlate</b><span>Es tu primera vez. Completa tus datos y el test de perfil.</span></span>' + icon('right') + '</button>' +
@@ -97,9 +97,10 @@
       '<form class="login-form" id="f-login" novalidate><button type="button" class="back-link" data-volver>' + icon('left') + 'Volver</button>' +
       '<div class="stack-sm"><h2>Soy aspirante</h2><p class="muted small">Si vuelves, continúas donde lo dejaste.</p></div>' +
       '<div class="form-error" role="alert"' + (msg ? '' : ' hidden') + '>' + esc(msg || '') + '</div>' +
-      '<div class="field"><label for="lg-cedula">Cédula</label><input class="input" id="lg-cedula" inputmode="numeric" autocomplete="off" placeholder="Solo números" required></div>' +
-      '<div class="field"><label for="lg-codigo">Código de acceso</label><input class="input" id="lg-codigo" autocomplete="off" placeholder="Ej. CX-2026-10" style="text-transform:uppercase" required>' +
-      '<span class="hint">Te lo envía tu reclutador cuando te selecciona.' + (window.ElxDemo ? ' Demo: cédula <b>12345678</b> y código <b>CX-2026-10</b>.' : '') + '</span></div>' +
+      '<div class="field"><label for="lg-usuario">Usuario</label><input class="input" id="lg-usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>' +
+      '<div class="field"><label for="lg-clave">Contraseña</label><div class="pass-wrap"><input class="input" id="lg-clave" type="password" autocomplete="current-password" required>' +
+      '<button type="button" class="pass-eye" id="lg-ver" aria-label="Mostrar contraseña">Ver</button></div>' +
+      '<span class="hint">Te los envía tu reclutador cuando te selecciona.' + (window.ElxDemo ? ' Demo: usuario <b>demo</b> y contraseña <b>demo1234</b>.' : '') + '</span></div>' +
       '<button class="btn btn-primary btn-block" type="submit">Entrar' + icon('right') + '</button>' +
       '<p class="small muted">¿Todavía no te postulas? <a href="#" data-post>Postúlate aquí</a></p></form></div></main>';
     enlazarTop();
@@ -109,16 +110,18 @@
     f.addEventListener('submit', async e => {
       e.preventDefault();
       const errBox = f.querySelector('.form-error');
-      const ced = f.querySelector('#lg-cedula').value.trim(), cod = f.querySelector('#lg-codigo').value.trim();
-      if (!ced || !cod) { errBox.hidden = false; errBox.textContent = 'Escribe tu cédula y tu código de acceso.'; return; }
+      const usr = f.querySelector('#lg-usuario').value.trim(), clave = f.querySelector('#lg-clave').value;
+      if (!usr || !clave) { errBox.hidden = false; errBox.textContent = 'Escribe tu usuario y tu contraseña.'; return; }
       const btn = f.querySelector('button[type="submit"]'); const txt = btn.innerHTML; btn.disabled = true; btn.textContent = 'Entrando…';
       try {
-        const r = await API.llamar('asp', 'auth', 'aspirante', { cedula: ced, codigo: cod });
+        const r = await API.llamar('asp', 'auth', 'aspirante', { usuario: usr, clave });
         API.guardarToken('asp', r.token);
         await iniciar();
       } catch (er) { errBox.hidden = false; errBox.textContent = er.message; btn.disabled = false; btn.innerHTML = txt; }
     });
-    f.querySelector('#lg-cedula').focus();
+    const ver = f.querySelector('#lg-ver'), inp = f.querySelector('#lg-clave');
+    ver.addEventListener('click', () => { const v = inp.type === 'password'; inp.type = v ? 'text' : 'password'; ver.textContent = v ? 'Ocultar' : 'Ver'; ver.setAttribute('aria-label', v ? 'Ocultar contraseña' : 'Mostrar contraseña'); });
+    f.querySelector('#lg-usuario').focus();
   }
 
   /* ---------- Postúlate: datos → test → revisión → resultado (fin) ---------- */
@@ -242,8 +245,8 @@
         : '<div class="result-hero"><h1>¡Gracias, ' + esc(r.nombre.split(' ')[0]) + '!</h1><p class="muted">Tus respuestas encajan con más de una célula. El equipo de reclutamiento revisará tu perfil para ubicarte donde mejor te vaya.</p></div>') +
       '<hr class="divider"><div class="stack-sm"><h3>Qué sigue</h3><ul class="steps" style="color:var(--fg)">' +
       '<li><span class="n">' + icon('users') + '</span><div><b>Revisamos tu postulación</b><span class="muted">El equipo de reclutamiento evalúa tu perfil.</span></div></li>' +
-      '<li><span class="n">' + icon('tag') + '</span><div><b>Te contactamos</b><span class="muted">Si eres seleccionado, te enviamos tu código de acceso por correo o WhatsApp.</span></div></li>' +
-      '<li><span class="n">' + icon('book') + '</span><div><b>Empiezas tu formación</b><span class="muted">Entras por «Soy aspirante» con tu cédula y el código.</span></div></li></ul></div>' +
+      '<li><span class="n">' + icon('tag') + '</span><div><b>Te contactamos</b><span class="muted">Si eres seleccionado, te enviamos tu usuario y contraseña por correo o WhatsApp.</span></div></li>' +
+      '<li><span class="n">' + icon('book') + '</span><div><b>Empiezas tu formación</b><span class="muted">Entras por «Soy aspirante» con tu usuario y contraseña.</span></div></li></ul></div>' +
       '<div class="row"><button class="btn btn-secondary" id="fin-ok">Volver al inicio</button></div></div></div></main>';
     enlazarTop();
     app.querySelector('#fin-ok').addEventListener('click', verInicio);
@@ -378,7 +381,7 @@
     else if (!r.tieneCelula) cont = '<div class="notice info">Terminaste el tronco común. La formación de ' + esc(cel ? cel.nombre : 'tu célula') + ' todavía no tiene módulos cargados; te avisaremos cuando esté lista.</div>';
 
     let n = 0;
-    el.innerHTML = '<div class="stack-sm"><span class="eyebrow">Inicio</span><h1>Hola, ' + esc(S.asp.nombre.split(' ')[0]) + '</h1><p class="muted">Cohorte ' + esc(S.asp.cohorte) + ' · ' + (cel ? 'Célula ' + esc(cel.nombre) : 'Célula en revisión') + '</p></div>' +
+    el.innerHTML = '<div class="stack-sm"><span class="eyebrow">Inicio</span><h1>Hola, ' + esc(S.asp.nombre.split(' ')[0]) + '</h1><p class="muted">' + (cel ? 'Célula ' + esc(cel.nombre) : 'Célula en revisión') + '</p></div>' +
       (!S.asp.celula ? '<div class="notice">Tu perfil está en revisión. Mientras tanto puedes avanzar con el tronco común.</div>' : '') + cont +
       '<div class="stats"><div class="stat"><span class="small muted">Progreso</span><b>' + r.progreso + '%</b></div><div class="stat"><span class="small muted">Módulos aprobados</span><b>' + aprob + ' / ' + r.modulos.length + '</b></div><div class="stat"><span class="small muted">Promedio de exámenes</span><b>' + prom + '</b></div></div>' +
       '<div class="stack-sm"><h2>Módulos</h2><div class="mod-list">' + r.modulos.map(m => {
@@ -613,10 +616,10 @@
     const cel = celulaDe(S.asp.celula);
     const notas = S.ruta.modulos.filter(m => m.examen.mejor != null).map(m => m.examen.mejor);
     const prom = notas.length ? Math.round(notas.reduce((a, b) => a + b, 0) / notas.length) : null;
-    el.innerHTML = '<div class="cert"><div class="row-between"><span class="brand"><span class="brand-mark">R</span><span>Ridery Academy</span></span><span class="pill pill-ok">' + icon('check') + 'Completado</span></div>' +
+    el.innerHTML = '<div class="cert"><div class="row-between"><span class="brand"><img class="brand-mark" src="img/logo-192.png" alt="Ridery" width="32" height="32"><span>Ridery Academy</span></span><span class="pill pill-ok">' + icon('check') + 'Completado</span></div>' +
       '<span class="eyebrow">Certificado de formación</span><div class="stack-sm"><span class="muted">Se certifica que</span><span class="name">' + esc(S.asp.nombre) + '</span>' +
       '<span class="muted">completó y aprobó la formación para agentes de CX de la célula <b style="color:var(--fg)">' + esc(cel ? cel.nombre : '') + '</b>.</span></div>' +
-      '<hr class="divider"><div class="cert-grid"><div><span class="small muted">Cédula</span><b class="num">' + esc(S.asp.cedula) + '</b></div><div><span class="small muted">Cohorte</span><b>' + esc(S.asp.cohorte) + '</b></div>' +
+      '<hr class="divider"><div class="cert-grid"><div><span class="small muted">Cédula</span><b class="num">' + esc(S.asp.cedula) + '</b></div>' +
       '<div><span class="small muted">Módulos aprobados</span><b class="num">' + S.ruta.modulos.length + '</b></div><div><span class="small muted">Promedio</span><b class="num">' + (prom != null ? prom + '%' : '—') + '</b></div>' +
       '<div><span class="small muted">Fecha</span><b>' + fecha(S.asp.completadoFecha || new Date().toISOString()) + '</b></div></div></div>' +
       '<p class="muted">Tu resultado ya está disponible para tu supervisor. Te contactarán con los siguientes pasos para tu ingreso.</p>' +
