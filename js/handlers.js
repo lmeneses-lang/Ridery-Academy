@@ -208,40 +208,78 @@
     return { progreso: r.progreso, completo: r.completo, promedio: notas.length ? Math.round(notas.reduce((a, b) => a + b, 0) / notas.length) : null };
   }
 
-  /* ---------- Acceso ---------- */
+  /* ---------- Acceso ----------
+     Postúlate: formulario público (datos + test) que sugiere una célula y termina ahí.
+     Soy aspirante: solo entra quien fue aprobado en el panel (cédula + código de cohorte). */
+  const estadoDe = a => a.estado || (a.cohorte ? 'aprobado' : 'postulado');
+  const limpiarCedula = c => limpiar(c, 20).replace(/\D/g, ''); // V-20.111.222 y 20111222 son la misma cédula
+
   async function loginAspirante(store, body) {
     await cargarConfig(store);
+    const cedula = limpiarCedula(body.cedula);
     const codigo = limpiar(body.codigo, 40).toUpperCase();
-    const cedula = limpiar(body.cedula, 20).replace(/[^0-9A-Za-z]/g, '').toUpperCase();
-    if (!codigo || !cedula) throw err(400, 'Escribe tu código de cohorte y tu cédula.');
+    if (!cedula || !codigo) throw err(400, 'Escribe tu cédula y tu código de acceso.');
+    const asp = await store.get('aspirantes', 'asp-' + cedula);
+    if (!asp) throw err(404, 'No encontramos esa cédula. Si aún no te postulas, vuelve y elige «Postúlate».');
+    const est = estadoDe(asp);
+    if (est === 'postulado') throw err(403, 'Tu postulación está en revisión. Te contactaremos con tu código de acceso cuando seas seleccionado.');
+    if (est === 'descartado') throw err(403, 'Tu postulación no continuó en este proceso. Gracias por tu interés en Ridery.');
+    if (asp.cohorte !== codigo) throw err(400, 'El código de acceso no coincide con tu cédula. Revisa el mensaje que te envió tu reclutador.');
     const cohorte = await store.get('cohortes', codigo);
-    if (!cohorte || !cohorte.activa) throw err(400, 'El código de cohorte no existe o ya cerró. Pídelo a tu reclutador.');
-    const id = 'asp-' + cedula;
-    let asp = await store.get('aspirantes', id);
-    if (asp) {
-      if (asp.cohorte !== codigo) throw err(400, 'Esta cédula ya está registrada en otra cohorte (' + asp.cohorte + ').');
-      asp.ultimoAcceso = ahora();
-    } else {
-      const nombre = limpiar(body.nombre, 80);
-      if (nombre.length < 3) throw err(400, 'Escribe tu nombre completo para registrarte.');
-      asp = { _id: id, cedula, nombre, email: limpiar(body.email, 120), telefono: limpiar(body.telefono, 30),
-        cohorte: codigo, creado: ahora(), ultimoAcceso: ahora(), test: null, celula: null, progreso: {}, examenes: {} };
-    }
+    if (!cohorte || !cohorte.activa) throw err(403, 'Tu cohorte ya cerró. Escríbele a tu reclutador.');
+    asp.ultimoAcceso = ahora();
     await store.put('aspirantes', asp);
     return asp;
   }
 
   function vistaAspirante(asp) {
     return { _id: asp._id, nombre: asp.nombre, cedula: asp.cedula, cohorte: asp.cohorte, celula: asp.celula,
-      estadoTest: asp.test ? asp.test.estado : null, testFecha: asp.test ? asp.test.fecha : null,
-      completadoFecha: asp.completadoFecha || null };
+      estado: estadoDe(asp), completadoFecha: asp.completadoFecha || null };
   }
 
   async function requerirAspirante(store, user) {
     const asp = user && await store.get('aspirantes', user.id);
-    if (!asp) throw err(401, 'Tu sesión expiró. Vuelve a entrar.');
+    if (!asp || estadoDe(asp) !== 'aprobado') throw err(401, 'Tu sesión expiró. Vuelve a entrar.');
     return asp;
   }
+
+  /* ---------- Acciones públicas (Postúlate) ---------- */
+  const publico = {
+    async test({ store }) {
+      await cargarConfig(store);
+      const preguntas = (await store.find('preguntas', {})).filter(p => p.activa !== false).sort((a, b) => (a.orden || 0) - (b.orden || 0));
+      return { preguntas: preguntas.map(p => ({ _id: p._id, texto: p.texto, opciones: p.opciones.map(o => o.texto) })) };
+    },
+    async verificarCedula({ store, body }) {
+      const cedula = limpiarCedula(body.cedula);
+      if (!cedula) throw err(400, 'Escribe tu cédula.');
+      if (await store.get('aspirantes', 'asp-' + cedula)) throw err(409, 'Ya existe una postulación con esta cédula. Si ya te seleccionaron, entra por «Soy aspirante».');
+      return { ok: true };
+    },
+    async postular({ store, body }) {
+      const cfg = await cargarConfig(store);
+      const d = body.datos || {};
+      const cedula = limpiarCedula(d.cedula);
+      const nombre = limpiar(d.nombre, 80);
+      if (nombre.length < 3) throw err(400, 'Escribe tu nombre y apellido.');
+      if (!cedula) throw err(400, 'Escribe tu cédula.');
+      const id = 'asp-' + cedula;
+      if (await store.get('aspirantes', id)) throw err(409, 'Ya existe una postulación con esta cédula.');
+      const preguntas = (await store.find('preguntas', {})).filter(p => p.activa !== false);
+      const respuestas = body.respuestas || {};
+      const faltan = preguntas.filter(p => respuestas[p._id] == null || !p.opciones[respuestas[p._id]]);
+      if (faltan.length) throw err(400, 'Faltan ' + faltan.length + ' preguntas por responder.');
+      const r = calcularCelula(preguntas, respuestas, cfg.reglas);
+      const resp = {};
+      preguntas.forEach(p => { resp[p._id] = { pregunta: p.texto, opcion: Number(respuestas[p._id]), texto: p.opciones[respuestas[p._id]].texto }; });
+      const asp = { _id: id, cedula, nombre, email: limpiar(d.email, 120), telefono: limpiar(d.telefono, 30), ciudad: limpiar(d.ciudad, 60),
+        estado: 'postulado', creado: ahora(), ultimoAcceso: ahora(), cohorte: null, celula: r.celula, progreso: {}, examenes: {},
+        test: { fecha: ahora(), respuestas: resp, puntajes: r.puntajes, ranking: r.ranking, estado: r.estado, motivo: r.motivo, celulaSugerida: r.celula } };
+      await store.put('aspirantes', asp);
+      const cel = cfg.celulas.find(c => c.id === r.celula);
+      return { estado: r.estado, celula: cel || null, nombre };
+    }
+  };
 
   /* ---------- Acciones del aspirante ---------- */
   const aspirante = {
@@ -251,28 +289,6 @@
       const modulos = await store.find('modulos', {});
       const ruta = construirRuta(modulos, asp, cfg.reglas);
       return { aspirante: vistaAspirante(asp), reglas: cfg.reglas, celulas: cfg.celulas, ruta };
-    },
-    async test({ store, user }) {
-      await requerirAspirante(store, user);
-      const preguntas = (await store.find('preguntas', {})).filter(p => p.activa !== false).sort((a, b) => (a.orden || 0) - (b.orden || 0));
-      return { preguntas: preguntas.map(p => ({ _id: p._id, texto: p.texto, opciones: p.opciones.map(o => o.texto) })) };
-    },
-    async enviarTest({ store, user, body }) {
-      const cfg = await cargarConfig(store);
-      const asp = await requerirAspirante(store, user);
-      if (asp.test) throw err(400, 'Ya enviaste tu test de perfil.');
-      const preguntas = (await store.find('preguntas', {})).filter(p => p.activa !== false);
-      const respuestas = body.respuestas || {};
-      const faltan = preguntas.filter(p => respuestas[p._id] == null || !p.opciones[respuestas[p._id]]);
-      if (faltan.length) throw err(400, 'Faltan ' + faltan.length + ' preguntas por responder.');
-      const r = calcularCelula(preguntas, respuestas, cfg.reglas);
-      const resp = {};
-      preguntas.forEach(p => { resp[p._id] = { pregunta: p.texto, opcion: Number(respuestas[p._id]), texto: p.opciones[respuestas[p._id]].texto }; });
-      asp.test = { fecha: ahora(), respuestas: resp, puntajes: r.puntajes, ranking: r.ranking, estado: r.estado, motivo: r.motivo, celulaSugerida: r.celula };
-      asp.celula = r.celula;
-      await store.put('aspirantes', asp);
-      const cel = cfg.celulas.find(c => c.id === r.celula);
-      return { estado: r.estado, celula: cel || null };
     },
     async progreso({ store, user, body }) {
       const cfg = await cargarConfig(store);
@@ -344,8 +360,9 @@
   /* ---------- Acciones del administrador ---------- */
   function fila(asp, modulos, cfg) {
     const p = progresoAspirante(asp, modulos, cfg.reglas);
-    return { _id: asp._id, nombre: asp.nombre, cedula: asp.cedula, email: asp.email, telefono: asp.telefono, cohorte: asp.cohorte,
-      celula: asp.celula, estadoTest: asp.test ? asp.test.estado : 'pendiente', creado: asp.creado, ultimoAcceso: asp.ultimoAcceso,
+    return { _id: asp._id, nombre: asp.nombre, cedula: asp.cedula, email: asp.email, telefono: asp.telefono, ciudad: asp.ciudad || '', cohorte: asp.cohorte,
+      celula: asp.celula, celulaSugerida: asp.test ? asp.test.celulaSugerida : null, estado: estadoDe(asp), estadoTest: asp.test ? asp.test.estado : 'pendiente',
+      creado: asp.creado, aprobadoFecha: asp.aprobadoFecha || null, ultimoAcceso: asp.ultimoAcceso,
       progreso: p.progreso, completo: p.completo, promedio: p.promedio };
   }
 
@@ -358,7 +375,7 @@
     async aspirantes({ store }) {
       const cfg = await cargarConfig(store);
       const [asps, modulos] = await Promise.all([store.find('aspirantes', {}), store.find('modulos', {})]);
-      return { aspirantes: asps.map(a => fila(a, modulos, cfg)).sort((a, b) => String(b.ultimoAcceso).localeCompare(String(a.ultimoAcceso))) };
+      return { aspirantes: asps.map(a => fila(a, modulos, cfg)).sort((a, b) => String(b.ultimoAcceso || b.creado).localeCompare(String(a.ultimoAcceso || a.creado))) };
     },
     async aspirante({ store, body }) {
       const cfg = await cargarConfig(store);
@@ -372,8 +389,9 @@
       const asp = await store.get('aspirantes', body.id);
       if (!asp) throw err(404, 'Aspirante no encontrado.');
       if (body.celula && !cfg.celulas.some(c => c.id === body.celula)) throw err(400, 'Esa célula no existe.');
-      asp.celula = body.celula || null;
-      if (asp.test) asp.test.estado = asp.celula ? 'asignado' : 'revision';
+      if (!body.celula) throw err(400, 'Elige una célula.');
+      asp.celula = body.celula;
+      if (body.cohorte) { const c = await store.get('cohortes', String(body.cohorte).toUpperCase()); if (!c) throw err(400, 'Esa cohorte no existe.'); asp.cohorte = c._id; }
       asp.asignadoManual = { fecha: ahora(), por: body._por || 'admin' };
       await store.put('aspirantes', asp);
       return { ok: true };
@@ -385,10 +403,24 @@
       await store.put('aspirantes', asp);
       return { ok: true };
     },
-    async reiniciarTest({ store, body }) {
+    async aprobar({ store, body }) {
+      const cfg = await cargarConfig(store);
       const asp = await store.get('aspirantes', body.id);
-      if (!asp) throw err(404, 'Aspirante no encontrado.');
-      asp.test = null; asp.celula = null;
+      if (!asp) throw err(404, 'Postulación no encontrada.');
+      if (!body.celula || !cfg.celulas.some(c => c.id === body.celula)) throw err(400, 'Elige la célula del aspirante.');
+      const cohorte = await store.get('cohortes', String(body.cohorte || '').toUpperCase());
+      if (!cohorte) throw err(400, 'Elige la cohorte del aspirante.');
+      if (!cohorte.activa) throw err(400, 'Esa cohorte está cerrada. Ábrela o elige otra.');
+      Object.assign(asp, { estado: 'aprobado', celula: body.celula, cohorte: cohorte._id, aprobadoFecha: ahora() });
+      await store.put('aspirantes', asp);
+      return { ok: true, codigo: cohorte._id };
+    },
+    async cambiarEstado({ store, body }) {
+      const asp = await store.get('aspirantes', body.id);
+      if (!asp) throw err(404, 'Postulación no encontrada.');
+      if (!['postulado', 'descartado'].includes(body.estado)) throw err(400, 'Estado no válido.');
+      asp.estado = body.estado;
+      if (body.estado === 'postulado') { asp.cohorte = null; asp.aprobadoFecha = null; asp.celula = asp.test ? asp.test.celulaSugerida : null; }
       await store.put('aspirantes', asp);
       return { ok: true };
     },
@@ -473,8 +505,9 @@
       const cfg = await cargarConfig(store);
       const [asps, modulos, intentos] = await Promise.all([store.find('aspirantes', {}), store.find('modulos', {}), store.find('intentos', {})]);
       const porCelula = {};
-      asps.forEach(a => { const k = a.celula || (a.test ? 'REVISION' : 'SIN_TEST'); porCelula[k] = (porCelula[k] || 0) + 1; });
-      const completados = asps.filter(a => progresoAspirante(a, modulos, cfg.reglas).completo).length;
+      const aprobados = asps.filter(a => estadoDe(a) === 'aprobado');
+      asps.forEach(a => { const k = a.celula || 'REVISION'; porCelula[k] = (porCelula[k] || 0) + 1; });
+      const completados = aprobados.filter(a => progresoAspirante(a, modulos, cfg.reglas).completo).length;
       const porModulo = ordenarModulos(modulos).map(m => {
         const its = intentos.filter(i => i.modulo === m._id);
         const personas = new Set(its.map(i => i.aspirante));
@@ -491,18 +524,18 @@
         const m = modulos.find(x => x._id === f.modulo); const p = m && m.examen.preguntas.find(x => x.id === f.id);
         return Object.assign(f, { tasa: Math.round(f.fallos * 100 / f.total), texto: p ? p.texto : '(pregunta eliminada)', moduloTitulo: m ? m.titulo : '' });
       }).sort((a, b) => b.tasa - a.tasa || b.fallos - a.fallos).slice(0, 10);
-      return { total: asps.length, conTest: asps.filter(a => a.test).length, enRevision: asps.filter(a => a.test && !a.celula).length,
-        completados, porCelula, porModulo, masFalladas, celulas: cfg.celulas };
+      return { total: asps.length, porRevisar: asps.filter(a => estadoDe(a) === 'postulado').length, sinCelula: asps.filter(a => estadoDe(a) === 'postulado' && !a.celula).length,
+        aprobados: aprobados.length, descartados: asps.filter(a => estadoDe(a) === 'descartado').length, completados, porCelula, porModulo, masFalladas, celulas: cfg.celulas };
     }
   };
 
   /* ---------- Despachador ---------- */
   async function ejecutar(grupo, accion, ctx) {
-    const tabla = grupo === 'admin' ? admin : aspirante;
+    const tabla = grupo === 'admin' ? admin : grupo === 'publico' ? publico : aspirante;
     if (!Object.prototype.hasOwnProperty.call(tabla, accion)) throw err(400, 'Acción desconocida: ' + accion);
     return tabla[accion](ctx);
   }
 
-  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, vistaAspirante, ejecutar };
+  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, vistaAspirante, estadoDe, ejecutar };
   if (typeof module !== 'undefined' && module.exports) module.exports = H; else root.ElxHandlers = H;
 })(typeof window !== 'undefined' ? window : globalThis);

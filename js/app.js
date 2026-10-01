@@ -1,33 +1,30 @@
 /* ============================================================
    Formación CX · aplicación del aspirante
-   Flujo: acceso → test de perfil → resultado → ruta (tronco común
-   + célula) → lecciones (video, texto, imágenes) → examen → certificado
+   Inicio: Postúlate (datos + test → célula sugerida, fin) o
+   Soy aspirante (aprobado en el panel) → ruta (tronco común + célula)
+   → lecciones (video, texto, imágenes) → examen → certificado
    ============================================================ */
 (function () {
   'use strict';
   const { API, esc, prosa, icon, youtubeId, tipoImagen, toast, confirmar, lightbox, fecha, iniciales } = window.Elx;
   const app = document.getElementById('app');
   const call = (accion, data) => API.llamar('asp', 'aspirante', accion, data);
-  const S = { asp: null, reglas: null, celulas: [], ruta: null, vista: null, abiertos: {}, test: null, examen: null };
+  const S = { asp: null, reglas: null, celulas: [], ruta: null, vista: null, abiertos: {}, post: null, examen: null };
   let limpiezas = [];
   const limpiar = () => { limpiezas.forEach(f => { try { f(); } catch (e) {} }); limpiezas = []; };
 
   /* ---------- Arranque ---------- */
   async function iniciar() {
-    if (!API.token('asp')) return verLogin();
+    if (!API.token('asp')) return verInicio();
     cargando();
-    try { await refrescar(); decidir(); } catch (e) { manejar(e); }
+    try { await refrescar(); verCurso({ tipo: 'inicio' }); } catch (e) { manejar(e); }
   }
   async function refrescar() {
     const r = await call('estado');
     S.asp = r.aspirante; S.reglas = r.reglas; S.celulas = r.celulas; S.ruta = r.ruta;
   }
-  function decidir() {
-    if (!S.asp.estadoTest) return verTestIntro();
-    verCurso({ tipo: 'inicio' });
-  }
   function manejar(e) {
-    if (e.status === 401) return verLogin('Tu sesión expiró. Vuelve a entrar con tu código y cédula.');
+    if (e.status === 401) { API.salir('asp'); S.asp = null; S.ruta = null; return verIngreso('Tu sesión expiró. Vuelve a entrar con tu cédula y código.'); }
     toast(e.message || 'Algo falló. Intenta de nuevo.', 'bad');
   }
   function cargando() { limpiar(); app.innerHTML = topbar({}) + '<div class="loading"><div class="spinner" aria-label="Cargando"></div></div>'; enlazarTop(); }
@@ -38,7 +35,7 @@
     const p = S.ruta ? S.ruta.progreso : 0;
     return '<header class="topbar">' +
       (curso ? '<button class="icon-btn drawer-toggle" data-act="drawer" aria-label="Abrir contenido del curso">' + icon('menu') + '</button>' : '') +
-      '<a class="brand" href="#" data-act="inicio"><span class="brand-mark">R</span><span>Formación CX <small>· Ridery</small></span></a>' +
+      '<a class="brand" href="#" data-act="inicio"><span class="brand-mark">R</span><span>Ridery Academy <small>· Formación CX</small></span></a>' +
       '<div class="grow"></div>' +
       (curso ? '<div class="top-progress" title="Progreso del curso"><div class="bar"><span style="width:' + p + '%"></span></div><span class="small num"><b>' + p + '%</b><span class="hide-sm"> completado</span></span></div>' : '') +
       (S.asp ? '<div style="position:relative"><button class="user-chip" data-act="menu" aria-haspopup="true" aria-expanded="false"><span class="avatar">' + esc(iniciales(S.asp.nombre)) + '</span><span class="hide-sm small">' + esc(S.asp.nombre.split(' ')[0]) + '</span>' + icon('chev') + '</button>' +
@@ -47,7 +44,12 @@
       '</header>';
   }
   function enlazarTop() {
-    app.querySelectorAll('[data-act="inicio"]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); if (S.asp && S.asp.estadoTest) verCurso({ tipo: 'inicio' }); }));
+    app.querySelectorAll('[data-act="inicio"]').forEach(a => a.addEventListener('click', async e => {
+      e.preventDefault();
+      if (S.asp) return verCurso({ tipo: 'inicio' });
+      if (S.post && S.post.paso && !S.post.enviado && !await confirmar({ titulo: '¿Salir de la postulación?', texto: 'Tus respuestas quedan guardadas en este dispositivo para continuar después.', ok: 'Salir', cancelar: 'Seguir' })) return;
+      verInicio();
+    }));
     const m = app.querySelector('[data-act="menu"]');
     if (m) {
       const menu = app.querySelector('#user-menu');
@@ -55,7 +57,7 @@
 
     }
     const s = app.querySelector('[data-act="salir"]');
-    if (s) s.addEventListener('click', () => { API.salir('asp'); S.asp = null; S.ruta = null; verLogin(); });
+    if (s) s.addEventListener('click', () => { API.salir('asp'); S.asp = null; S.ruta = null; verInicio(); });
   }
 
   document.addEventListener('click', e => {
@@ -63,89 +65,136 @@
     const menu = document.getElementById('user-menu'); if (menu) menu.hidden = true;
   });
 
-  /* ---------- Acceso ---------- */
-  function verLogin(msg) {
+  /* ---------- Inicio: Postúlate / Soy aspirante ---------- */
+  function ladoMarca(titulo, texto, items) {
+    return '<section class="login-side"><div class="stack-sm"><span class="eyebrow">Ridery Academy</span><h1>' + titulo + '</h1><span class="accent-rule"></span></div>' +
+      '<p>' + texto + '</p><ul class="steps">' + items.map(it => '<li><span class="n">' + icon(it[0]) + '</span><div><b>' + it[1] + '</b><span>' + it[2] + '</span></div></li>').join('') + '</ul></section>';
+  }
+  function verInicio() {
+    limpiar(); S.asp = null; S.ruta = null;
+    const lado = ladoMarca('Tu camino como agente de <em>CX</em> empieza aquí', 'Elige cómo quieres entrar.', [
+      ['plus', 'Postúlate', 'Cuéntanos de ti y responde un test corto. Te diremos en qué célula encajas mejor.'],
+      ['book', 'Soy aspirante', 'Si ya te seleccionaron, entra con tu cédula y tu código de acceso para empezar la formación.']]);
+    app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="login">' + lado +
+      '<div class="login-form"><div class="stack-sm"><h2>¿Cómo quieres entrar?</h2><p class="muted small">Elige una opción para continuar.</p></div><div class="choices">' +
+      '<button class="choice" data-ir="postulate"><span class="ic">' + icon('plus') + '</span><span><b>Postúlate</b><span>Es tu primera vez. Completa tus datos y el test de perfil.</span></span>' + icon('right') + '</button>' +
+      '<button class="choice alt" data-ir="aspirante"><span class="ic">' + icon('book') + '</span><span><b>Soy aspirante</b><span>Ya fuiste seleccionado. Entra a tu formación.</span></span>' + icon('right') + '</button>' +
+      '</div></div></div></main>';
+    enlazarTop();
+    app.querySelector('[data-ir="postulate"]').addEventListener('click', () => verPostulacion());
+    app.querySelector('[data-ir="aspirante"]').addEventListener('click', () => verIngreso());
+    app.querySelector('.choice').focus();
+  }
+
+  /* ---------- Soy aspirante ---------- */
+  function verIngreso(msg) {
     limpiar();
-    app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="login">' +
-      '<section class="login-side"><div class="stack-sm"><span class="eyebrow" style="color:inherit;opacity:.8">Programa de ingreso</span><h1>Tu formación como agente de CX empieza aquí</h1></div>' +
-      '<p>Vas a completar tres pasos. Tu progreso se guarda y puedes continuar cuando quieras.</p>' +
-      '<ol class="steps"><li><span class="n">1</span><div><b>Test de perfil</b><span>Unas preguntas para saber en qué célula encajas mejor.</span></div></li>' +
-      '<li><span class="n">2</span><div><b>Formación</b><span>Videos y material del tronco común y de tu célula.</span></div></li>' +
-      '<li><span class="n">3</span><div><b>Exámenes</b><span>Un examen corto al final de cada módulo.</span></div></li></ol></section>' +
-      '<form class="login-form" id="f-login" novalidate><div class="stack-sm"><h2>Entrar</h2><p class="muted small">Si ya te registraste, usa la misma cédula y código para continuar donde lo dejaste.</p></div>' +
-      (msg ? '<div class="form-error" role="alert">' + esc(msg) + '</div>' : '<div class="form-error" role="alert" hidden></div>') +
-      '<div class="field"><label for="lg-codigo">Código de cohorte</label><input class="input" id="lg-codigo" autocomplete="off" placeholder="Ej. CX-2026-10" required>' +
-      '<span class="hint">Te lo envía tu reclutador.' + (window.ElxDemo ? ' En la demo usa <b>CX-2026-10</b>.' : '') + '</span></div>' +
+    const lado = ladoMarca('Bienvenido a tu formación', 'Entra con los datos que te envió tu reclutador.', [
+      ['book', 'Tronco común', 'Lo que todo agente de CX de Ridery necesita saber.'],
+      ['tag', 'Tu célula', 'Videos, material y casos de la célula donde vas a trabajar.'],
+      ['award', 'Exámenes', 'Un examen corto al final de cada módulo.']]);
+    app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="login">' + lado +
+      '<form class="login-form" id="f-login" novalidate><button type="button" class="back-link" data-volver>' + icon('left') + 'Volver</button>' +
+      '<div class="stack-sm"><h2>Soy aspirante</h2><p class="muted small">Si vuelves, continúas donde lo dejaste.</p></div>' +
+      '<div class="form-error" role="alert"' + (msg ? '' : ' hidden') + '>' + esc(msg || '') + '</div>' +
       '<div class="field"><label for="lg-cedula">Cédula</label><input class="input" id="lg-cedula" inputmode="numeric" autocomplete="off" placeholder="Solo números" required></div>' +
-      '<div class="field"><label for="lg-nombre">Nombre y apellido</label><input class="input" id="lg-nombre" autocomplete="name" placeholder="Solo la primera vez"></div>' +
-      '<div class="two"><div class="field"><label for="lg-email">Correo</label><input class="input" id="lg-email" type="email" autocomplete="email"></div>' +
-      '<div class="field"><label for="lg-tel">Teléfono</label><input class="input" id="lg-tel" type="tel" autocomplete="tel" placeholder="0414 000 0000"></div></div>' +
-      '<button class="btn btn-primary btn-block" type="submit">Entrar</button></form></div></main>';
+      '<div class="field"><label for="lg-codigo">Código de acceso</label><input class="input" id="lg-codigo" autocomplete="off" placeholder="Ej. CX-2026-10" style="text-transform:uppercase" required>' +
+      '<span class="hint">Te lo envía tu reclutador cuando te selecciona.' + (window.ElxDemo ? ' Demo: cédula <b>12345678</b> y código <b>CX-2026-10</b>.' : '') + '</span></div>' +
+      '<button class="btn btn-primary btn-block" type="submit">Entrar' + icon('right') + '</button>' +
+      '<p class="small muted">¿Todavía no te postulas? <a href="#" data-post>Postúlate aquí</a></p></form></div></main>';
     enlazarTop();
     const f = app.querySelector('#f-login');
-    if (window.ElxDemo) f.querySelector('#lg-codigo').value = 'CX-2026-10';
+    f.querySelector('[data-volver]').addEventListener('click', verInicio);
+    f.querySelector('[data-post]').addEventListener('click', e => { e.preventDefault(); verPostulacion(); });
+    f.addEventListener('submit', async e => {
+      e.preventDefault();
+      const errBox = f.querySelector('.form-error');
+      const ced = f.querySelector('#lg-cedula').value.trim(), cod = f.querySelector('#lg-codigo').value.trim();
+      if (!ced || !cod) { errBox.hidden = false; errBox.textContent = 'Escribe tu cédula y tu código de acceso.'; return; }
+      const btn = f.querySelector('button[type="submit"]'); const txt = btn.innerHTML; btn.disabled = true; btn.textContent = 'Entrando…';
+      try {
+        const r = await API.llamar('asp', 'auth', 'aspirante', { cedula: ced, codigo: cod });
+        API.guardarToken('asp', r.token);
+        await iniciar();
+      } catch (er) { errBox.hidden = false; errBox.textContent = er.message; btn.disabled = false; btn.innerHTML = txt; }
+    });
+    f.querySelector('#lg-cedula').focus();
+  }
+
+  /* ---------- Postúlate: datos → test → revisión → resultado (fin) ---------- */
+  const POST_KEY = 'elx_postulacion';
+  const guardarPost = () => Elx.Store.set(POST_KEY, JSON.stringify({ datos: S.post.datos, resp: S.post.resp }));
+  function cabeceraPaso(n, etiqueta, pct) {
+    return '<div class="stepper-head"><div class="row-between"><span class="eyebrow">Postulación · Paso ' + n + ' de 3</span><span class="small muted num">' + etiqueta + '</span></div>' +
+      '<div class="bar"><span style="width:' + pct + '%"></span></div></div>';
+  }
+  function verPostulacion() {
+    limpiar();
+    if (!S.post) {
+      let guardado = {};
+      try { guardado = JSON.parse(Elx.Store.get(POST_KEY) || '{}'); } catch (e) {}
+      S.post = { datos: guardado.datos || {}, resp: guardado.resp || {}, preguntas: null, idx: 0, paso: 1 };
+    }
+    S.post.paso = 1;
+    const d = S.post.datos;
+    app.innerHTML = topbar({}) + '<main class="center-wrap"><form class="panel" id="f-post" novalidate>' + cabeceraPaso(1, 'Tus datos', 8) +
+      '<div class="stack-sm"><h1>Cuéntanos de ti</h1><p class="muted">Con estos datos te contactamos si eres seleccionado.</p></div>' +
+      '<div class="form-error" role="alert" hidden></div>' +
+      '<div class="card stack"><div class="field"><label for="p-nombre">Nombre y apellido</label><input class="input" id="p-nombre" autocomplete="name" value="' + esc(d.nombre || '') + '" required></div>' +
+      '<div class="two"><div class="field"><label for="p-cedula">Cédula</label><input class="input" id="p-cedula" inputmode="numeric" autocomplete="off" placeholder="Solo números" value="' + esc(d.cedula || '') + '" required></div>' +
+      '<div class="field"><label for="p-ciudad">Ciudad</label><input class="input" id="p-ciudad" autocomplete="address-level2" placeholder="Ej. Caracas" value="' + esc(d.ciudad || '') + '"></div></div>' +
+      '<div class="two"><div class="field"><label for="p-email">Correo</label><input class="input" id="p-email" type="email" autocomplete="email" value="' + esc(d.email || '') + '" required></div>' +
+      '<div class="field"><label for="p-tel">Teléfono (WhatsApp)</label><input class="input" id="p-tel" type="tel" autocomplete="tel" placeholder="0414 000 0000" value="' + esc(d.telefono || '') + '" required></div></div></div>' +
+      '<div class="nav-row"><button type="button" class="btn btn-secondary" id="p-back">' + icon('left') + 'Volver</button><button class="btn btn-primary" type="submit">Continuar al test' + icon('right') + '</button></div></form></main>';
+    enlazarTop();
+    const f = app.querySelector('#f-post');
+    f.querySelector('#p-back').addEventListener('click', verInicio);
+    f.querySelectorAll('input').forEach(i => i.addEventListener('input', () => {
+      S.post.datos = { nombre: f.querySelector('#p-nombre').value.trim(), cedula: f.querySelector('#p-cedula').value.trim(), ciudad: f.querySelector('#p-ciudad').value.trim(),
+        email: f.querySelector('#p-email').value.trim(), telefono: f.querySelector('#p-tel').value.trim() };
+      guardarPost();
+    }));
     f.addEventListener('submit', async e => {
       e.preventDefault();
       const errBox = f.querySelector('.form-error');
       const v = id => f.querySelector('#' + id).value.trim();
-      if (!v('lg-codigo') || !v('lg-cedula')) { errBox.hidden = false; errBox.textContent = 'Escribe tu código de cohorte y tu cédula.'; return; }
-      const btn = f.querySelector('button[type="submit"]'); btn.disabled = true; btn.textContent = 'Entrando…';
+      S.post.datos = { nombre: v('p-nombre'), cedula: v('p-cedula'), ciudad: v('p-ciudad'), email: v('p-email'), telefono: v('p-tel') };
+      guardarPost();
+      const falta = v('p-nombre').length < 3 ? 'Escribe tu nombre y apellido.' : !v('p-cedula') ? 'Escribe tu cédula.'
+        : !/^\S+@\S+\.\S+$/.test(v('p-email')) ? 'Escribe un correo válido, por ejemplo nombre@gmail.com.' : v('p-tel').replace(/\D/g, '').length < 10 ? 'Escribe tu teléfono con código de área (11 dígitos).' : '';
+      if (falta) { errBox.hidden = false; errBox.textContent = falta; window.scrollTo(0, 0); return; }
+      const btn = f.querySelector('button[type="submit"]'); btn.disabled = true;
       try {
-        const r = await API.llamar('asp', 'auth', 'aspirante', { codigo: v('lg-codigo'), cedula: v('lg-cedula'), nombre: v('lg-nombre'), email: v('lg-email'), telefono: v('lg-tel') });
-        API.guardarToken('asp', r.token);
-        await iniciar();
-      } catch (er) { errBox.hidden = false; errBox.textContent = er.message; btn.disabled = false; btn.textContent = 'Entrar'; }
+        await API.llamar('asp', 'auth', 'verificarCedula', { cedula: v('p-cedula') });
+        if (!S.post.preguntas) S.post.preguntas = (await API.llamar('asp', 'auth', 'test', {})).preguntas;
+        const primeraSin = S.post.preguntas.findIndex(p => S.post.resp[p._id] == null);
+        if (primeraSin === -1) verRevisionTest(); else { S.post.idx = primeraSin; verPregunta(); }
+      } catch (er) { errBox.hidden = false; errBox.textContent = er.message; btn.disabled = false; window.scrollTo(0, 0); }
     });
-    f.querySelector('#lg-codigo').focus();
-  }
-
-  /* ---------- Test de perfil ---------- */
-  const borradorKey = () => 'elx_test_' + (S.asp && S.asp._id);
-  async function verTestIntro() {
-    cargando();
-    try {
-      const r = await call('test');
-      let resp = {};
-      try { resp = JSON.parse(Elx.Store.get(borradorKey()) || '{}'); } catch (e) {}
-      S.test = { preguntas: r.preguntas, idx: 0, resp };
-    } catch (e) { return manejar(e); }
-    const n = S.test.preguntas.length;
-    const empezado = Object.keys(S.test.resp).length > 0;
-    app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="panel"><div class="card stack">' +
-      '<span class="eyebrow">Paso 1 de 3</span><h1>Test de perfil</h1>' +
-      '<p class="muted">Hola, ' + esc(S.asp.nombre.split(' ')[0]) + '. Responde con lo que harías en tu día a día. No hay respuestas buenas ni malas: el resultado nos dice en qué célula vas a rendir mejor.</p>' +
-      '<div class="stats"><div class="stat"><span class="small muted">Preguntas</span><b>' + n + '</b></div><div class="stat"><span class="small muted">Tiempo aprox.</span><b>' + Math.max(2, Math.ceil(n * 0.6)) + ' min</b></div><div class="stat"><span class="small muted">Intentos</span><b>1</b></div></div>' +
-      '<div class="notice info">Solo puedes enviarlo una vez. Antes de enviar verás un resumen para cambiar lo que quieras.</div>' +
-      '<div class="row"><button class="btn btn-primary" id="t-go">' + (empezado ? 'Continuar test' : 'Comenzar test') + icon('right') + '</button></div></div></div></main>';
-    enlazarTop();
-    app.querySelector('#t-go').addEventListener('click', () => {
-      const primeraSin = S.test.preguntas.findIndex(p => S.test.resp[p._id] == null);
-      S.test.idx = primeraSin === -1 ? 0 : primeraSin;
-      primeraSin === -1 ? verRevisionTest() : verPregunta();
-    });
+    f.querySelector('#p-nombre').focus();
   }
   function verPregunta() {
     limpiar();
-    const t = S.test, p = t.preguntas[t.idx], n = t.preguntas.length, sel = t.resp[p._id];
-    const pct = Math.round(t.idx * 100 / n);
-    app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="panel">' +
-      '<div class="stepper-head"><div class="row-between"><span class="eyebrow">Test de perfil</span><span class="small muted num">Pregunta ' + (t.idx + 1) + ' de ' + n + '</span></div><div class="bar"><span style="width:' + pct + '%"></span></div></div>' +
+    const t = S.post, p = t.preguntas[t.idx], n = t.preguntas.length, sel = t.resp[p._id];
+    t.paso = 2;
+    app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="panel">' + cabeceraPaso(2, 'Pregunta ' + (t.idx + 1) + ' de ' + n, Math.round(15 + t.idx * 75 / n)) +
+      (t.idx === 0 ? '<p class="muted">Responde con lo que harías en tu día a día. No hay respuestas buenas ni malas.</p>' : '') +
       '<h2 id="q-t">' + esc(p.texto) + '</h2>' +
       '<div class="options" role="radiogroup" aria-labelledby="q-t">' + p.opciones.map((o, i) =>
         '<button type="button" class="option' + (sel === i ? ' selected' : '') + '" role="radio" aria-checked="' + (sel === i) + '" data-i="' + i + '"><span class="key">' + String.fromCharCode(65 + i) + '</span><span>' + esc(o) + '</span></button>').join('') + '</div>' +
       '<p class="small muted hide-sm">Atajo: presiona A, B, C o D para elegir y Enter para seguir.</p>' +
-      '<div class="nav-row"><button class="btn btn-secondary" id="q-prev"' + (t.idx === 0 ? ' disabled' : '') + '>' + icon('left') + 'Atrás</button>' +
+      '<div class="nav-row"><button class="btn btn-secondary" id="q-prev">' + icon('left') + 'Atrás</button>' +
       '<button class="btn btn-primary" id="q-next"' + (sel == null ? ' disabled' : '') + '>' + (t.idx === n - 1 ? 'Revisar respuestas' : 'Siguiente') + icon('right') + '</button></div></div></main>';
     enlazarTop();
     const elegir = i => {
       if (i < 0 || i >= p.opciones.length) return;
-      t.resp[p._id] = i; Elx.Store.set(borradorKey(), JSON.stringify(t.resp));
+      t.resp[p._id] = i; guardarPost();
       app.querySelectorAll('.option').forEach(b => { const on = Number(b.dataset.i) === i; b.classList.toggle('selected', on); b.setAttribute('aria-checked', String(on)); });
       app.querySelector('#q-next').disabled = false;
     };
     const siguiente = () => { if (t.resp[p._id] == null) return; if (t.idx === n - 1) verRevisionTest(); else { t.idx++; verPregunta(); } };
     app.querySelectorAll('.option').forEach(b => b.addEventListener('click', () => elegir(Number(b.dataset.i))));
-    app.querySelector('#q-prev').addEventListener('click', () => { t.idx--; verPregunta(); });
+    app.querySelector('#q-prev').addEventListener('click', () => { if (t.idx === 0) verPostulacion(); else { t.idx--; verPregunta(); } });
     app.querySelector('#q-next').addEventListener('click', siguiente);
     const tecla = e => {
       if (e.target.closest('input, textarea')) return;
@@ -159,43 +208,45 @@
   }
   function verRevisionTest() {
     limpiar();
-    const t = S.test;
-    app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="panel">' +
-      '<div class="stepper-head"><div class="row-between"><span class="eyebrow">Test de perfil</span><span class="small muted">Resumen</span></div><div class="bar"><span style="width:100%"></span></div></div>' +
-      '<div class="stack-sm"><h1>Revisa tus respuestas</h1><p class="muted">Puedes cambiar cualquiera antes de enviar. Después de enviar no se puede modificar.</p></div>' +
-      '<div class="card card-tight review">' + t.preguntas.map((p, i) =>
+    const t = S.post, d = t.datos;
+    t.paso = 3;
+    app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="panel">' + cabeceraPaso(3, 'Revisión', 95) +
+      '<div class="stack-sm"><h1>Revisa y envía</h1><p class="muted">Puedes cambiar lo que quieras. Después de enviar ya no se puede modificar.</p></div>' +
+      '<div class="card card-tight review"><div class="review-item"><span class="n">' + icon('users') + '</span><div class="grow stack-sm"><span class="small muted">Tus datos</span><b>' + esc(d.nombre) + ' · C.I. ' + esc(d.cedula) + '</b><span class="small">' + esc(d.email) + ' · ' + esc(d.telefono) + (d.ciudad ? ' · ' + esc(d.ciudad) : '') + '</span></div>' +
+      '<button class="btn btn-ghost btn-sm" id="r-datos">Cambiar</button></div>' + t.preguntas.map((p, i) =>
         '<div class="review-item"><span class="n num">' + (i + 1) + '</span><div class="grow stack-sm"><span class="small muted">' + esc(p.texto) + '</span><b>' + esc(p.opciones[t.resp[p._id]] || 'Sin responder') + '</b></div>' +
         '<button class="btn btn-ghost btn-sm" data-ir="' + i + '">Cambiar</button></div>').join('') + '</div>' +
-      '<div class="nav-row"><button class="btn btn-secondary" id="r-back">' + icon('left') + 'Atrás</button><button class="btn btn-primary" id="r-send">Enviar respuestas</button></div></div></main>';
+      '<div class="nav-row"><button class="btn btn-secondary" id="r-back">' + icon('left') + 'Atrás</button><button class="btn btn-primary" id="r-send">Enviar postulación</button></div></div></main>';
     enlazarTop();
+    app.querySelector('#r-datos').addEventListener('click', verPostulacion);
     app.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => { t.idx = Number(b.dataset.ir); verPregunta(); }));
     app.querySelector('#r-back').addEventListener('click', () => { t.idx = t.preguntas.length - 1; verPregunta(); });
     app.querySelector('#r-send').addEventListener('click', async () => {
-      const ok = await confirmar({ titulo: '¿Enviar el test?', texto: 'Con estas respuestas te asignamos una célula. No podrás cambiarlas después.', ok: 'Enviar' });
+      const ok = await confirmar({ titulo: '¿Enviar tu postulación?', texto: 'Con tus respuestas vemos en qué célula encajas. No podrás cambiarlas después.', ok: 'Enviar' });
       if (!ok) return;
       const btn = app.querySelector('#r-send'); btn.disabled = true; btn.textContent = 'Enviando…';
       try {
-        const r = await call('enviarTest', { respuestas: t.resp });
-        Elx.Store.del(borradorKey());
-        await refrescar();
-        verResultado(r);
-      } catch (e) { btn.disabled = false; btn.textContent = 'Enviar respuestas'; manejar(e); }
+        const r = await API.llamar('asp', 'auth', 'postular', { datos: t.datos, respuestas: t.resp });
+        Elx.Store.del(POST_KEY); S.post = null;
+        verFinPostulacion(r);
+      } catch (e) { btn.disabled = false; btn.textContent = 'Enviar postulación'; manejar(e); }
     });
   }
-  function verResultado(r) {
+  function verFinPostulacion(r) {
     limpiar();
     const asignado = r.estado === 'asignado' && r.celula;
     app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="panel"><div class="card stack">' +
-      '<span class="eyebrow">Resultado del test</span>' +
+      '<span class="pill pill-ok" style="align-self:flex-start">' + icon('check') + 'Postulación enviada</span>' +
       (asignado
-        ? '<div class="result-hero"><h1>Tu célula es</h1><span class="cell-badge">' + icon('tag') + esc(r.celula.nombre) + '</span><p class="muted">' + esc(r.celula.descripcion || '') + '</p></div>'
-        : '<div class="result-hero"><h1>Tu perfil queda en revisión</h1><p class="muted">Tus respuestas encajan con más de una célula. Un supervisor revisará tu caso y te asignará la que mejor te quede.</p></div>') +
-      '<hr class="divider"><div class="stack-sm"><h3>Qué sigue</h3><ol class="steps" style="color:var(--fg)">' +
-      '<li><span class="n">2</span><div><b>Tronco común</b><span class="muted">Lo que todo agente de CX necesita saber.</span></div></li>' +
-      '<li><span class="n">3</span><div><b>' + (asignado ? 'Formación de ' + esc(r.celula.nombre) : 'Formación de tu célula') + '</b><span class="muted">' + (asignado ? 'Videos, material y exámenes de tu célula.' : 'Se habilita cuando te asignen célula.') + '</span></div></li></ol></div>' +
-      '<div class="row"><button class="btn btn-primary" id="res-go">Empezar mi formación' + icon('right') + '</button></div></div></div></main>';
+        ? '<div class="result-hero"><h1>¡Gracias, ' + esc(r.nombre.split(' ')[0]) + '! Tu perfil encaja en</h1><span class="cell-badge">' + icon('tag') + esc(r.celula.nombre) + '</span><p class="muted">' + esc(r.celula.descripcion || '') + '</p></div>'
+        : '<div class="result-hero"><h1>¡Gracias, ' + esc(r.nombre.split(' ')[0]) + '!</h1><p class="muted">Tus respuestas encajan con más de una célula. El equipo de reclutamiento revisará tu perfil para ubicarte donde mejor te vaya.</p></div>') +
+      '<hr class="divider"><div class="stack-sm"><h3>Qué sigue</h3><ul class="steps" style="color:var(--fg)">' +
+      '<li><span class="n">' + icon('users') + '</span><div><b>Revisamos tu postulación</b><span class="muted">El equipo de reclutamiento evalúa tu perfil.</span></div></li>' +
+      '<li><span class="n">' + icon('tag') + '</span><div><b>Te contactamos</b><span class="muted">Si eres seleccionado, te enviamos tu código de acceso por correo o WhatsApp.</span></div></li>' +
+      '<li><span class="n">' + icon('book') + '</span><div><b>Empiezas tu formación</b><span class="muted">Entras por «Soy aspirante» con tu cédula y el código.</span></div></li></ul></div>' +
+      '<div class="row"><button class="btn btn-secondary" id="fin-ok">Volver al inicio</button></div></div></div></main>';
     enlazarTop();
-    app.querySelector('#res-go').addEventListener('click', () => verCurso({ tipo: 'inicio' }));
+    app.querySelector('#fin-ok').addEventListener('click', verInicio);
   }
 
   /* ---------- Curso: estructura ---------- */
@@ -529,7 +580,7 @@
     const r = 52, c = 2 * Math.PI * r, off = c * (1 - nota / 100);
     return '<svg class="score-ring" viewBox="0 0 120 120" role="img" aria-label="Nota ' + nota + '%"><circle cx="60" cy="60" r="' + r + '" fill="none" stroke="var(--surface-2)" stroke-width="10"/>' +
       '<circle cx="60" cy="60" r="' + r + '" fill="none" stroke="' + (ok ? 'var(--ok)' : 'var(--bad)') + '" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + c.toFixed(1) + '" stroke-dashoffset="' + off.toFixed(1) + '" transform="rotate(-90 60 60)"/>' +
-      '<text x="60" y="68" text-anchor="middle" font-family="Sora, sans-serif" font-size="26" font-weight="700" fill="var(--fg)">' + nota + '%</text></svg>';
+      '<text x="60" y="73" text-anchor="middle" font-family="Bebas Neue, Urbanist, sans-serif" font-size="38" font-weight="400" fill="var(--fg)">' + nota + '%</text></svg>';
   }
   function vistaResultadoExamen(el, m, r) {
     const siguiente = vecino({ tipo: 'examen', modId: m._id }, 1);
@@ -562,7 +613,7 @@
     const cel = celulaDe(S.asp.celula);
     const notas = S.ruta.modulos.filter(m => m.examen.mejor != null).map(m => m.examen.mejor);
     const prom = notas.length ? Math.round(notas.reduce((a, b) => a + b, 0) / notas.length) : null;
-    el.innerHTML = '<div class="cert"><div class="row-between"><span class="brand"><span class="brand-mark">R</span><span>Ridery · Formación CX</span></span><span class="pill pill-ok">' + icon('check') + 'Completado</span></div>' +
+    el.innerHTML = '<div class="cert"><div class="row-between"><span class="brand"><span class="brand-mark">R</span><span>Ridery Academy</span></span><span class="pill pill-ok">' + icon('check') + 'Completado</span></div>' +
       '<span class="eyebrow">Certificado de formación</span><div class="stack-sm"><span class="muted">Se certifica que</span><span class="name">' + esc(S.asp.nombre) + '</span>' +
       '<span class="muted">completó y aprobó la formación para agentes de CX de la célula <b style="color:var(--fg)">' + esc(cel ? cel.nombre : '') + '</b>.</span></div>' +
       '<hr class="divider"><div class="cert-grid"><div><span class="small muted">Cédula</span><b class="num">' + esc(S.asp.cedula) + '</b></div><div><span class="small muted">Cohorte</span><b>' + esc(S.asp.cohorte) + '</b></div>' +

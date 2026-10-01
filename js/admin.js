@@ -7,9 +7,9 @@
   const H = window.ElxHandlers;
   const app = document.getElementById('app');
   const call = (accion, data) => API.llamar('admin', 'admin', accion, data);
-  const A = { usuario: null, celulas: [], reglas: {}, cohortes: [], tab: 'aspirantes', filtros: { q: '', cohorte: '', celula: '', estado: '' }, celContenido: H.COMUN, aspirantes: [] };
+  const A = { usuario: null, celulas: [], reglas: {}, cohortes: [], tab: 'aspirantes', filtros: { q: '', cohorte: '', celula: '', estado: 'postulado' }, celContenido: H.COMUN, aspirantes: [] };
   const TABS = [
-    ['aspirantes', 'Aspirantes', 'users'], ['test', 'Test de perfil', 'list'], ['contenido', 'Contenido', 'book'],
+    ['aspirantes', 'Postulaciones', 'users'], ['test', 'Test de perfil', 'list'], ['contenido', 'Contenido', 'book'],
     ['cohortes', 'Cohortes', 'tag'], ['metricas', 'Métricas', 'chart'], ['ajustes', 'Ajustes', 'gear']
   ];
   const nombreCel = id => id === H.COMUN ? 'Tronco común' : ((A.celulas.find(c => c.id === id) || {}).nombre || id || '—');
@@ -24,7 +24,7 @@
 
   /* ---------- Acceso ---------- */
   function verLogin(msg) {
-    app.innerHTML = '<header class="topbar"><span class="brand"><span class="brand-mark">R</span><span>Panel · Formación CX</span></span></header>' +
+    app.innerHTML = '<header class="topbar"><span class="brand"><span class="brand-mark">R</span><span>Ridery Academy <small>· Panel</small></span></span></header>' +
       '<main class="center-wrap"><form class="card stack" id="f" style="width:100%;max-width:400px" novalidate><div class="stack-sm"><h1>Panel admin</h1><p class="muted small">Gestiona aspirantes, contenido y exámenes.</p></div>' +
       '<div class="form-error" role="alert"' + (msg ? '' : ' hidden') + '>' + esc(msg || '') + '</div>' +
       '<div class="field"><label for="a-u">Usuario</label><input class="input" id="a-u" autocomplete="username"></div>' +
@@ -57,7 +57,7 @@
   }
 
   function shell() {
-    app.innerHTML = '<header class="topbar"><span class="brand"><span class="brand-mark">R</span><span>Panel · Formación CX</span></span><div class="grow"></div>' +
+    app.innerHTML = '<header class="topbar"><span class="brand"><span class="brand-mark">R</span><span>Ridery Academy <small>· Panel</small></span></span><div class="grow"></div>' +
       '<div style="position:relative"><button class="user-chip" id="um" aria-haspopup="true"><span class="avatar">' + esc(iniciales(A.usuario)) + '</span><span class="hide-sm small">' + esc(A.usuario) + '</span>' + icon('chev') + '</button>' +
       '<div class="menu" id="user-menu" hidden><button id="salir">' + icon('out') + 'Salir</button></div></div></header>' +
       '<div class="admin"><nav class="admin-nav" aria-label="Secciones">' + TABS.map(t => '<button data-tab="' + t[0] + '">' + icon(t[2]) + t[1] + '</button>').join('') + '</nav><main class="admin-main" id="main"></main></div>';
@@ -79,98 +79,134 @@
   }
   const encabezado = (titulo, sub, acciones) => '<div class="row-between"><div class="stack-sm" style="gap:4px"><h1>' + titulo + '</h1>' + (sub ? '<p class="muted">' + sub + '</p>' : '') + '</div><div class="row">' + (acciones || '') + '</div></div>';
 
-  /* ============ Aspirantes ============ */
+  /* ============ Postulaciones y aspirantes ============ */
+  const ESTADOS = [['postulado', 'Por revisar'], ['aprobado', 'Aspirantes'], ['descartado', 'Descartados']];
+  function pillEstado(a) {
+    if (a.estado === 'aprobado') return '<span class="pill pill-ok">Aspirante</span>';
+    if (a.estado === 'descartado') return '<span class="pill">Descartado</span>';
+    return a.celulaSugerida ? '<span class="pill pill-brand">Por revisar</span>' : '<span class="pill pill-warn">Por revisar · sin célula</span>';
+  }
   async function tabAspirantes() {
     try { A.aspirantes = (await call('aspirantes')).aspirantes; } catch (e) { return manejar(e); }
     const f = A.filtros;
-    main.innerHTML = encabezado('Aspirantes', '', '<button class="btn btn-secondary" id="csv">' + icon('download') + 'Exportar CSV</button>') +
+    if (!f.estado || !ESTADOS.some(x => x[0] === f.estado)) f.estado = 'postulado';
+    const cuenta = e => A.aspirantes.filter(a => a.estado === e).length;
+    main.innerHTML = encabezado('Postulaciones', 'Quien se postula aparece en «Por revisar». Al aprobarlo pasa a «Aspirantes» y puede entrar a la formación.', '<button class="btn btn-secondary" id="csv">' + icon('download') + 'Exportar CSV</button>') +
+      '<div class="seg" role="tablist">' + ESTADOS.map(([k, n]) => '<button role="tab" data-est="' + k + '" class="' + (f.estado === k ? 'active' : '') + '" aria-selected="' + (f.estado === k) + '">' + n + ' <span class="num" style="opacity:.6">' + cuenta(k) + '</span></button>').join('') + '</div>' +
       '<div class="filters"><input class="input" id="f-q" placeholder="Buscar por nombre o cédula" value="' + esc(f.q) + '">' +
-      '<select class="select" id="f-coh"><option value="">Todas las cohortes</option>' + A.cohortes.map(c => '<option value="' + esc(c._id) + '"' + (f.cohorte === c._id ? ' selected' : '') + '>' + esc(c._id) + '</option>').join('') + '</select>' +
-      '<select class="select" id="f-cel"><option value="">Todas las células</option><option value="__rev"' + (f.celula === '__rev' ? ' selected' : '') + '>En revisión</option><option value="__sin"' + (f.celula === '__sin' ? ' selected' : '') + '>Sin test</option>' + opcionesCel(f.celula) + '</select>' +
-      '<select class="select" id="f-est"><option value="">Todos los estados</option><option value="curso"' + (f.estado === 'curso' ? ' selected' : '') + '>En formación</option><option value="completo"' + (f.estado === 'completo' ? ' selected' : '') + '>Completaron</option></select></div>' +
+      '<select class="select" id="f-cel"><option value="">Todas las células</option><option value="__sin"' + (f.celula === '__sin' ? ' selected' : '') + '>Sin célula</option>' + opcionesCel(f.celula) + '</select>' +
+      '<select class="select" id="f-coh"' + (f.estado !== 'aprobado' ? ' hidden' : '') + '><option value="">Todas las cohortes</option>' + A.cohortes.map(c => '<option value="' + esc(c._id) + '"' + (f.cohorte === c._id ? ' selected' : '') + '>' + esc(c._id) + '</option>').join('') + '</select></div>' +
       '<div id="tabla"></div>';
     const pintar = () => {
       const q = f.q.toLowerCase();
-      const lista = A.aspirantes.filter(a =>
+      const lista = A.aspirantes.filter(a => a.estado === f.estado &&
         (!q || a.nombre.toLowerCase().includes(q) || a.cedula.toLowerCase().includes(q)) &&
-        (!f.cohorte || a.cohorte === f.cohorte) &&
-        (!f.celula || (f.celula === '__rev' ? a.estadoTest === 'revision' && !a.celula : f.celula === '__sin' ? a.estadoTest === 'pendiente' : a.celula === f.celula)) &&
-        (!f.estado || (f.estado === 'completo' ? a.completo : !a.completo)));
+        (!f.celula || (f.celula === '__sin' ? !a.celula : a.celula === f.celula)) &&
+        (f.estado !== 'aprobado' || !f.cohorte || a.cohorte === f.cohorte));
       A.filtrados = lista;
       const t = main.querySelector('#tabla');
-      if (!lista.length) { t.innerHTML = '<div class="card empty">' + icon('users') + '<p>' + (A.aspirantes.length ? 'Ningún aspirante coincide con los filtros.' : 'Todavía no hay aspirantes. Comparte un código de cohorte para que se registren.') + '</p></div>'; return; }
-      t.innerHTML = '<p class="small muted num">' + lista.length + ' de ' + A.aspirantes.length + ' aspirantes</p><div class="table-wrap"><table><thead><tr><th>Aspirante</th><th>Cohorte</th><th>Célula</th><th>Test</th><th>Progreso</th><th>Promedio</th><th>Último acceso</th></tr></thead><tbody>' +
-        lista.map(a => '<tr class="click" data-id="' + esc(a._id) + '" tabindex="0"><td><b>' + esc(a.nombre) + '</b><div class="small muted num">C.I. ' + esc(a.cedula) + '</div></td><td>' + esc(a.cohorte) + '</td><td>' + esc(a.celula ? nombreCel(a.celula) : '—') + '</td>' +
-          '<td>' + pillTest(a.estadoTest, a.celula) + '</td><td><div class="row" style="gap:8px;flex-wrap:nowrap"><div class="bar' + (a.completo ? ' ok' : '') + '"><span style="width:' + a.progreso + '%"></span></div><span class="small num">' + a.progreso + '%</span></div></td>' +
-          '<td class="num">' + (a.promedio != null ? a.promedio + '%' : '—') + '</td><td class="small muted">' + fechaHora(a.ultimoAcceso) + '</td></tr>').join('') + '</tbody></table></div>';
+      if (!lista.length) {
+        const vacio = { postulado: A.aspirantes.length ? 'No hay postulaciones por revisar con estos filtros.' : 'Todavía no hay postulaciones. Comparte el enlace de la página para que la gente se postule.', aprobado: 'Todavía no apruebas aspirantes. Revisa las postulaciones y aprueba a quien quieras formar.', descartado: 'No hay postulaciones descartadas.' }[f.estado];
+        t.innerHTML = '<div class="card empty">' + icon('users') + '<p>' + vacio + '</p></div>'; return;
+      }
+      const esAsp = f.estado === 'aprobado';
+      t.innerHTML = '<p class="small muted num">' + lista.length + ' resultado' + (lista.length === 1 ? '' : 's') + '</p><div class="table-wrap"><table><thead><tr><th>Persona</th><th>Contacto</th><th>' + (esAsp ? 'Célula' : 'Célula sugerida') + '</th>' +
+        (esAsp ? '<th>Cohorte</th><th>Progreso</th><th>Promedio</th><th>Último acceso</th>' : '<th>Estado</th><th>Fecha</th>') + '</tr></thead><tbody>' +
+        lista.map(a => '<tr class="click" data-id="' + esc(a._id) + '" tabindex="0"><td><b>' + esc(a.nombre) + '</b><div class="small muted num">C.I. ' + esc(a.cedula) + (a.ciudad ? ' · ' + esc(a.ciudad) : '') + '</div></td>' +
+          '<td class="small">' + esc(a.telefono || '—') + '<div class="muted">' + esc(a.email || '') + '</div></td><td>' + esc(a.celula ? nombreCel(a.celula) : '—') + '</td>' +
+          (esAsp
+            ? '<td>' + esc(a.cohorte || '—') + '</td><td><div class="row" style="gap:8px;flex-wrap:nowrap"><div class="bar' + (a.completo ? ' ok' : '') + '"><span style="width:' + a.progreso + '%"></span></div><span class="small num">' + a.progreso + '%</span></div></td>' +
+              '<td class="num">' + (a.promedio != null ? a.promedio + '%' : '—') + '</td><td class="small muted">' + (a.ultimoAcceso ? fechaHora(a.ultimoAcceso) : 'Sin entrar') + '</td>'
+            : '<td>' + pillEstado(a) + '</td><td class="small muted">' + fechaHora(a.creado) + '</td>') + '</tr>').join('') + '</tbody></table></div>';
       t.querySelectorAll('tr.click').forEach(tr => {
         tr.addEventListener('click', () => detalleAspirante(tr.dataset.id));
         tr.addEventListener('keydown', e => { if (e.key === 'Enter') detalleAspirante(tr.dataset.id); });
       });
     };
+    main.querySelectorAll('[data-est]').forEach(b => b.addEventListener('click', () => { f.estado = b.dataset.est; tabAspirantes(); }));
     main.querySelector('#f-q').addEventListener('input', e => { f.q = e.target.value; pintar(); });
     main.querySelector('#f-coh').addEventListener('change', e => { f.cohorte = e.target.value; pintar(); });
     main.querySelector('#f-cel').addEventListener('change', e => { f.celula = e.target.value; pintar(); });
-    main.querySelector('#f-est').addEventListener('change', e => { f.estado = e.target.value; pintar(); });
     main.querySelector('#csv').addEventListener('click', () => exportarCSV(A.filtrados || []));
     pintar();
   }
-  function pillTest(estado, celula) {
-    if (estado === 'pendiente') return '<span class="pill">Sin test</span>';
-    if (estado === 'revision' && !celula) return '<span class="pill pill-warn">En revisión</span>';
-    return '<span class="pill pill-ok">Asignado</span>';
-  }
   function exportarCSV(lista) {
-    const cols = ['Nombre', 'Cédula', 'Correo', 'Teléfono', 'Cohorte', 'Célula', 'Estado test', 'Progreso %', 'Promedio %', 'Completó', 'Registro', 'Último acceso'];
+    const cols = ['Nombre', 'Cédula', 'Correo', 'Teléfono', 'Ciudad', 'Estado', 'Célula', 'Célula sugerida', 'Cohorte', 'Progreso %', 'Promedio %', 'Completó', 'Postulación', 'Aprobado', 'Último acceso'];
     const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-    const filas = lista.map(a => [a.nombre, a.cedula, a.email, a.telefono, a.cohorte, a.celula ? nombreCel(a.celula) : '', a.estadoTest, a.progreso, a.promedio, a.completo ? 'Sí' : 'No', a.creado, a.ultimoAcceso].map(q).join(';'));
+    const est = { postulado: 'Por revisar', aprobado: 'Aspirante', descartado: 'Descartado' };
+    const filas = lista.map(a => [a.nombre, a.cedula, a.email, a.telefono, a.ciudad, est[a.estado], a.celula ? nombreCel(a.celula) : '', a.celulaSugerida ? nombreCel(a.celulaSugerida) : '', a.cohorte, a.progreso, a.promedio, a.completo ? 'Sí' : 'No', a.creado, a.aprobadoFecha, a.ultimoAcceso].map(q).join(';'));
     const blob = new Blob(['﻿' + [cols.map(q).join(';')].concat(filas).join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'aspirantes-' + new Date().toISOString().slice(0, 10) + '.csv';
-    document.body.appendChild(a); a.click(); a.remove();
-    toast('CSV exportado (' + lista.length + ' aspirantes)');
+    const el = document.createElement('a'); el.href = URL.createObjectURL(blob); el.download = 'postulaciones-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(el); el.click(); el.remove();
+    toast('CSV exportado (' + lista.length + ')');
   }
 
   async function detalleAspirante(id) {
     let d;
     try { d = await call('aspirante', { id }); } catch (e) { return manejar(e); }
-    const a = d.aspirante, t = a.test;
+    const a = d.aspirante, t = a.test, r = d.resumen;
     const max = t ? Math.max(1, ...Object.values(t.puntajes || {})) : 1;
+    const abiertas = A.cohortes.filter(c => c.activa);
+    const selCoh = sel => '<select class="select" id="d-coh" style="width:auto">' + (abiertas.length ? '' : '<option value="">No hay cohortes abiertas</option>') + abiertas.map(c => '<option value="' + esc(c._id) + '"' + (c._id === sel ? ' selected' : '') + '>' + esc(c._id) + ' · ' + esc(c.nombre) + '</option>').join('') + '</select>';
+    let acciones;
+    if (r.estado === 'postulado') acciones = '<div class="card card-tight stack-sm" style="background:var(--brand-soft);border-color:transparent"><h3>Aprobar como aspirante</h3><p class="small muted">Podrá entrar a la formación con su cédula y el código de la cohorte. Envíale el código por correo o WhatsApp.</p>' +
+      '<div class="row"><div class="field"><label for="d-cel">Célula</label><select class="select" id="d-cel" style="width:auto"><option value="">Elige una célula</option>' + opcionesCel(a.celula) + '</select></div>' +
+      '<div class="field"><label for="d-coh">Cohorte</label>' + selCoh('') + '</div></div>' +
+      '<div class="row"><button class="btn btn-primary" id="d-aprobar">' + icon('check') + 'Aprobar</button><button class="btn btn-danger" id="d-desc">Descartar</button></div></div>';
+    else if (r.estado === 'descartado') acciones = '<div class="notice">Esta postulación fue descartada.</div><div class="row"><button class="btn btn-secondary" id="d-rev">Volver a «Por revisar»</button></div>';
+    else acciones = '<div class="row" style="align-items:flex-end"><div class="field"><label for="d-cel">Célula</label><select class="select" id="d-cel" style="width:auto">' + opcionesCel(a.celula) + '</select></div>' +
+      '<div class="field"><label for="d-coh">Cohorte · código de acceso</label>' + selCoh(a.cohorte) + '</div><button class="btn btn-primary btn-sm" id="d-save">Guardar cambios</button></div>' +
+      '<div class="row"><button class="btn btn-ghost btn-sm" id="d-copy">Copiar mensaje con su acceso</button><button class="btn btn-ghost btn-sm" id="d-rev">Quitar acceso (volver a «Por revisar»)</button></div>';
     const w = document.createElement('div'); w.className = 'modal-wrap';
-    w.innerHTML = '<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="dt"><div class="row-between"><div class="row"><span class="avatar">' + esc(iniciales(a.nombre)) + '</span><div><h2 id="dt">' + esc(a.nombre) + '</h2><span class="small muted num">C.I. ' + esc(a.cedula) + ' · ' + esc(a.cohorte) + '</span></div></div><button class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
-      '<div class="cert-grid small"><div><span class="muted">Correo</span><b>' + esc(a.email || '—') + '</b></div><div><span class="muted">Teléfono</span><b>' + esc(a.telefono || '—') + '</b></div><div><span class="muted">Registro</span><b>' + fecha(a.creado) + '</b></div><div><span class="muted">Progreso</span><b class="num">' + d.resumen.progreso + '%' + (d.resumen.completo ? ' · completó' : '') + '</b></div></div>' +
-      '<hr class="divider"><div class="stack-sm"><div class="row-between"><h3>Test de perfil</h3>' + pillTest(a.test ? a.test.estado : 'pendiente', a.celula) + '</div>' +
-      (t ? (t.motivo ? '<p class="small muted">Motivo de revisión: ' + esc(t.motivo) + '</p>' : '') +
+    w.innerHTML = '<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="dt"><div class="row-between"><div class="row"><span class="avatar">' + esc(iniciales(a.nombre)) + '</span><div><h2 id="dt">' + esc(a.nombre) + '</h2><span class="small muted num">C.I. ' + esc(a.cedula) + '</span></div>' + pillEstado(r) + '</div><button class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
+      '<div class="cert-grid small"><div><span class="muted">Correo</span><b>' + esc(a.email || '—') + '</b></div><div><span class="muted">Teléfono</span><b>' + esc(a.telefono || '—') + '</b></div><div><span class="muted">Ciudad</span><b>' + esc(a.ciudad || '—') + '</b></div><div><span class="muted">Postulación</span><b>' + fecha(a.creado) + '</b></div>' +
+      (r.estado === 'aprobado' ? '<div><span class="muted">Progreso</span><b class="num">' + r.progreso + '%' + (r.completo ? ' · completó' : '') + '</b></div>' : '') + '</div>' +
+      acciones +
+      '<hr class="divider"><div class="stack-sm"><div class="row-between"><h3>Test de perfil</h3><span class="small muted">Sugerida: <b>' + esc(t && t.celulaSugerida ? nombreCel(t.celulaSugerida) : 'ninguna') + '</b></span></div>' +
+      (t ? (t.motivo ? '<p class="small muted">' + esc(t.motivo) + '</p>' : '') +
         '<div class="stack-sm">' + (t.ranking || []).map(([c, v]) => '<div class="hbar"><span>' + esc(nombreCel(c)) + '</span><div class="bar"><span style="width:' + Math.round(v * 100 / max) + '%"></span></div><span class="num small">' + v + '</span></div>').join('') + '</div>' +
-        '<details><summary class="small" style="cursor:pointer;font-weight:600">Ver respuestas (' + Object.keys(t.respuestas || {}).length + ')</summary><div class="review">' +
-        Object.values(t.respuestas || {}).map((r, i) => '<div class="review-item"><span class="n num">' + (i + 1) + '</span><div class="stack-sm" style="gap:2px"><span class="small muted">' + esc(r.pregunta) + '</span><b>' + esc(r.texto) + '</b></div></div>').join('') + '</div></details>'
-        : '<p class="small muted">Todavía no hace el test.</p>') +
-      '<div class="row"><label class="label" for="d-cel">Célula asignada</label><select class="select" id="d-cel" style="width:auto"><option value="">Sin célula (en revisión)</option>' + opcionesCel(a.celula) + '</select><button class="btn btn-primary btn-sm" id="d-save">Guardar célula</button>' +
-      (t ? '<button class="btn btn-danger btn-sm" id="d-retest">Repetir test</button>' : '') + '</div></div>' +
-      '<hr class="divider"><div class="stack-sm"><h3>Módulos</h3>' + (d.ruta.modulos.length ? '<div class="table-wrap"><table><thead><tr><th>Módulo</th><th>Estado</th><th>Intentos</th><th>Mejor nota</th><th></th></tr></thead><tbody>' +
+        (Object.keys(t.respuestas || {}).length ? '<details><summary class="small" style="cursor:pointer;font-weight:700">Ver respuestas (' + Object.keys(t.respuestas).length + ')</summary><div class="review">' +
+          Object.values(t.respuestas).map((x, i) => '<div class="review-item"><span class="n num">' + (i + 1) + '</span><div class="stack-sm" style="gap:2px"><span class="small muted">' + esc(x.pregunta) + '</span><b>' + esc(x.texto) + '</b></div></div>').join('') + '</div></details>' : '')
+        : '<p class="small muted">Sin test.</p>') + '</div>' +
+      (r.estado === 'aprobado' ? '<hr class="divider"><div class="stack-sm"><h3>Módulos</h3>' + (d.ruta.modulos.length ? '<div class="table-wrap"><table><thead><tr><th>Módulo</th><th>Estado</th><th>Intentos</th><th>Mejor nota</th><th></th></tr></thead><tbody>' +
         d.ruta.modulos.map(m => '<tr><td><b>' + esc(m.titulo) + '</b><div class="small muted">' + esc(nombreCel(m.celula)) + '</div></td><td>' + ({ aprobado: '<span class="pill pill-ok">Aprobado</span>', disponible: '<span class="pill pill-brand">En curso</span>', bloqueado: '<span class="pill">Bloqueado</span>', agotado: '<span class="pill pill-bad">Sin intentos</span>' }[m.estado]) + '</td>' +
           '<td class="num">' + m.examen.intentos + ' / ' + A.reglas.intentosMax + '</td><td class="num">' + (m.examen.mejor != null ? m.examen.mejor + '%' : '—') + '</td>' +
-          '<td>' + (m.examen.intentos && !m.examen.aprobado ? '<button class="btn btn-secondary btn-sm" data-reset="' + esc(m._id) + '">Reiniciar intentos</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="small muted">Sin módulos en su ruta.</p>') + '</div>' +
-      '<div class="modal-actions" style="justify-content:space-between"><button class="btn btn-danger btn-sm" id="d-del">' + icon('trash') + 'Eliminar aspirante</button><button class="btn btn-secondary" data-x>Cerrar</button></div></div>';
+          '<td>' + (m.examen.intentos && !m.examen.aprobado ? '<button class="btn btn-secondary btn-sm" data-reset="' + esc(m._id) + '">Reiniciar intentos</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="small muted">Sin módulos en su ruta.</p>') + '</div>' : '') +
+      '<div class="modal-actions" style="justify-content:space-between"><button class="btn btn-danger btn-sm" id="d-del">' + icon('trash') + 'Eliminar registro</button><button class="btn btn-secondary" data-x>Cerrar</button></div></div>';
     const cerrar = () => { w.remove(); document.removeEventListener('keydown', k); };
     const k = e => { if (e.key === 'Escape' && !document.querySelector('.modal-wrap + .modal-wrap')) cerrar(); };
     document.addEventListener('keydown', k);
     w.addEventListener('click', e => { if (e.target === w || e.target.closest('[data-x]')) cerrar(); });
     document.body.appendChild(w);
     const recargar = async () => { cerrar(); await tabAspirantes(); detalleAspirante(id); };
-    w.querySelector('#d-save').addEventListener('click', async () => {
-      try { await call('asignarCelula', { id, celula: w.querySelector('#d-cel').value }); toast('Célula actualizada'); recargar(); } catch (e) { manejar(e); }
+    const $ = sel => w.querySelector(sel);
+    if ($('#d-aprobar')) $('#d-aprobar').addEventListener('click', async () => {
+      const celula = $('#d-cel').value, cohorte = $('#d-coh').value;
+      if (!celula) return toast('Elige la célula antes de aprobar.', 'bad');
+      if (!cohorte) return toast('Crea o abre una cohorte en la sección Cohortes.', 'bad');
+      try { await call('aprobar', { id, celula, cohorte }); toast(a.nombre.split(' ')[0] + ' ya es aspirante. Código de acceso: ' + cohorte); A.filtros.estado = 'aprobado'; recargar(); } catch (e) { manejar(e); }
     });
-    const rt = w.querySelector('#d-retest');
-    if (rt) rt.addEventListener('click', async () => {
-      if (!await confirmar({ titulo: '¿Repetir el test?', texto: 'Se borran sus respuestas y su célula. El aspirante volverá a hacer el test al entrar.', ok: 'Repetir test', peligro: true })) return;
-      try { await call('reiniciarTest', { id }); toast('El aspirante hará el test de nuevo'); recargar(); } catch (e) { manejar(e); }
+    if ($('#d-desc')) $('#d-desc').addEventListener('click', async () => {
+      if (!await confirmar({ titulo: '¿Descartar a ' + a.nombre + '?', texto: 'No podrá entrar a la formación. Puedes devolverlo a «Por revisar» después.', ok: 'Descartar', peligro: true })) return;
+      try { await call('cambiarEstado', { id, estado: 'descartado' }); toast('Postulación descartada'); cerrar(); tabAspirantes(); } catch (e) { manejar(e); }
+    });
+    if ($('#d-rev')) $('#d-rev').addEventListener('click', async () => {
+      if (r.estado === 'aprobado' && !await confirmar({ titulo: '¿Quitarle el acceso?', texto: 'Ya no podrá entrar a la formación. Su progreso se conserva por si lo vuelves a aprobar.', ok: 'Quitar acceso', peligro: true })) return;
+      try { await call('cambiarEstado', { id, estado: 'postulado' }); toast('Volvió a «Por revisar»'); A.filtros.estado = 'postulado'; recargar(); } catch (e) { manejar(e); }
+    });
+    if ($('#d-save')) $('#d-save').addEventListener('click', async () => {
+      try { await call('asignarCelula', { id, celula: $('#d-cel').value, cohorte: $('#d-coh').value }); toast('Cambios guardados'); recargar(); } catch (e) { manejar(e); }
+    });
+    if ($('#d-copy')) $('#d-copy').addEventListener('click', () => {
+      const msg = 'Hola ' + a.nombre.split(' ')[0] + ', fuiste seleccionado para la formación de agentes CX de Ridery (célula ' + nombreCel(a.celula) + '). Entra en ' + location.origin + location.pathname.replace(/admin\.html$/, '') + ' → «Soy aspirante» con tu cédula y el código de acceso: ' + a.cohorte;
+      navigator.clipboard.writeText(msg).then(() => toast('Mensaje copiado'), () => toast('No se pudo copiar automáticamente.', 'bad'));
     });
     w.querySelectorAll('[data-reset]').forEach(b => b.addEventListener('click', async () => {
       try { await call('reiniciarIntentos', { id, moduloId: b.dataset.reset }); toast('Intentos reiniciados'); recargar(); } catch (e) { manejar(e); }
     }));
-    w.querySelector('#d-del').addEventListener('click', async () => {
-      if (!await confirmar({ titulo: '¿Eliminar a ' + a.nombre + '?', texto: 'Se borra su registro, test y progreso. No se puede deshacer.', ok: 'Eliminar', peligro: true })) return;
-      try { await call('eliminarAspirante', { id }); cerrar(); toast('Aspirante eliminado'); tabAspirantes(); } catch (e) { manejar(e); }
+    $('#d-del').addEventListener('click', async () => {
+      if (!await confirmar({ titulo: '¿Eliminar a ' + a.nombre + '?', texto: 'Se borra su postulación, test y progreso. Podrá postularse de nuevo con la misma cédula.', ok: 'Eliminar', peligro: true })) return;
+      try { await call('eliminarAspirante', { id }); cerrar(); toast('Registro eliminado'); tabAspirantes(); } catch (e) { manejar(e); }
     });
   }
 
@@ -441,7 +477,7 @@
     let asps;
     try { const [r, a] = await Promise.all([call('resumen'), call('aspirantes')]); A.cohortes = r.cohortes; asps = a.aspirantes; } catch (e) { return manejar(e); }
     const cuenta = id => asps.filter(a => a.cohorte === id).length;
-    main.innerHTML = encabezado('Cohortes', 'El aspirante entra con el código de su cohorte. Cierra una cohorte para que nadie nuevo se registre con ese código.') +
+    main.innerHTML = encabezado('Cohortes', 'El código de la cohorte es el código de acceso del aspirante. Al aprobar una postulación eliges su cohorte. Si cierras una cohorte, sus aspirantes ya no pueden entrar.') +
       '<form class="card card-tight row" id="f-c" style="align-items:flex-end"><div class="field grow" style="min-width:160px"><label for="c-id">Código</label><input class="input" id="c-id" placeholder="CX-2026-11" style="text-transform:uppercase"></div>' +
       '<div class="field grow" style="min-width:200px"><label for="c-n">Nombre</label><input class="input" id="c-n" placeholder="Cohorte noviembre 2026"></div><button class="btn btn-primary" type="submit">' + icon('plus') + 'Crear cohorte</button></form>' +
       '<div class="table-wrap"><table><thead><tr><th>Código</th><th>Nombre</th><th>Aspirantes</th><th>Creada</th><th>Estado</th><th></th></tr></thead><tbody>' +
@@ -465,12 +501,12 @@
   async function tabMetricas() {
     let r;
     try { r = await call('metricas'); } catch (e) { return manejar(e); }
-    const filas = Object.entries(r.porCelula).map(([k, v]) => [k === 'REVISION' ? 'En revisión' : k === 'SIN_TEST' ? 'Sin test' : nombreCel(k), v]).sort((a, b) => b[1] - a[1]);
+    const filas = Object.entries(r.porCelula).map(([k, v]) => [k === 'REVISION' ? 'Sin célula sugerida' : nombreCel(k), v]).sort((a, b) => b[1] - a[1]);
     const max = Math.max(1, ...filas.map(f => f[1]));
     main.innerHTML = encabezado('Métricas') +
-      '<div class="kpis"><div class="stat"><span class="small muted">Aspirantes</span><b>' + r.total + '</b></div><div class="stat"><span class="small muted">Hicieron el test</span><b>' + r.conTest + '</b></div>' +
-      '<div class="stat"><span class="small muted">En revisión</span><b style="color:' + (r.enRevision ? 'var(--warn)' : 'inherit') + '">' + r.enRevision + '</b></div><div class="stat"><span class="small muted">Completaron</span><b style="color:var(--ok)">' + r.completados + '</b></div></div>' +
-      '<div class="card stack"><h2>Aspirantes por célula</h2>' + (filas.length ? filas.map(([n, v]) => '<div class="hbar"><span>' + esc(n) + '</span><div class="bar"><span style="width:' + Math.round(v * 100 / max) + '%"></span></div><span class="num small">' + v + '</span></div>').join('') : '<p class="muted small">Sin datos todavía.</p>') + '</div>' +
+      '<div class="kpis"><div class="stat"><span class="small muted">Postulaciones</span><b>' + r.total + '</b></div><div class="stat"><span class="small muted">Por revisar</span><b style="color:' + (r.porRevisar ? 'var(--warn)' : 'inherit') + '">' + r.porRevisar + '</b></div>' +
+      '<div class="stat"><span class="small muted">Aspirantes aprobados</span><b>' + r.aprobados + '</b></div><div class="stat"><span class="small muted">Completaron la formación</span><b style="color:var(--ok)">' + r.completados + '</b></div></div>' +
+      '<div class="card stack"><h2>Postulaciones por célula</h2><p class="small muted">Célula sugerida por el test o asignada al aprobar.</p>' + (filas.length ? filas.map(([n, v]) => '<div class="hbar"><span>' + esc(n) + '</span><div class="bar"><span style="width:' + Math.round(v * 100 / max) + '%"></span></div><span class="num small">' + v + '</span></div>').join('') : '<p class="muted small">Sin datos todavía.</p>') + '</div>' +
       '<div class="stack-sm"><h2>Exámenes por módulo</h2>' + (r.porModulo.length ? '<div class="table-wrap"><table><thead><tr><th>Módulo</th><th>Célula</th><th>Personas</th><th>Aprobaron</th><th>Intentos</th><th>Nota promedio</th></tr></thead><tbody>' +
         r.porModulo.map(m => '<tr><td><b>' + esc(m.titulo) + '</b></td><td>' + esc(nombreCel(m.celula)) + '</td><td class="num">' + m.personas + '</td><td class="num">' + m.aprobaron + ' <span class="muted small">(' + Math.round(m.aprobaron * 100 / Math.max(1, m.personas)) + '%)</span></td><td class="num">' + m.intentos + '</td><td class="num">' + (m.promedio != null ? m.promedio + '%' : '—') + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="card empty"><p>Aún nadie presentó exámenes.</p></div>') + '</div>' +
       '<div class="stack-sm"><h2>Preguntas que más se fallan</h2><p class="small muted">Si una pregunta tiene una tasa de error muy alta, revisa si la lección la explica bien o si la pregunta es confusa.</p>' + (r.masFalladas.length ? '<div class="table-wrap"><table><thead><tr><th>Pregunta</th><th>Módulo</th><th>Respuestas</th><th>% de error</th></tr></thead><tbody>' +

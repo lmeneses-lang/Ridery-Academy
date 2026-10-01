@@ -48,6 +48,11 @@
       m.lecciones[1].imagenes = [imgEjemplo('Células de CX', '#2F49D1'), imgEjemplo('Panel de Zendesk', '#11734A')];
       await store.put('modulos', m);
     }
+    if (!(await store.get('aspirantes', 'asp-12345678'))) {
+      await store.put('aspirantes', { _id: 'asp-12345678', cedula: '12345678', nombre: 'Aspirante Demo', email: 'demo@ridery.app', telefono: '', estado: 'aprobado',
+        creado: new Date().toISOString(), aprobadoFecha: new Date().toISOString(), ultimoAcceso: null, cohorte: 'CX-2026-10', celula: 'PAYMENTS', progreso: {}, examenes: {},
+        test: { fecha: new Date().toISOString(), respuestas: {}, puntajes: { PAYMENTS: 7, 'MATCH AND PRICING': 3 }, ranking: [['PAYMENTS', 7], ['MATCH AND PRICING', 3]], estado: 'asignado', motivo: '', celulaSugerida: 'PAYMENTS' } });
+    }
   }
 
   function sesion(token) {
@@ -59,6 +64,7 @@
 
   async function llamar(fn, body, token) {
     await pausa();
+    try { if (localStorage.getItem(KEY) !== null) db = null; } catch (e) { /* sin almacenamiento: se queda en memoria */ } // relee: el panel y el aspirante comparten datos entre pestañas
     await sembrarDemo();
     try {
       if (fn === 'auth') {
@@ -70,7 +76,7 @@
           if (!body.usuario || !body.clave) throw H.err(401, 'Usuario o clave incorrectos.');
           return { token: firmar({ rol: 'admin', usuario: body.usuario }), usuario: body.usuario };
         }
-        throw H.err(400, 'Acción desconocida');
+        return copia(await H.ejecutar('publico', body.accion, { store, body }));
       }
       const user = sesion(token);
       if (!user || user.rol !== fn) throw H.err(401, 'Tu sesión expiró. Vuelve a entrar.');

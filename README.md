@@ -7,17 +7,26 @@ Una plataforma de e-learning para aspirantes a agentes de CX. Funciona aparte de
 
 ## Cómo funciona
 
-1. **Entrar.** El aspirante entra con un **código de cohorte**, su cédula y su nombre. Si vuelve con la misma cédula y el mismo código, sigue donde lo dejó.
-2. **Test de perfil.** Responde preguntas de selección simple. Cada opción suma puntos a una o varias células.
-   - Si la célula con más puntos llega al mínimo y le saca la diferencia configurada a la segunda, queda **asignado** a esa célula.
-   - Si no, queda **en revisión** y lo asignas a mano desde el panel.
-3. **Ruta de formación.** Ve primero el **tronco común** y después **solo los módulos de su célula**. Los módulos se desbloquean en orden.
-4. **Lecciones.** Cada lección tiene un video de YouTube, texto e imágenes. Solo se marca como completada cuando el aspirante ve el 90% del video. Adelantar el video no cuenta: solo suman los segundos que realmente se reproducen.
-5. **Examen.** Al final de cada módulo hay un examen de selección simple:
-   - las preguntas y las opciones cambian de orden en cada intento;
+La página abre con dos opciones.
+
+**Postúlate** (público, sin código). Sirve como filtro:
+
+1. La persona deja sus datos: nombre, cédula, ciudad, correo y teléfono.
+2. Responde el test de perfil de selección simple. Cada opción suma puntos a una o varias células.
+3. Al enviar, ve en qué célula encaja y termina ahí. Si hay empate o nadie llega al mínimo, se le dice que su perfil será revisado.
+4. La postulación queda en el panel, en **Postulaciones → Por revisar**.
+
+**En el panel** abres la postulación, revisas los puntajes y la apruebas eligiendo **célula** y **cohorte**, o la descartas. El código de la cohorte es su **código de acceso**. El botón "Copiar mensaje con su acceso" te arma el texto para enviárselo por WhatsApp.
+
+**Soy aspirante** (solo personas aprobadas). Entran con su cédula y su código de acceso, y ven:
+
+1. El **tronco común** y después **solo los módulos de su célula**. Los módulos se desbloquean en orden.
+2. **Lecciones** con video de YouTube, texto e imágenes. Hay que ver el 90% del video y adelantarlo no cuenta.
+3. Un **examen** de selección simple al final de cada módulo:
+   - las preguntas y opciones cambian de orden en cada intento;
    - hay una nota mínima y un número limitado de intentos;
    - la corrección se hace en el servidor.
-6. **Certificado.** Al aprobar todo, aparece la pantalla de certificado.
+4. Un **certificado** al aprobar todo.
 
 ## Estructura
 
@@ -59,15 +68,17 @@ Usa **3 funciones serverless**. El tope de Vercel Hobby es 12.
    - 5 preguntas del test;
    - 4 módulos;
    - la cohorte `CX-2026-10`.
+6. Las postulaciones se ven en `/admin.html` → **Postulaciones**.
 
-## Cambiar los colores por los de AdminCX
+## Marca
 
-Abre `css/styles.css`. Al inicio están las variables de color (`--brand`, `--bg`, `--surface`, etc.):
+Sigue el manual de Ridery:
 
-- el primer bloque es el **modo claro**;
-- los dos bloques siguientes son el **modo oscuro**.
+- **Colores principales:** verde `#38CEA6` y azul marino `#0F111E`.
+- **Detalles:** fucsia `#D71D5C` y azul rey `#272883`.
+- **Tipografía:** Urbanist en textos y Bebas Neue en cifras.
 
-Pega ahí los códigos de AdminCX.
+Todo está en variables al inicio de `css/styles.css`.
 
 ## Imágenes con Lightshot
 
@@ -78,6 +89,8 @@ Pega ahí los códigos de AdminCX.
 ## Modo demo
 
 Abre `index.html?demo=1` o `admin.html?demo=1` para probar todo sin base de datos. Los datos quedan solo en tu navegador.
+
+En la demo existe un aspirante ya aprobado (cédula `12345678`, código `CX-2026-10`) para ver la formación directamente.
 
 Si no lo quieres en producción, borra la línea `<script src="js/demo.js">` de los dos HTML.
 

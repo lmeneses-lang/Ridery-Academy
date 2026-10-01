@@ -1,4 +1,4 @@
-// POST /api/auth  { accion: 'aspirante' | 'admin', ... }
+// POST /api/auth  { accion: 'aspirante' | 'admin' | acciones públicas de Postúlate (test, verificarCedula, postular) }
 const H = require('../js/handlers.js');
 const store = require('../lib/store');
 const { firmar, iguales, responder, manejarError } = require('../lib/auth');
@@ -19,6 +19,7 @@ module.exports = async (req, res) => {
       }
       return responder(res, 200, { token: firmar({ rol: 'admin', usuario: body.usuario }, 1), usuario: body.usuario });
     }
-    responder(res, 400, { error: 'Acción desconocida' });
+    const data = await H.ejecutar('publico', body.accion, { store, body });
+    responder(res, 200, data);
   } catch (e) { manejarError(res, e); }
 };
