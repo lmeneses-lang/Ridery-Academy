@@ -1,0 +1,11 @@
+{
+  "name": "formacion-cx",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Plataforma de formación para aspirantes a agentes CX de Ridery",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2",
+    "mongodb": "^6.9.0"
+  }
+}
