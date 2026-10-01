@@ -367,10 +367,29 @@
   }
 
   const admin = {
-    async resumen({ store }) {
+    async resumen({ store, user }) {
       const cfg = await cargarConfig(store);
       const [asps, modulos, cohortes] = await Promise.all([store.find('aspirantes', {}), store.find('modulos', {}), store.find('cohortes', {})]);
-      return { celulas: cfg.celulas, reglas: cfg.reglas, cohortes, totalAspirantes: asps.length, modulos: modulos.length };
+      return { celulas: cfg.celulas, reglas: cfg.reglas, cohortes, totalAspirantes: asps.length, modulos: modulos.length,
+        yo: { usuario: user.usuario, nombre: user.nombre || user.usuario, perfil: user.perfil, principal: !!user.principal } };
+    },
+    async crearAspirante({ store, body }) {
+      const cfg = await cargarConfig(store);
+      const d = body.aspirante || {};
+      const cedula = limpiarCedula(d.cedula), nombre = limpiar(d.nombre, 80);
+      if (nombre.length < 3) throw err(400, 'Escribe nombre y apellido.');
+      if (!cedula) throw err(400, 'Escribe la cédula.');
+      const id = 'asp-' + cedula;
+      if (await store.get('aspirantes', id)) throw err(409, 'Ya existe un registro con esa cédula. Búscalo en Postulaciones.');
+      if (!d.celula || !cfg.celulas.some(c => c.id === d.celula)) throw err(400, 'Elige la célula.');
+      const cohorte = await store.get('cohortes', String(d.cohorte || '').toUpperCase());
+      if (!cohorte) throw err(400, 'Elige la cohorte.');
+      if (!cohorte.activa) throw err(400, 'Esa cohorte está cerrada. Ábrela o elige otra.');
+      const asp = { _id: id, cedula, nombre, email: limpiar(d.email, 120), telefono: limpiar(d.telefono, 30), ciudad: limpiar(d.ciudad, 60),
+        estado: 'aprobado', creado: ahora(), aprobadoFecha: ahora(), ultimoAcceso: null, cohorte: cohorte._id, celula: d.celula,
+        progreso: {}, examenes: {}, test: null, origen: 'manual', nota: limpiar(d.nota, 300) };
+      await store.put('aspirantes', asp);
+      return { ok: true, codigo: cohorte._id };
     },
     async aspirantes({ store }) {
       const cfg = await cargarConfig(store);
@@ -526,16 +545,86 @@
       }).sort((a, b) => b.tasa - a.tasa || b.fallos - a.fallos).slice(0, 10);
       return { total: asps.length, porRevisar: asps.filter(a => estadoDe(a) === 'postulado').length, sinCelula: asps.filter(a => estadoDe(a) === 'postulado' && !a.celula).length,
         aprobados: aprobados.length, descartados: asps.filter(a => estadoDe(a) === 'descartado').length, completados, porCelula, porModulo, masFalladas, celulas: cfg.celulas };
+    },
+
+    /* ----- Equipo del panel ----- */
+    async usuarios({ store }) {
+      const us = await store.find('usuarios', {});
+      return { usuarios: us.map(vistaUsuario).sort((a, b) => a.usuario.localeCompare(b.usuario)) };
+    },
+    async guardarUsuario({ store, body, user, cripto }) {
+      const u = body.usuario || {};
+      const id = limpiarUsuario(u.usuario);
+      if (!/^[a-z0-9._-]{3,30}$/.test(id)) throw err(400, 'El usuario debe tener de 3 a 30 caracteres: letras, números, punto, guion o guion bajo.');
+      if (!PERFILES[u.perfil]) throw err(400, 'Elige un rol.');
+      const previo = await store.get('usuarios', id);
+      if (u.nuevo && previo) throw err(409, 'Ya existe un usuario con ese nombre.');
+      if (!u.nuevo && !previo) throw err(404, 'Usuario no encontrado.');
+      if (user.cuenta === id && (u.perfil !== 'admin' || u.activo === false)) throw err(400, 'No puedes quitarte tu propio rol de admin ni desactivarte.');
+      const doc = Object.assign({ creado: ahora(), creadoPor: user.usuario }, previo || {}, {
+        _id: id, nombre: limpiar(u.nombre, 80) || id, perfil: u.perfil, activo: u.activo !== false, actualizado: ahora() });
+      if (u.clave) {
+        if (String(u.clave).length < 8) throw err(400, 'La clave debe tener al menos 8 caracteres.');
+        doc.hash = await cripto.hash(String(u.clave));
+      } else if (!previo) throw err(400, 'Escribe una clave para el usuario nuevo.');
+      await store.put('usuarios', doc);
+      return { usuario: vistaUsuario(doc) };
+    },
+    async eliminarUsuario({ store, body, user }) {
+      const id = limpiarUsuario(body.id);
+      if (user.cuenta === id) throw err(400, 'No puedes eliminar tu propio usuario.');
+      await store.del('usuarios', id);
+      return { ok: true };
+    },
+    async cambiarMiClave({ store, body, user, cripto }) {
+      if (user.principal) throw err(400, 'La clave de la cuenta principal se cambia en Vercel (variable ADMIN_PASS).');
+      const u = await store.get('usuarios', user.cuenta);
+      if (!u || !(await cripto.verificar(String(body.actual || ''), u.hash))) throw err(400, 'Tu clave actual no es correcta.');
+      if (String(body.nueva || '').length < 8) throw err(400, 'La clave nueva debe tener al menos 8 caracteres.');
+      u.hash = await cripto.hash(String(body.nueva)); u.actualizado = ahora();
+      await store.put('usuarios', u);
+      return { ok: true };
     }
   };
+
+  /* ---------- Roles del panel ---------- */
+  const PERFILES = {
+    admin: { nombre: 'Admin', acciones: '*' },
+    reclutador: { nombre: 'Reclutador', acciones: ['resumen', 'aspirantes', 'aspirante', 'aprobar', 'cambiarEstado', 'asignarCelula', 'reiniciarIntentos', 'crearAspirante', 'guardarCohorte', 'metricas', 'cambiarMiClave'] },
+    calidad: { nombre: 'Calidad', acciones: ['resumen', 'aspirantes', 'aspirante', 'metricas', 'cambiarMiClave'] }
+  };
+  const limpiarUsuario = u => limpiar(u, 30).toLowerCase();
+  function vistaUsuario(u) { return { usuario: u._id, nombre: u.nombre, perfil: u.perfil, activo: u.activo !== false, creado: u.creado, ultimoAcceso: u.ultimoAcceso || null }; }
+
+  // Login de cuentas creadas en el panel (la cuenta principal se valida aparte, con ADMIN_USER / ADMIN_PASS)
+  async function loginAdmin(store, body, cripto) {
+    const id = limpiarUsuario(body.usuario);
+    const u = id && await store.get('usuarios', id);
+    if (!u || u.activo === false || !(await cripto.verificar(String(body.clave || ''), u.hash))) throw err(401, 'Usuario o clave incorrectos.');
+    u.ultimoAcceso = ahora();
+    await store.put('usuarios', u);
+    return { rol: 'admin', usuario: u._id, nombre: u.nombre, perfil: u.perfil, cuenta: u._id };
+  }
 
   /* ---------- Despachador ---------- */
   async function ejecutar(grupo, accion, ctx) {
     const tabla = grupo === 'admin' ? admin : grupo === 'publico' ? publico : aspirante;
     if (!Object.prototype.hasOwnProperty.call(tabla, accion)) throw err(400, 'Acción desconocida: ' + accion);
+    if (grupo === 'admin') {
+      const user = ctx.user || {};
+      if (user.cuenta) {                       // cuenta del panel: se revalida en cada llamada (rol actual, activa)
+        const u = await ctx.store.get('usuarios', user.cuenta);
+        if (!u || u.activo === false) throw err(401, 'Tu acceso al panel fue desactivado.');
+        ctx.user = Object.assign({}, user, { perfil: u.perfil, nombre: u.nombre });
+      } else {
+        ctx.user = Object.assign({}, user, { perfil: 'admin', principal: true });
+      }
+      const p = PERFILES[ctx.user.perfil];
+      if (!p || (p.acciones !== '*' && !p.acciones.includes(accion))) throw err(403, 'Tu rol (' + (p ? p.nombre : ctx.user.perfil) + ') no tiene permiso para esto.');
+    }
     return tabla[accion](ctx);
   }
 
-  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, vistaAspirante, estadoDe, ejecutar };
+  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, vistaAspirante, estadoDe, PERFILES, ejecutar };
   if (typeof module !== 'undefined' && module.exports) module.exports = H; else root.ElxHandlers = H;
 })(typeof window !== 'undefined' ? window : globalThis);

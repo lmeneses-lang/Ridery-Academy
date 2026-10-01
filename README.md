@@ -80,6 +80,23 @@ Sigue el manual de Ridery:
 
 Todo está en variables al inicio de `css/styles.css`.
 
+## Usuarios del panel
+
+- **Cuenta principal:** es la de `ADMIN_USER` y `ADMIN_PASS` en Vercel. Siempre es Admin y sirve de respaldo si alguien pierde el acceso.
+- **Más cuentas:** en **Panel → Usuarios → Nuevo usuario** creas una cuenta para cada persona, con su propio usuario, clave y rol:
+
+| Rol | Puede |
+|---|---|
+| Admin | Todo: contenido, test, ajustes y usuarios |
+| Reclutador | Postulaciones (aprobar, descartar, agregar aspirantes), cohortes y métricas |
+| Calidad | Ver postulaciones, aspirantes y métricas, sin editar |
+
+Las claves se guardan cifradas (scrypt) y no se pueden volver a ver: si alguien la olvida, le pones una nueva. Si desactivas o eliminas una cuenta, esa persona pierde el acceso en su siguiente acción.
+
+## Agregar aspirantes a mano
+
+En **Postulaciones → Agregar aspirante** registras a alguien sin que haga el test (referidos o reingresos). Queda aprobado con la célula y cohorte que elijas, y entra por "Soy aspirante" con su cédula y el código de la cohorte.
+
 ## Imágenes con Lightshot
 
 - **Enlace `prnt.sc/...`:** es una página, no una imagen. Se muestra como un botón "Abrir captura".

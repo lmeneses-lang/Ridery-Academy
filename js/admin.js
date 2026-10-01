@@ -10,8 +10,13 @@
   const A = { usuario: null, celulas: [], reglas: {}, cohortes: [], tab: 'aspirantes', filtros: { q: '', cohorte: '', celula: '', estado: 'postulado' }, celContenido: H.COMUN, aspirantes: [] };
   const TABS = [
     ['aspirantes', 'Postulaciones', 'users'], ['test', 'Test de perfil', 'list'], ['contenido', 'Contenido', 'book'],
-    ['cohortes', 'Cohortes', 'tag'], ['metricas', 'Métricas', 'chart'], ['ajustes', 'Ajustes', 'gear']
+    ['cohortes', 'Cohortes', 'tag'], ['metricas', 'Métricas', 'chart'], ['usuarios', 'Usuarios', 'lock'], ['ajustes', 'Ajustes', 'gear']
   ];
+  // Qué ve cada rol en el menú (el servidor también valida cada acción)
+  const TABS_ROL = { admin: TABS.map(t => t[0]), reclutador: ['aspirantes', 'cohortes', 'metricas'], calidad: ['aspirantes', 'metricas'] };
+  const ROL_NOMBRE = { admin: 'Admin', reclutador: 'Reclutador', calidad: 'Calidad' };
+  const ROL_TEXTO = { admin: 'Todo el panel: contenido, test, ajustes y usuarios.', reclutador: 'Postulaciones, aprobar o descartar, agregar aspirantes, cohortes y métricas.', calidad: 'Ver postulaciones, aspirantes y métricas. No puede editar.' };
+  const puede = (...roles) => roles.includes(A.yo && A.yo.perfil);
   const nombreCel = id => id === H.COMUN ? 'Tronco común' : ((A.celulas.find(c => c.id === id) || {}).nombre || id || '—');
   const opcionesCel = (sel, extra) => (extra || '') + A.celulas.map(c => '<option value="' + esc(c.id) + '"' + (c.id === sel ? ' selected' : '') + '>' + esc(c.nombre) + '</option>').join('');
   let main = null;
@@ -51,7 +56,9 @@
     app.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     try {
       const r = await call('resumen');
-      A.celulas = r.celulas; A.reglas = r.reglas; A.cohortes = r.cohortes;
+      A.celulas = r.celulas; A.reglas = r.reglas; A.cohortes = r.cohortes; A.yo = r.yo;
+      A.usuario = r.yo.nombre || r.yo.usuario;
+      if (!TABS_ROL[A.yo.perfil].includes(A.tab)) A.tab = TABS_ROL[A.yo.perfil][0];
       shell(); abrir(A.tab);
     } catch (e) { manejar(e); }
   }
@@ -59,13 +66,15 @@
   function shell() {
     app.innerHTML = '<header class="topbar"><span class="brand"><span class="brand-mark">R</span><span>Ridery Academy <small>· Panel</small></span></span><div class="grow"></div>' +
       '<div style="position:relative"><button class="user-chip" id="um" aria-haspopup="true"><span class="avatar">' + esc(iniciales(A.usuario)) + '</span><span class="hide-sm small">' + esc(A.usuario) + '</span>' + icon('chev') + '</button>' +
-      '<div class="menu" id="user-menu" hidden><button id="salir">' + icon('out') + 'Salir</button></div></div></header>' +
-      '<div class="admin"><nav class="admin-nav" aria-label="Secciones">' + TABS.map(t => '<button data-tab="' + t[0] + '">' + icon(t[2]) + t[1] + '</button>').join('') + '</nav><main class="admin-main" id="main"></main></div>';
+      '<div class="menu" id="user-menu" hidden><div style="padding:8px 10px"><b>' + esc(A.usuario) + '</b><div class="small muted">' + esc(ROL_NOMBRE[A.yo.perfil]) + (A.yo.principal ? ' · cuenta principal' : ' · @' + esc(A.yo.usuario)) + '</div></div><hr class="divider">' +
+      (A.yo.principal ? '' : '<button id="mi-clave">' + icon('lock') + 'Cambiar mi clave</button>') + '<button id="salir">' + icon('out') + 'Salir</button></div></div></header>' +
+      '<div class="admin"><nav class="admin-nav" aria-label="Secciones">' + TABS.filter(t => TABS_ROL[A.yo.perfil].includes(t[0])).map(t => '<button data-tab="' + t[0] + '">' + icon(t[2]) + t[1] + '</button>').join('') + '</nav><main class="admin-main" id="main"></main></div>';
     main = app.querySelector('#main');
     const menu = app.querySelector('#user-menu');
     app.querySelector('#um').addEventListener('click', e => { e.stopPropagation(); menu.hidden = !menu.hidden; });
     document.addEventListener('click', e => { if (!e.target.closest('.menu')) menu.hidden = true; });
     app.querySelector('#salir').addEventListener('click', () => { API.salir('admin'); verLogin(); });
+    const mc = app.querySelector('#mi-clave'); if (mc) mc.addEventListener('click', cambiarMiClave);
     app.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', async () => {
       if (dirty && !await confirmar({ titulo: '¿Salir sin guardar?', texto: 'Tienes cambios sin guardar en este módulo.', ok: 'Salir sin guardar', peligro: true })) return;
       dirty = false; abrir(b.dataset.tab);
@@ -75,7 +84,7 @@
     A.tab = tab;
     app.querySelectorAll('[data-tab]').forEach(b => { b.classList.toggle('active', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
     main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-    ({ aspirantes: tabAspirantes, test: tabTest, contenido: tabContenido, cohortes: tabCohortes, metricas: tabMetricas, ajustes: tabAjustes })[tab]();
+    ({ aspirantes: tabAspirantes, test: tabTest, contenido: tabContenido, cohortes: tabCohortes, metricas: tabMetricas, usuarios: tabUsuarios, ajustes: tabAjustes })[tab]();
   }
   const encabezado = (titulo, sub, acciones) => '<div class="row-between"><div class="stack-sm" style="gap:4px"><h1>' + titulo + '</h1>' + (sub ? '<p class="muted">' + sub + '</p>' : '') + '</div><div class="row">' + (acciones || '') + '</div></div>';
 
@@ -91,7 +100,7 @@
     const f = A.filtros;
     if (!f.estado || !ESTADOS.some(x => x[0] === f.estado)) f.estado = 'postulado';
     const cuenta = e => A.aspirantes.filter(a => a.estado === e).length;
-    main.innerHTML = encabezado('Postulaciones', 'Quien se postula aparece en «Por revisar». Al aprobarlo pasa a «Aspirantes» y puede entrar a la formación.', '<button class="btn btn-secondary" id="csv">' + icon('download') + 'Exportar CSV</button>') +
+    main.innerHTML = encabezado('Postulaciones', 'Quien se postula aparece en «Por revisar». Al aprobarlo pasa a «Aspirantes» y puede entrar a la formación.', '<button class="btn btn-secondary" id="csv">' + icon('download') + 'Exportar CSV</button>' + (puede('admin', 'reclutador') ? '<button class="btn btn-primary" id="nuevo-asp">' + icon('plus') + 'Agregar aspirante</button>' : '')) +
       '<div class="seg" role="tablist">' + ESTADOS.map(([k, n]) => '<button role="tab" data-est="' + k + '" class="' + (f.estado === k ? 'active' : '') + '" aria-selected="' + (f.estado === k) + '">' + n + ' <span class="num" style="opacity:.6">' + cuenta(k) + '</span></button>').join('') + '</div>' +
       '<div class="filters"><input class="input" id="f-q" placeholder="Buscar por nombre o cédula" value="' + esc(f.q) + '">' +
       '<select class="select" id="f-cel"><option value="">Todas las células</option><option value="__sin"' + (f.celula === '__sin' ? ' selected' : '') + '>Sin célula</option>' + opcionesCel(f.celula) + '</select>' +
@@ -128,7 +137,53 @@
     main.querySelector('#f-coh').addEventListener('change', e => { f.cohorte = e.target.value; pintar(); });
     main.querySelector('#f-cel').addEventListener('change', e => { f.celula = e.target.value; pintar(); });
     main.querySelector('#csv').addEventListener('click', () => exportarCSV(A.filtrados || []));
+    const na = main.querySelector('#nuevo-asp'); if (na) na.addEventListener('click', modalNuevoAspirante);
     pintar();
+  }
+
+  function modalNuevoAspirante() {
+    const abiertas = A.cohortes.filter(c => c.activa);
+    const w = document.createElement('div'); w.className = 'modal-wrap';
+    w.innerHTML = '<form class="modal" role="dialog" aria-modal="true" aria-labelledby="na-t" novalidate><div class="row-between"><h2 id="na-t">Agregar aspirante</h2><button type="button" class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
+      '<p class="small muted">Queda aprobado de una vez, sin pasar por el test. Úsalo para referidos o reingresos.</p><div class="form-error" role="alert" hidden></div>' +
+      '<div class="field"><label for="na-nombre">Nombre y apellido</label><input class="input" id="na-nombre" required></div>' +
+      '<div class="two"><div class="field"><label for="na-cedula">Cédula</label><input class="input" id="na-cedula" inputmode="numeric" required></div><div class="field"><label for="na-ciudad">Ciudad</label><input class="input" id="na-ciudad"></div></div>' +
+      '<div class="two"><div class="field"><label for="na-email">Correo</label><input class="input" id="na-email" type="email"></div><div class="field"><label for="na-tel">Teléfono</label><input class="input" id="na-tel" type="tel"></div></div>' +
+      '<div class="two"><div class="field"><label for="na-cel">Célula</label><select class="select" id="na-cel"><option value="">Elige una célula</option>' + opcionesCel('') + '</select></div>' +
+      '<div class="field"><label for="na-coh">Cohorte · código de acceso</label><select class="select" id="na-coh">' + (abiertas.length ? '' : '<option value="">No hay cohortes abiertas</option>') + abiertas.map(c => '<option value="' + esc(c._id) + '">' + esc(c._id) + '</option>').join('') + '</select></div></div>' +
+      '<div class="field"><label for="na-nota">Nota interna (opcional)</label><input class="input" id="na-nota" placeholder="Ej. referido por supervisor de Payments"></div>' +
+      '<div class="modal-actions"><button type="button" class="btn btn-secondary" data-x>Cancelar</button><button class="btn btn-primary" type="submit">' + icon('check') + 'Agregar aspirante</button></div></form>';
+    const cerrar = () => w.remove();
+    w.addEventListener('click', e => { if (e.target === w || e.target.closest('[data-x]')) cerrar(); });
+    document.body.appendChild(w);
+    const f = w.querySelector('form'), v = id => f.querySelector('#' + id).value.trim();
+    f.querySelector('#na-nombre').focus();
+    f.addEventListener('submit', async e => {
+      e.preventDefault();
+      const er = f.querySelector('.form-error'), b = f.querySelector('[type="submit"]');
+      b.disabled = true;
+      try {
+        const r = await call('crearAspirante', { aspirante: { nombre: v('na-nombre'), cedula: v('na-cedula'), ciudad: v('na-ciudad'), email: v('na-email'), telefono: v('na-tel'), celula: v('na-cel'), cohorte: v('na-coh'), nota: v('na-nota') } });
+        cerrar(); toast(v('na-nombre').split(' ')[0] + ' ya puede entrar con su cédula y el código ' + r.codigo);
+        A.filtros.estado = 'aprobado'; tabAspirantes();
+      } catch (x) { er.hidden = false; er.textContent = x.message; b.disabled = false; }
+    });
+  }
+
+  function cambiarMiClave() {
+    const w = document.createElement('div'); w.className = 'modal-wrap';
+    w.innerHTML = '<form class="modal" role="dialog" aria-modal="true" novalidate><h2>Cambiar mi clave</h2><div class="form-error" role="alert" hidden></div>' +
+      '<div class="field"><label for="mc-a">Clave actual</label><input class="input" id="mc-a" type="password" autocomplete="current-password"></div>' +
+      '<div class="field"><label for="mc-n">Clave nueva</label><input class="input" id="mc-n" type="password" autocomplete="new-password"><span class="hint">Mínimo 8 caracteres.</span></div>' +
+      '<div class="modal-actions"><button type="button" class="btn btn-secondary" data-x>Cancelar</button><button class="btn btn-primary" type="submit">Guardar</button></div></form>';
+    w.addEventListener('click', e => { if (e.target === w || e.target.closest('[data-x]')) w.remove(); });
+    document.body.appendChild(w);
+    const f = w.querySelector('form'); f.querySelector('#mc-a').focus();
+    f.addEventListener('submit', async e => {
+      e.preventDefault();
+      try { await call('cambiarMiClave', { actual: f.querySelector('#mc-a').value, nueva: f.querySelector('#mc-n').value }); w.remove(); toast('Clave actualizada'); }
+      catch (x) { const er = f.querySelector('.form-error'); er.hidden = false; er.textContent = x.message; }
+    });
   }
   function exportarCSV(lista) {
     const cols = ['Nombre', 'Cédula', 'Correo', 'Teléfono', 'Ciudad', 'Estado', 'Célula', 'Célula sugerida', 'Cohorte', 'Progreso %', 'Promedio %', 'Completó', 'Postulación', 'Aprobado', 'Último acceso'];
@@ -149,7 +204,8 @@
     const abiertas = A.cohortes.filter(c => c.activa);
     const selCoh = sel => '<select class="select" id="d-coh" style="width:auto">' + (abiertas.length ? '' : '<option value="">No hay cohortes abiertas</option>') + abiertas.map(c => '<option value="' + esc(c._id) + '"' + (c._id === sel ? ' selected' : '') + '>' + esc(c._id) + ' · ' + esc(c.nombre) + '</option>').join('') + '</select>';
     let acciones;
-    if (r.estado === 'postulado') acciones = '<div class="card card-tight stack-sm" style="background:var(--brand-soft);border-color:transparent"><h3>Aprobar como aspirante</h3><p class="small muted">Podrá entrar a la formación con su cédula y el código de la cohorte. Envíale el código por correo o WhatsApp.</p>' +
+    if (!puede('admin', 'reclutador')) acciones = '';
+    else if (r.estado === 'postulado') acciones = '<div class="card card-tight stack-sm" style="background:var(--brand-soft);border-color:transparent"><h3>Aprobar como aspirante</h3><p class="small muted">Podrá entrar a la formación con su cédula y el código de la cohorte. Envíale el código por correo o WhatsApp.</p>' +
       '<div class="row"><div class="field"><label for="d-cel">Célula</label><select class="select" id="d-cel" style="width:auto"><option value="">Elige una célula</option>' + opcionesCel(a.celula) + '</select></div>' +
       '<div class="field"><label for="d-coh">Cohorte</label>' + selCoh('') + '</div></div>' +
       '<div class="row"><button class="btn btn-primary" id="d-aprobar">' + icon('check') + 'Aprobar</button><button class="btn btn-danger" id="d-desc">Descartar</button></div></div>';
@@ -171,8 +227,9 @@
       (r.estado === 'aprobado' ? '<hr class="divider"><div class="stack-sm"><h3>Módulos</h3>' + (d.ruta.modulos.length ? '<div class="table-wrap"><table><thead><tr><th>Módulo</th><th>Estado</th><th>Intentos</th><th>Mejor nota</th><th></th></tr></thead><tbody>' +
         d.ruta.modulos.map(m => '<tr><td><b>' + esc(m.titulo) + '</b><div class="small muted">' + esc(nombreCel(m.celula)) + '</div></td><td>' + ({ aprobado: '<span class="pill pill-ok">Aprobado</span>', disponible: '<span class="pill pill-brand">En curso</span>', bloqueado: '<span class="pill">Bloqueado</span>', agotado: '<span class="pill pill-bad">Sin intentos</span>' }[m.estado]) + '</td>' +
           '<td class="num">' + m.examen.intentos + ' / ' + A.reglas.intentosMax + '</td><td class="num">' + (m.examen.mejor != null ? m.examen.mejor + '%' : '—') + '</td>' +
-          '<td>' + (m.examen.intentos && !m.examen.aprobado ? '<button class="btn btn-secondary btn-sm" data-reset="' + esc(m._id) + '">Reiniciar intentos</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="small muted">Sin módulos en su ruta.</p>') + '</div>' : '') +
-      '<div class="modal-actions" style="justify-content:space-between"><button class="btn btn-danger btn-sm" id="d-del">' + icon('trash') + 'Eliminar registro</button><button class="btn btn-secondary" data-x>Cerrar</button></div></div>';
+          '<td>' + (m.examen.intentos && !m.examen.aprobado && puede('admin', 'reclutador') ? '<button class="btn btn-secondary btn-sm" data-reset="' + esc(m._id) + '">Reiniciar intentos</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="small muted">Sin módulos en su ruta.</p>') + '</div>' : '') +
+      (a.origen === 'manual' ? '<p class="small muted">Agregado a mano desde el panel' + (a.nota ? ': ' + esc(a.nota) : '') + '</p>' : '') +
+      '<div class="modal-actions" style="justify-content:space-between">' + (puede('admin') ? '<button class="btn btn-danger btn-sm" id="d-del">' + icon('trash') + 'Eliminar registro</button>' : '<span></span>') + '<button class="btn btn-secondary" data-x>Cerrar</button></div></div>';
     const cerrar = () => { w.remove(); document.removeEventListener('keydown', k); };
     const k = e => { if (e.key === 'Escape' && !document.querySelector('.modal-wrap + .modal-wrap')) cerrar(); };
     document.addEventListener('keydown', k);
@@ -204,7 +261,7 @@
     w.querySelectorAll('[data-reset]').forEach(b => b.addEventListener('click', async () => {
       try { await call('reiniciarIntentos', { id, moduloId: b.dataset.reset }); toast('Intentos reiniciados'); recargar(); } catch (e) { manejar(e); }
     }));
-    $('#d-del').addEventListener('click', async () => {
+    if ($('#d-del')) $('#d-del').addEventListener('click', async () => {
       if (!await confirmar({ titulo: '¿Eliminar a ' + a.nombre + '?', texto: 'Se borra su postulación, test y progreso. Podrá postularse de nuevo con la misma cédula.', ok: 'Eliminar', peligro: true })) return;
       try { await call('eliminarAspirante', { id }); cerrar(); toast('Registro eliminado'); tabAspirantes(); } catch (e) { manejar(e); }
     });
@@ -511,6 +568,65 @@
         r.porModulo.map(m => '<tr><td><b>' + esc(m.titulo) + '</b></td><td>' + esc(nombreCel(m.celula)) + '</td><td class="num">' + m.personas + '</td><td class="num">' + m.aprobaron + ' <span class="muted small">(' + Math.round(m.aprobaron * 100 / Math.max(1, m.personas)) + '%)</span></td><td class="num">' + m.intentos + '</td><td class="num">' + (m.promedio != null ? m.promedio + '%' : '—') + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="card empty"><p>Aún nadie presentó exámenes.</p></div>') + '</div>' +
       '<div class="stack-sm"><h2>Preguntas que más se fallan</h2><p class="small muted">Si una pregunta tiene una tasa de error muy alta, revisa si la lección la explica bien o si la pregunta es confusa.</p>' + (r.masFalladas.length ? '<div class="table-wrap"><table><thead><tr><th>Pregunta</th><th>Módulo</th><th>Respuestas</th><th>% de error</th></tr></thead><tbody>' +
         r.masFalladas.map(f => '<tr><td>' + esc(f.texto) + '</td><td class="small">' + esc(f.moduloTitulo) + '</td><td class="num">' + f.total + '</td><td><span class="pill ' + (f.tasa >= 50 ? 'pill-bad' : f.tasa >= 25 ? 'pill-warn' : '') + ' num">' + f.tasa + '%</span></td></tr>').join('') + '</tbody></table></div>' : '<div class="card empty"><p>Sin errores registrados todavía.</p></div>') + '</div>';
+  }
+
+  /* ============ Usuarios del panel ============ */
+  async function tabUsuarios() {
+    let us;
+    try { us = (await call('usuarios')).usuarios; } catch (e) { return manejar(e); }
+    const pill = p => '<span class="pill ' + (p === 'admin' ? 'pill-brand' : p === 'reclutador' ? 'pill-ok' : '') + '">' + esc(ROL_NOMBRE[p] || p) + '</span>';
+    main.innerHTML = encabezado('Usuarios', 'Cuentas para entrar a este panel. Cada persona entra con su usuario y su clave.', '<button class="btn btn-primary" id="nu">' + icon('plus') + 'Nuevo usuario</button>') +
+      '<div class="cert-grid">' + Object.keys(ROL_NOMBRE).map(k => '<div class="card card-tight stack-sm">' + pill(k) + '<span class="small muted">' + ROL_TEXTO[k] + '</span></div>').join('') + '</div>' +
+      '<div class="notice info">La cuenta principal (usuario y clave de Vercel) siempre funciona como Admin, aunque no aparezca en esta lista. Úsala si alguien pierde el acceso.</div>' +
+      (us.length ? '<div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th></th></tr></thead><tbody>' +
+        us.map(u => '<tr><td class="num"><b>@' + esc(u.usuario) + '</b></td><td>' + esc(u.nombre) + '</td><td>' + pill(u.perfil) + '</td><td>' + (u.activo ? '<span class="pill pill-ok">Activo</span>' : '<span class="pill">Desactivado</span>') + '</td>' +
+          '<td class="small muted">' + (u.ultimoAcceso ? fechaHora(u.ultimoAcceso) : 'Nunca') + '</td><td><button class="btn btn-secondary btn-sm" data-ed="' + esc(u.usuario) + '">' + icon('edit') + 'Editar</button></td></tr>').join('') + '</tbody></table></div>'
+        : '<div class="card empty">' + icon('users') + '<p>Todavía no hay usuarios. Crea uno para cada persona que vaya a usar el panel.</p></div>');
+    main.querySelector('#nu').addEventListener('click', () => modalUsuario(null));
+    main.querySelectorAll('[data-ed]').forEach(b => b.addEventListener('click', () => modalUsuario(us.find(u => u.usuario === b.dataset.ed))));
+  }
+  function claveAleatoria() {
+    const c = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const a = new Uint32Array(12); crypto.getRandomValues(a);
+    return [...a].map(n => c[n % c.length]).join('');
+  }
+  function modalUsuario(u) {
+    const nuevo = !u; u = u || { usuario: '', nombre: '', perfil: 'reclutador', activo: true };
+    const w = document.createElement('div'); w.className = 'modal-wrap';
+    w.innerHTML = '<form class="modal" role="dialog" aria-modal="true" novalidate><div class="row-between"><h2>' + (nuevo ? 'Nuevo usuario' : 'Editar @' + esc(u.usuario)) + '</h2><button type="button" class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
+      '<div class="form-error" role="alert" hidden></div>' +
+      '<div class="two"><div class="field"><label for="u-u">Usuario</label><input class="input" id="u-u" value="' + esc(u.usuario) + '"' + (nuevo ? '' : ' disabled') + ' placeholder="ej. maria.lopez" autocomplete="off"></div>' +
+      '<div class="field"><label for="u-n">Nombre</label><input class="input" id="u-n" value="' + esc(u.nombre) + '" placeholder="María López"></div></div>' +
+      '<div class="field"><label for="u-r">Rol</label><select class="select" id="u-r">' + Object.keys(ROL_NOMBRE).map(k => '<option value="' + k + '"' + (u.perfil === k ? ' selected' : '') + '>' + ROL_NOMBRE[k] + ' — ' + ROL_TEXTO[k] + '</option>').join('') + '</select></div>' +
+      '<div class="field"><label for="u-c">' + (nuevo ? 'Clave' : 'Nueva clave (déjalo vacío para no cambiarla)') + '</label><div class="row" style="flex-wrap:nowrap"><input class="input" id="u-c" autocomplete="new-password" placeholder="Mínimo 8 caracteres"><button type="button" class="btn btn-secondary" id="u-gen">Generar</button></div>' +
+      '<span class="hint">Cópiala y envíasela a la persona. Después no se puede ver de nuevo.</span></div>' +
+      (nuevo ? '' : '<label class="switch"><input type="checkbox" id="u-a"' + (u.activo ? ' checked' : '') + '>Cuenta activa (si la desactivas, se cierra su sesión)</label>') +
+      '<div class="modal-actions" style="justify-content:space-between">' + (nuevo ? '<span></span>' : '<button type="button" class="btn btn-danger btn-sm" id="u-del">' + icon('trash') + 'Eliminar</button>') +
+      '<div class="row"><button type="button" class="btn btn-secondary" data-x>Cancelar</button><button class="btn btn-primary" type="submit">' + (nuevo ? 'Crear usuario' : 'Guardar') + '</button></div></div></form>';
+    w.addEventListener('click', e => { if (e.target === w || e.target.closest('[data-x]')) w.remove(); });
+    document.body.appendChild(w);
+    const f = w.querySelector('form'), $ = s2 => f.querySelector(s2);
+    $('#u-gen').addEventListener('click', () => { $('#u-c').value = claveAleatoria(); $('#u-c').select(); });
+    (nuevo ? $('#u-u') : $('#u-n')).focus();
+    f.addEventListener('submit', async e => {
+      e.preventDefault();
+      const clave = $('#u-c').value;
+      try {
+        await call('guardarUsuario', { usuario: { nuevo, usuario: nuevo ? $('#u-u').value : u.usuario, nombre: $('#u-n').value, perfil: $('#u-r').value, clave, activo: nuevo ? true : $('#u-a').checked } });
+        w.remove();
+        if (clave) {
+          const usr = (nuevo ? $('#u-u').value : u.usuario).trim().toLowerCase();
+          const msg = 'Tu acceso al panel de Ridery Academy: ' + location.origin + location.pathname + ' · usuario: ' + usr + ' · clave: ' + clave;
+          const ok = await confirmar({ titulo: nuevo ? 'Usuario creado' : 'Clave actualizada', texto: 'Usuario <b>' + esc(usr) + '</b> · clave <b class="num">' + esc(clave) + '</b><br>Envíasela a la persona. Después no se puede volver a ver.', ok: 'Copiar mensaje', cancelar: 'Cerrar' });
+          if (ok) navigator.clipboard.writeText(msg).then(() => toast('Mensaje copiado'), () => toast('No se pudo copiar. Anótala a mano.', 'bad'));
+        } else toast('Cambios guardados');
+        tabUsuarios();
+      } catch (x) { const er = $('.form-error'); er.hidden = false; er.textContent = x.message; }
+    });
+    const del = $('#u-del');
+    if (del) del.addEventListener('click', async () => {
+      if (!await confirmar({ titulo: '¿Eliminar a @' + u.usuario + '?', texto: 'Ya no podrá entrar al panel.', ok: 'Eliminar', peligro: true })) return;
+      try { await call('eliminarUsuario', { id: u.usuario }); w.remove(); toast('Usuario eliminado'); tabUsuarios(); } catch (x) { manejar(x); }
+    });
   }
 
   /* ============ Ajustes ============ */

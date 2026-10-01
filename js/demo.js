@@ -57,9 +57,14 @@
 
   function sesion(token) {
     if (!token || !token.startsWith('demo.')) return null;
-    try { return JSON.parse(atob(token.slice(5))); } catch (e) { return null; }
+    try { return JSON.parse(decodeURIComponent(escape(atob(token.slice(5))))); } catch (e) { return null; }
   }
-  const firmar = p => 'demo.' + btoa(JSON.stringify(p));
+  const firmar = p => 'demo.' + btoa(unescape(encodeURIComponent(JSON.stringify(p))));
+  // En la demo las claves se guardan con un hash simple (solo vive en tu navegador)
+  const cripto = {
+    async hash(c) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('demo:' + c)); return 'demo$' + [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join(''); },
+    async verificar(c, g) { return (await cripto.hash(c)) === g; }
+  };
   const pausa = () => new Promise(r => setTimeout(r, 120));
 
   async function llamar(fn, body, token) {
@@ -74,13 +79,18 @@
         }
         if (body.accion === 'admin') {
           if (!body.usuario || !body.clave) throw H.err(401, 'Usuario o clave incorrectos.');
+          // Si el usuario existe en "Usuarios", se valida su clave y rol; si no, entra como cuenta principal (solo en la demo)
+          if (await store.get('usuarios', String(body.usuario).trim().toLowerCase())) {
+            const u = await H.loginAdmin(store, body, cripto);
+            return { token: firmar(u), usuario: u.usuario };
+          }
           return { token: firmar({ rol: 'admin', usuario: body.usuario }), usuario: body.usuario };
         }
         return copia(await H.ejecutar('publico', body.accion, { store, body }));
       }
       const user = sesion(token);
       if (!user || user.rol !== fn) throw H.err(401, 'Tu sesión expiró. Vuelve a entrar.');
-      return copia(await H.ejecutar(fn, body.accion, { store, user, body }));
+      return copia(await H.ejecutar(fn, body.accion, { store, user, body, cripto }));
     } catch (e) {
       if (e.status === 401 && fn !== 'auth') window.Elx.API.salir(fn === 'admin' ? 'admin' : 'asp');
       throw e;
