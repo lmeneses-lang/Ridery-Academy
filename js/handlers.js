@@ -210,7 +210,7 @@
 
   /* ---------- Acceso ----------
      Postúlate: formulario público (datos + test) que sugiere una célula y termina ahí.
-     Soy aspirante: solo entra quien fue aprobado en el panel, con el usuario y contraseña que le asignaron. */
+     Inicia sesión: un solo acceso. Según el usuario entra al panel (equipo) o a la formación (aspirante aprobado). */
   const estadoDe = a => a.estado || 'postulado';
   const limpiarCedula = c => limpiar(c, 20).replace(/\D/g, ''); // V-20.111.222 y 20111222 son la misma cédula
 
@@ -238,6 +238,7 @@
     if (!USUARIO_OK.test(usuario)) throw err(400, 'El usuario debe tener de 3 a 30 caracteres: letras, números, punto, guion o guion bajo, sin espacios.');
     const otro = (await store.find('aspirantes', { usuario })).find(x => x._id !== asp._id);
     if (otro) throw err(409, 'El usuario «' + usuario + '» ya lo tiene ' + otro.nombre + '. Elige otro.');
+    if (await store.get('usuarios', usuario)) throw err(409, 'El usuario «' + usuario + '» ya es una cuenta del panel. Elige otro.');
     asp.usuario = usuario;
     if (clave) {
       if (String(clave).length < 6) throw err(400, 'La contraseña debe tener al menos 6 caracteres.');
@@ -267,7 +268,7 @@
     async verificarCedula({ store, body }) {
       const cedula = limpiarCedula(body.cedula);
       if (!cedula) throw err(400, 'Escribe tu cédula.');
-      if (await store.get('aspirantes', 'asp-' + cedula)) throw err(409, 'Ya existe una postulación con esta cédula. Si ya te seleccionaron, entra por «Soy aspirante».');
+      if (await store.get('aspirantes', 'asp-' + cedula)) throw err(409, 'Ya existe una postulación con esta cédula. Si ya te seleccionaron, entra por «Inicia sesión».');
       return { ok: true };
     },
     async postular({ store, body }) {
@@ -568,6 +569,7 @@
       if (!PERFILES[u.perfil]) throw err(400, 'Elige un rol.');
       const previo = await store.get('usuarios', id);
       if (u.nuevo && previo) throw err(409, 'Ya existe un usuario con ese nombre.');
+      if (u.nuevo && (await store.find('aspirantes', { usuario: id })).length) throw err(409, 'Ese nombre de usuario ya lo tiene un aspirante. Elige otro.');
       if (!u.nuevo && !previo) throw err(404, 'Usuario no encontrado.');
       if (user.cuenta === id && (u.perfil !== 'admin' || u.activo === false)) throw err(400, 'No puedes quitarte tu propio rol de admin ni desactivarte.');
       const doc = Object.assign({ creado: ahora(), creadoPor: user.usuario }, previo || {}, {
@@ -605,11 +607,22 @@
   const limpiarUsuario = u => limpiar(u, 30).toLowerCase();
   function vistaUsuario(u) { return { usuario: u._id, nombre: u.nombre, perfil: u.perfil, activo: u.activo !== false, creado: u.creado, ultimoAcceso: u.ultimoAcceso || null }; }
 
+  // Inicio de sesión único: equipo del panel o aspirante, según quién sea el usuario.
+  // esPrincipal(usuario, clave) valida la cuenta principal (variables de Vercel).
+  async function iniciarSesion(store, body, cripto, esPrincipal) {
+    const usuario = limpiarUsuario(body.usuario), clave = String(body.clave || '');
+    if (!usuario || !clave) throw err(400, 'Escribe tu usuario y tu contraseña.');
+    if (esPrincipal(String(body.usuario || '').trim(), clave)) return { tipo: 'admin', sesion: { rol: 'admin', usuario: String(body.usuario).trim() } };
+    if (await store.get('usuarios', usuario)) return { tipo: 'admin', sesion: await loginAdmin(store, body, cripto) };
+    const asp = await loginAspirante(store, body, cripto);
+    return { tipo: 'aspirante', sesion: { rol: 'aspirante', id: asp._id }, aspirante: asp };
+  }
+
   // Login de cuentas creadas en el panel (la cuenta principal se valida aparte, con ADMIN_USER / ADMIN_PASS)
   async function loginAdmin(store, body, cripto) {
     const id = limpiarUsuario(body.usuario);
     const u = id && await store.get('usuarios', id);
-    if (!u || u.activo === false || !(await cripto.verificar(String(body.clave || ''), u.hash))) throw err(401, 'Usuario o clave incorrectos.');
+    if (!u || u.activo === false || !(await cripto.verificar(String(body.clave || ''), u.hash))) throw err(401, 'Usuario o contraseña incorrectos.');
     u.ultimoAcceso = ahora();
     await store.put('usuarios', u);
     return { rol: 'admin', usuario: u._id, nombre: u.nombre, perfil: u.perfil, cuenta: u._id };
@@ -634,6 +647,6 @@
     return tabla[accion](ctx);
   }
 
-  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, vistaAspirante, estadoDe, PERFILES, ejecutar };
+  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, iniciarSesion, vistaAspirante, estadoDe, PERFILES, ejecutar };
   if (typeof module !== 'undefined' && module.exports) module.exports = H; else root.ElxHandlers = H;
 })(typeof window !== 'undefined' ? window : globalThis);

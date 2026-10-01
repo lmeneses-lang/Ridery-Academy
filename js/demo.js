@@ -73,6 +73,12 @@
     await sembrarDemo();
     try {
       if (fn === 'auth') {
+        if (body.accion === 'login') {
+          // Demo: la cuenta principal es admin / admin1234
+          const r = await H.iniciarSesion(store, body, cripto, (u, c) => u === 'admin' && c === 'admin1234');
+          return r.tipo === 'admin' ? { tipo: 'admin', token: firmar(r.sesion), usuario: r.sesion.usuario }
+            : { tipo: 'aspirante', token: firmar(r.sesion), aspirante: H.vistaAspirante(r.aspirante) };
+        }
         if (body.accion === 'aspirante') {
           const asp = await H.loginAspirante(store, body, cripto);
           return { token: firmar({ rol: 'aspirante', id: asp._id }), aspirante: H.vistaAspirante(asp) };

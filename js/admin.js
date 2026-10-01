@@ -30,11 +30,11 @@
   /* ---------- Acceso ---------- */
   function verLogin(msg) {
     app.innerHTML = '<header class="topbar"><span class="brand"><img class="brand-mark" src="img/logo-192.png" alt="Ridery" width="32" height="32"><span>Ridery Academy <small>· Panel</small></span></span></header>' +
-      '<main class="center-wrap"><form class="card stack" id="f" style="width:100%;max-width:400px" novalidate><div class="stack-sm"><h1>Panel admin</h1><p class="muted small">Gestiona aspirantes, contenido y exámenes.</p></div>' +
+      '<main class="center-wrap"><form class="card stack" id="f" style="width:100%;max-width:400px" novalidate><div class="stack-sm"><h1>Inicia sesión</h1><p class="muted small">Panel del equipo de Ridery Academy.</p></div>' +
       '<div class="form-error" role="alert"' + (msg ? '' : ' hidden') + '>' + esc(msg || '') + '</div>' +
       '<div class="field"><label for="a-u">Usuario</label><input class="input" id="a-u" autocomplete="username"></div>' +
       '<div class="field"><label for="a-p">Clave</label><input class="input" id="a-p" type="password" autocomplete="current-password"></div>' +
-      (window.ElxDemo ? '<p class="small muted">Demo: escribe cualquier usuario y clave.</p>' : '') +
+      (window.ElxDemo ? '<p class="small muted">Demo: usuario <b>admin</b> y clave <b>admin1234</b>.</p>' : '') +
       '<button class="btn btn-primary btn-block" type="submit">Entrar</button></form></main>';
     const f = app.querySelector('#f');
     f.addEventListener('submit', async e => {
@@ -42,7 +42,12 @@
       const er = f.querySelector('.form-error'), b = f.querySelector('button');
       b.disabled = true;
       try {
-        const r = await API.llamar('admin', 'auth', 'admin', { usuario: f.querySelector('#a-u').value.trim(), clave: f.querySelector('#a-p').value });
+        const r = await API.llamar('admin', 'auth', 'login', { usuario: f.querySelector('#a-u').value.trim(), clave: f.querySelector('#a-p').value });
+        if (r.tipo === 'aspirante') {   // un aspirante entró por aquí: lo llevamos a su formación
+          API.guardarToken('asp', r.token);
+          location.href = 'index.html' + (window.ElxDemo && !window.ELX_DEMO ? '?demo=1' : '');
+          return;
+        }
         API.guardarToken('admin', r.token); Elx.Store.set('elx_admin_user', r.usuario);
         iniciar();
       } catch (x) { er.hidden = false; er.textContent = x.message; b.disabled = false; }
@@ -65,7 +70,7 @@
 
   function shell() {
     app.innerHTML = '<header class="topbar"><span class="brand"><img class="brand-mark" src="img/logo-192.png" alt="Ridery" width="32" height="32"><span>Ridery Academy <small>· Panel</small></span></span><div class="grow"></div>' +
-      '<div style="position:relative"><button class="user-chip" id="um" aria-haspopup="true"><span class="avatar">' + esc(iniciales(A.usuario)) + '</span><span class="hide-sm small">' + esc(A.usuario) + '</span>' + icon('chev') + '</button>' +
+      '<div style="position:relative"><button class="user-chip" id="um" aria-haspopup="true"><span class="avatar avatar-top">' + icon('user') + '</span><span class="hide-sm small">' + esc(A.usuario) + '</span>' + icon('chev') + '</button>' +
       '<div class="menu" id="user-menu" hidden><div style="padding:8px 10px"><b>' + esc(A.usuario) + '</b><div class="small muted">' + esc(ROL_NOMBRE[A.yo.perfil]) + (A.yo.principal ? ' · cuenta principal' : ' · @' + esc(A.yo.usuario)) + '</div></div><hr class="divider">' +
       (A.yo.principal ? '' : '<button id="mi-clave">' + icon('lock') + 'Cambiar mi clave</button>') + '<button id="salir">' + icon('out') + 'Salir</button></div></div></header>' +
       '<div class="admin"><nav class="admin-nav" aria-label="Secciones">' + TABS.filter(t => TABS_ROL[A.yo.perfil].includes(t[0])).map(t => '<button data-tab="' + t[0] + '">' + icon(t[2]) + t[1] + '</button>').join('') + '</nav><main class="admin-main" id="main"></main></div>';
@@ -73,7 +78,7 @@
     const menu = app.querySelector('#user-menu');
     app.querySelector('#um').addEventListener('click', e => { e.stopPropagation(); menu.hidden = !menu.hidden; });
     document.addEventListener('click', e => { if (!e.target.closest('.menu')) menu.hidden = true; });
-    app.querySelector('#salir').addEventListener('click', () => { API.salir('admin'); verLogin(); });
+    app.querySelector('#salir').addEventListener('click', () => { API.salir('admin'); location.href = 'index.html' + (window.ElxDemo && !window.ELX_DEMO ? '?demo=1' : ''); });
     const mc = app.querySelector('#mi-clave'); if (mc) mc.addEventListener('click', cambiarMiClave);
     app.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', async () => {
       if (dirty && !await confirmar({ titulo: '¿Salir sin guardar?', texto: 'Tienes cambios sin guardar en este módulo.', ok: 'Salir sin guardar', peligro: true })) return;
@@ -153,7 +158,7 @@
   async function mostrarAcceso(nombre, usuario, clave, celula) {
     const url = location.origin + location.pathname.replace(/admin\.html$/, '');
     const msg = 'Hola ' + nombre.split(' ')[0] + ', fuiste seleccionado para la formación de agentes CX de Ridery' + (celula ? ' (célula ' + nombreCel(celula) + ')' : '') + '.\n' +
-      'Entra en ' + url + ' → «Soy aspirante»\nUsuario: ' + usuario + '\nContraseña: ' + clave;
+      'Entra en ' + url + ' → «Inicia sesión»\nUsuario: ' + usuario + '\nContraseña: ' + clave;
     const ok = await confirmar({ titulo: 'Acceso de ' + nombre.split(' ')[0], texto: 'Usuario <b>' + esc(usuario) + '</b> · contraseña <b class="num">' + esc(clave) + '</b><br>Envíaselo ahora: la contraseña no se puede volver a ver.', ok: 'Copiar mensaje', cancelar: 'Cerrar' });
     if (ok) navigator.clipboard.writeText(msg).then(() => toast('Mensaje copiado. Pégalo en WhatsApp.'), () => toast('No se pudo copiar. Anótalo a mano.', 'bad'));
   }
@@ -223,7 +228,7 @@
     const max = t ? Math.max(1, ...Object.values(t.puntajes || {})) : 1;
     let acciones;
     if (!puede('admin', 'reclutador')) acciones = '';
-    else if (r.estado === 'postulado') acciones = '<div class="card card-tight stack-sm" style="background:var(--brand-soft);border-color:transparent"><h3>Aprobar como aspirante</h3><p class="small muted">Elige su célula y créale un usuario y contraseña. Con eso entra por «Soy aspirante».</p>' +
+    else if (r.estado === 'postulado') acciones = '<div class="card card-tight stack-sm" style="background:var(--brand-soft);border-color:transparent"><h3>Aprobar como aspirante</h3><p class="small muted">Elige su célula y créale un usuario y contraseña. Con eso entra por «Inicia sesión».</p>' +
       '<div class="field"><label for="d-cel">Célula</label><select class="select" id="d-cel" style="width:auto"><option value="">Elige una célula</option>' + opcionesCel(a.celula) + '</select></div>' +
       camposAcceso('d', a.usuario || a.cedula, !a.hash && !r.tieneClave) +
       '<div class="row"><button class="btn btn-primary" id="d-aprobar">' + icon('check') + 'Aprobar</button><button class="btn btn-danger" id="d-desc">Descartar</button></div></div>';

@@ -1,7 +1,7 @@
 /* ============================================================
    Formación CX · aplicación del aspirante
    Inicio: Postúlate (datos + test → célula sugerida, fin) o
-   Soy aspirante (aprobado en el panel) → ruta (tronco común + célula)
+   Inicia sesión (aspirante aprobado o equipo del panel) → ruta (tronco común + célula)
    → lecciones (video, texto, imágenes) → examen → certificado
    ============================================================ */
 (function () {
@@ -38,7 +38,7 @@
       '<a class="brand" href="#" data-act="inicio"><img class="brand-mark" src="img/logo-192.png" alt="Ridery" width="32" height="32"><span>Ridery Academy <small>· Formación CX</small></span></a>' +
       '<div class="grow"></div>' +
       (curso ? '<div class="top-progress" title="Progreso del curso"><div class="bar"><span style="width:' + p + '%"></span></div><span class="small num"><b>' + p + '%</b><span class="hide-sm"> completado</span></span></div>' : '') +
-      (S.asp ? '<div style="position:relative"><button class="user-chip" data-act="menu" aria-haspopup="true" aria-expanded="false"><span class="avatar">' + esc(iniciales(S.asp.nombre)) + '</span><span class="hide-sm small">' + esc(S.asp.nombre.split(' ')[0]) + '</span>' + icon('chev') + '</button>' +
+      (S.asp ? '<div style="position:relative"><button class="user-chip" data-act="menu" aria-haspopup="true" aria-expanded="false"><span class="avatar avatar-top">' + icon('user') + '</span><span class="hide-sm small">' + esc(S.asp.nombre.split(' ')[0]) + '</span>' + icon('chev') + '</button>' +
         '<div class="menu" id="user-menu" hidden><div style="padding:8px 10px"><b>' + esc(S.asp.nombre) + '</b><div class="small muted">@' + esc(S.asp.usuario) + ' · C.I. ' + esc(S.asp.cedula) + '</div></div><hr class="divider">' +
         '<button data-act="salir">' + icon('out') + 'Salir</button></div></div>' : '') +
       '</header>';
@@ -65,7 +65,7 @@
     const menu = document.getElementById('user-menu'); if (menu) menu.hidden = true;
   });
 
-  /* ---------- Inicio: Postúlate / Soy aspirante ---------- */
+  /* ---------- Inicio: Postúlate / Inicia sesión ---------- */
   function ladoMarca(titulo, texto, items) {
     return '<section class="login-side"><div class="stack-sm"><span class="eyebrow">Ridery Academy</span><h1>' + titulo + '</h1><span class="accent-rule"></span></div>' +
       '<p>' + texto + '</p><ul class="steps">' + items.map(it => '<li><span class="n">' + icon(it[0]) + '</span><div><b>' + it[1] + '</b><span>' + it[2] + '</span></div></li>').join('') + '</ul></section>';
@@ -74,11 +74,11 @@
     limpiar(); S.asp = null; S.ruta = null;
     const lado = ladoMarca('Tu camino como agente de <em>CX</em> empieza aquí', 'Elige cómo quieres entrar.', [
       ['plus', 'Postúlate', 'Cuéntanos de ti y responde un test corto. Te diremos en qué célula encajas mejor.'],
-      ['book', 'Soy aspirante', 'Si ya te seleccionaron, entra con el usuario y la contraseña que te envió tu reclutador.']]);
+      ['book', 'Inicia sesión', 'Si ya te seleccionaron, entra con el usuario y la contraseña que te envió tu reclutador.']]);
     app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="login">' + lado +
       '<div class="login-form"><div class="stack-sm"><h2>¿Cómo quieres entrar?</h2><p class="muted small">Elige una opción para continuar.</p></div><div class="choices">' +
       '<button class="choice" data-ir="postulate"><span class="ic">' + icon('plus') + '</span><span><b>Postúlate</b><span>Es tu primera vez. Completa tus datos y el test de perfil.</span></span>' + icon('right') + '</button>' +
-      '<button class="choice alt" data-ir="aspirante"><span class="ic">' + icon('book') + '</span><span><b>Soy aspirante</b><span>Ya fuiste seleccionado. Entra a tu formación.</span></span>' + icon('right') + '</button>' +
+      '<button class="choice alt" data-ir="aspirante"><span class="ic">' + icon('book') + '</span><span><b>Inicia sesión</b><span>Ya tienes usuario y contraseña. Entra a tu formación o al panel.</span></span>' + icon('right') + '</button>' +
       '</div></div></div></main>';
     enlazarTop();
     app.querySelector('[data-ir="postulate"]').addEventListener('click', () => verPostulacion());
@@ -86,21 +86,21 @@
     app.querySelector('.choice').focus();
   }
 
-  /* ---------- Soy aspirante ---------- */
+  /* ---------- Inicia sesión (aspirante o equipo) ---------- */
   function verIngreso(msg) {
     limpiar();
-    const lado = ladoMarca('Bienvenido a tu formación', 'Entra con los datos que te envió tu reclutador.', [
+    const lado = ladoMarca('Bienvenido a Ridery Academy', 'Entra con el usuario y la contraseña que te dieron. Te llevamos a tu formación o al panel del equipo, según tu cuenta.', [
       ['book', 'Tronco común', 'Lo que todo agente de CX de Ridery necesita saber.'],
       ['tag', 'Tu célula', 'Videos, material y casos de la célula donde vas a trabajar.'],
       ['award', 'Exámenes', 'Un examen corto al final de cada módulo.']]);
     app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="login">' + lado +
       '<form class="login-form" id="f-login" novalidate><button type="button" class="back-link" data-volver>' + icon('left') + 'Volver</button>' +
-      '<div class="stack-sm"><h2>Soy aspirante</h2><p class="muted small">Si vuelves, continúas donde lo dejaste.</p></div>' +
+      '<div class="stack-sm"><h2>Inicia sesión</h2><p class="muted small">Si eres aspirante, continúas donde lo dejaste.</p></div>' +
       '<div class="form-error" role="alert"' + (msg ? '' : ' hidden') + '>' + esc(msg || '') + '</div>' +
       '<div class="field"><label for="lg-usuario">Usuario</label><input class="input" id="lg-usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>' +
       '<div class="field"><label for="lg-clave">Contraseña</label><div class="pass-wrap"><input class="input" id="lg-clave" type="password" autocomplete="current-password" required>' +
       '<button type="button" class="pass-eye" id="lg-ver" aria-label="Mostrar contraseña">Ver</button></div>' +
-      '<span class="hint">Te los envía tu reclutador cuando te selecciona.' + (window.ElxDemo ? ' Demo: usuario <b>demo</b> y contraseña <b>demo1234</b>.' : '') + '</span></div>' +
+      '<span class="hint">Te los envía tu reclutador cuando te selecciona.' + (window.ElxDemo ? ' Demo: aspirante <b>demo</b> / <b>demo1234</b> · panel <b>admin</b> / <b>admin1234</b>.' : '') + '</span></div>' +
       '<button class="btn btn-primary btn-block" type="submit">Entrar' + icon('right') + '</button>' +
       '<p class="small muted">¿Todavía no te postulas? <a href="#" data-post>Postúlate aquí</a></p></form></div></main>';
     enlazarTop();
@@ -114,7 +114,13 @@
       if (!usr || !clave) { errBox.hidden = false; errBox.textContent = 'Escribe tu usuario y tu contraseña.'; return; }
       const btn = f.querySelector('button[type="submit"]'); const txt = btn.innerHTML; btn.disabled = true; btn.textContent = 'Entrando…';
       try {
-        const r = await API.llamar('asp', 'auth', 'aspirante', { usuario: usr, clave });
+        const r = await API.llamar('asp', 'auth', 'login', { usuario: usr, clave });
+        if (r.tipo === 'admin') {
+          API.guardarToken('admin', r.token); Elx.Store.set('elx_admin_user', r.usuario);
+          btn.textContent = 'Abriendo el panel…';
+          location.href = 'admin.html' + (window.ElxDemo && !window.ELX_DEMO ? '?demo=1' : '');
+          return;
+        }
         API.guardarToken('asp', r.token);
         await iniciar();
       } catch (er) { errBox.hidden = false; errBox.textContent = er.message; btn.disabled = false; btn.innerHTML = txt; }
@@ -246,7 +252,7 @@
       '<hr class="divider"><div class="stack-sm"><h3>Qué sigue</h3><ul class="steps" style="color:var(--fg)">' +
       '<li><span class="n">' + icon('users') + '</span><div><b>Revisamos tu postulación</b><span class="muted">El equipo de reclutamiento evalúa tu perfil.</span></div></li>' +
       '<li><span class="n">' + icon('tag') + '</span><div><b>Te contactamos</b><span class="muted">Si eres seleccionado, te enviamos tu usuario y contraseña por correo o WhatsApp.</span></div></li>' +
-      '<li><span class="n">' + icon('book') + '</span><div><b>Empiezas tu formación</b><span class="muted">Entras por «Soy aspirante» con tu usuario y contraseña.</span></div></li></ul></div>' +
+      '<li><span class="n">' + icon('book') + '</span><div><b>Empiezas tu formación</b><span class="muted">Entras por «Inicia sesión» con tu usuario y contraseña.</span></div></li></ul></div>' +
       '<div class="row"><button class="btn btn-secondary" id="fin-ok">Volver al inicio</button></div></div></div></main>';
     enlazarTop();
     app.querySelector('#fin-ok').addEventListener('click', verInicio);

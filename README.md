@@ -18,7 +18,7 @@ La página abre con dos opciones.
 
 **En el panel** abres la postulación, revisas los puntajes y la apruebas eligiendo su **célula** y creándole un **usuario** (por defecto, su cédula) y una **contraseña** (botón Generar), o la descartas. Al aprobar te aparece el mensaje con su acceso para copiarlo y enviarlo por WhatsApp. La contraseña se guarda cifrada y no se puede volver a ver: si la olvida, le generas una nueva desde su ficha.
 
-**Soy aspirante** (solo personas aprobadas). Entran con su usuario y contraseña, y ven:
+**Inicia sesión** es un solo acceso para todos: si el usuario es del equipo, entra directo al panel; si es un aspirante aprobado, entra a su formación. Un nombre de usuario no puede repetirse entre aspirantes y cuentas del panel. Los aspirantes ven:
 
 1. El **tronco común** y después **solo los módulos de su célula**. Los módulos se desbloquean en orden.
 2. **Lecciones** con video de YouTube, texto e imágenes. Hay que ver el 90% del video y adelantarlo no cuenta.
@@ -96,7 +96,7 @@ Las claves se guardan cifradas (scrypt) y no se pueden volver a ver: si alguien 
 
 ## Agregar aspirantes a mano
 
-En **Postulaciones → Agregar aspirante** registras a alguien sin que haga el test (referidos o reingresos). Queda aprobado con la célula, el usuario y la contraseña que le asignes, y entra por "Soy aspirante".
+En **Postulaciones → Agregar aspirante** registras a alguien sin que haga el test (referidos o reingresos). Queda aprobado con la célula, el usuario y la contraseña que le asignes, y entra por "Inicia sesión".
 
 ## Imágenes con Lightshot
 
@@ -108,7 +108,7 @@ En **Postulaciones → Agregar aspirante** registras a alguien sin que haga el t
 
 Abre `index.html?demo=1` o `admin.html?demo=1` para probar todo sin base de datos. Los datos quedan solo en tu navegador.
 
-En la demo existe un aspirante ya aprobado (usuario `demo`, contraseña `demo1234`) para ver la formación directamente.
+En la demo existe un aspirante ya aprobado (usuario `demo`, contraseña `demo1234`). La cuenta del panel en la demo es `admin` / `admin1234` para ver la formación directamente.
 
 Si no lo quieres en producción, borra la línea `<script src="js/demo.js">` de los dos HTML.
 

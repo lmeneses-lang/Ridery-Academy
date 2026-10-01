@@ -1,4 +1,4 @@
-// POST /api/auth  { accion: 'aspirante' | 'admin' | acciones públicas de Postúlate (test, verificarCedula, postular) }
+// POST /api/auth  { accion: 'login' | 'aspirante' | 'admin' | acciones públicas de Postúlate (test, verificarCedula, postular) }
 const H = require('../js/handlers.js');
 const store = require('../lib/store');
 const { firmar, iguales, responder, manejarError, cripto } = require('../lib/auth');
@@ -7,6 +7,14 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return responder(res, 405, { error: 'Método no permitido' });
   try {
     const body = req.body || {};
+    if (body.accion === 'login') {
+      // Un solo "Inicia sesión": devuelve tipo 'admin' (va al panel) o 'aspirante' (va a la formación)
+      const principal = (u, c) => !!(process.env.ADMIN_USER && process.env.ADMIN_PASS && iguales(u, process.env.ADMIN_USER) && iguales(c, process.env.ADMIN_PASS));
+      const r = await H.iniciarSesion(store, body, cripto, principal);
+      return responder(res, 200, r.tipo === 'admin'
+        ? { tipo: 'admin', token: firmar(r.sesion, 1), usuario: r.sesion.usuario }
+        : { tipo: 'aspirante', token: firmar(r.sesion, 30), aspirante: H.vistaAspirante(r.aspirante) });
+    }
     if (body.accion === 'aspirante') {
       const asp = await H.loginAspirante(store, body, cripto);
       return responder(res, 200, { token: firmar({ rol: 'aspirante', id: asp._id }, 30), aspirante: H.vistaAspirante(asp) });
