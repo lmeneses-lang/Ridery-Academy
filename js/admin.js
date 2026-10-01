@@ -9,13 +9,13 @@
   const call = (accion, data) => API.llamar('admin', 'admin', accion, data);
   const A = { usuario: null, celulas: [], reglas: {}, cohortes: [], tab: 'aspirantes', filtros: { q: '', cohorte: '', celula: '', estado: 'postulado' }, celContenido: H.COMUN, aspirantes: [] };
   const TABS = [
-    ['aspirantes', 'Postulaciones', 'users'], ['test', 'Test de perfil', 'list'], ['contenido', 'Contenido', 'book'],
-    ['metricas', 'Métricas', 'chart'], ['usuarios', 'Usuarios', 'lock'], ['ajustes', 'Ajustes', 'gear']
+    ['aspirantes', 'Postulaciones', 'users'], ['assessment', 'Assessment', 'chat'], ['test', 'Test de perfil', 'list'], ['contenido', 'Contenido', 'book'],
+    ['boost', 'Boost', 'bolt'], ['metricas', 'Métricas', 'chart'], ['usuarios', 'Usuarios', 'lock'], ['ajustes', 'Ajustes', 'gear']
   ];
   // Qué ve cada rol en el menú (el servidor también valida cada acción)
-  const TABS_ROL = { admin: TABS.map(t => t[0]), reclutador: ['aspirantes', 'metricas'], calidad: ['aspirantes', 'metricas'] };
+  const TABS_ROL = { admin: TABS.map(t => t[0]), reclutador: ['aspirantes', 'assessment', 'metricas'], calidad: ['aspirantes', 'assessment', 'metricas'] };
   const ROL_NOMBRE = { admin: 'Admin', reclutador: 'Reclutador', calidad: 'Calidad' };
-  const ROL_TEXTO = { admin: 'Todo el panel: contenido, test, ajustes y usuarios.', reclutador: 'Postulaciones: aprobar, descartar, agregar aspirantes y darles acceso. Métricas.', calidad: 'Ver postulaciones, aspirantes y métricas. No puede editar.' };
+  const ROL_TEXTO = { admin: 'Todo el panel: contenido, test, ajustes y usuarios.', reclutador: 'Postulaciones: aprobar, descartar, agregar aspirantes y darles acceso. Chat de Assessment y métricas.', calidad: 'Ver postulaciones, aspirantes y métricas, y responder en Assessment. No puede editar.' };
   const puede = (...roles) => roles.includes(A.yo && A.yo.perfil);
   const nombreCel = id => id === H.COMUN ? 'Tronco común' : ((A.celulas.find(c => c.id === id) || {}).nombre || id || '—');
   const opcionesCel = (sel, extra) => (extra || '') + A.celulas.map(c => '<option value="' + esc(c.id) + '"' + (c.id === sel ? ' selected' : '') + '>' + esc(c.nombre) + '</option>').join('');
@@ -65,6 +65,7 @@
       A.usuario = r.yo.nombre || r.yo.usuario;
       if (!TABS_ROL[A.yo.perfil].includes(A.tab)) A.tab = TABS_ROL[A.yo.perfil][0];
       shell(); abrir(A.tab);
+      call('chats').then(x => pintarBadge(x.noLeidos), () => {});
     } catch (e) { manejar(e); }
   }
 
@@ -73,7 +74,7 @@
       '<div style="position:relative"><button class="user-chip" id="um" aria-haspopup="true"><span class="avatar avatar-top">' + icon('user') + '</span><span class="hide-sm small">' + esc(A.usuario) + '</span>' + icon('chev') + '</button>' +
       '<div class="menu" id="user-menu" hidden><div style="padding:8px 10px"><b>' + esc(A.usuario) + '</b><div class="small muted">' + esc(ROL_NOMBRE[A.yo.perfil]) + (A.yo.principal ? ' · cuenta principal' : ' · @' + esc(A.yo.usuario)) + '</div></div><hr class="divider">' +
       (A.yo.principal ? '' : '<button id="mi-clave">' + icon('lock') + 'Cambiar mi clave</button>') + '<button id="salir">' + icon('out') + 'Salir</button></div></div></header>' +
-      '<div class="admin"><nav class="admin-nav" aria-label="Secciones">' + TABS.filter(t => TABS_ROL[A.yo.perfil].includes(t[0])).map(t => '<button data-tab="' + t[0] + '">' + icon(t[2]) + t[1] + '</button>').join('') + '</nav><main class="admin-main" id="main"></main></div>';
+      '<div class="admin"><nav class="admin-nav" aria-label="Secciones">' + TABS.filter(t => TABS_ROL[A.yo.perfil].includes(t[0])).map(t => '<button data-tab="' + t[0] + '">' + icon(t[2]) + t[1] + (t[0] === 'assessment' ? '<span class="badge" data-badge hidden>0</span>' : '') + '</button>').join('') + '</nav><main class="admin-main" id="main"></main></div>';
     main = app.querySelector('#main');
     const menu = app.querySelector('#user-menu');
     app.querySelector('#um').addEventListener('click', e => { e.stopPropagation(); menu.hidden = !menu.hidden; });
@@ -85,12 +86,22 @@
       dirty = false; abrir(b.dataset.tab);
     }));
   }
-  function abrir(tab) {
+  function abrir(tab, extra) {
+    if (A.parar) { A.parar(); A.parar = null; }
     A.tab = tab;
     app.querySelectorAll('[data-tab]').forEach(b => { b.classList.toggle('active', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
     main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-    ({ aspirantes: tabAspirantes, test: tabTest, contenido: tabContenido, metricas: tabMetricas, usuarios: tabUsuarios, ajustes: tabAjustes })[tab]();
+    ({ aspirantes: tabAspirantes, assessment: tabAssessment, test: tabTest, contenido: tabContenido, boost: tabBoost, metricas: tabMetricas, usuarios: tabUsuarios, ajustes: tabAjustes })[tab](extra);
   }
+  function pintarBadge(n) {
+    A.noLeidos = n;
+    document.querySelectorAll('[data-badge]').forEach(b => { b.textContent = n; b.hidden = !n; });
+  }
+  // Revisa chats nuevos cada 15 s mientras no estés en Assessment
+  setInterval(async () => {
+    if (!A.yo || A.tab === 'assessment' || document.hidden || !API.token('admin')) return;
+    try { const r = await call('chats'); if (r.noLeidos > (A.noLeidos || 0)) toast('Nuevo mensaje en Assessment'); pintarBadge(r.noLeidos); } catch (e) {}
+  }, 15000);
   const encabezado = (titulo, sub, acciones) => '<div class="row-between"><div class="stack-sm" style="gap:4px"><h1>' + titulo + '</h1>' + (sub ? '<p class="muted">' + sub + '</p>' : '') + '</div><div class="row">' + (acciones || '') + '</div></div>';
 
   /* ============ Postulaciones y aspirantes ============ */
@@ -211,10 +222,10 @@
     });
   }
   function exportarCSV(lista) {
-    const cols = ['Nombre', 'Cédula', 'Correo', 'Teléfono', 'Ciudad', 'Estado', 'Célula', 'Célula sugerida', 'Usuario', 'Progreso %', 'Promedio %', 'Completó', 'Postulación', 'Aprobado', 'Último acceso'];
+    const cols = ['Nombre', 'Cédula', 'Correo', 'Teléfono', 'Ciudad', 'Estado', 'Célula', 'Célula sugerida', 'Usuario', 'Progreso %', 'Promedio %', 'Mecanografía PPM', 'Completó', 'Postulación', 'Aprobado', 'Último acceso'];
     const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
     const est = { postulado: 'Por revisar', aprobado: 'Aspirante', descartado: 'Descartado' };
-    const filas = lista.map(a => [a.nombre, a.cedula, a.email, a.telefono, a.ciudad, est[a.estado], a.celula ? nombreCel(a.celula) : '', a.celulaSugerida ? nombreCel(a.celulaSugerida) : '', a.usuario, a.progreso, a.promedio, a.completo ? 'Sí' : 'No', a.creado, a.aprobadoFecha, a.ultimoAcceso].map(q).join(';'));
+    const filas = lista.map(a => [a.nombre, a.cedula, a.email, a.telefono, a.ciudad, est[a.estado], a.celula ? nombreCel(a.celula) : '', a.celulaSugerida ? nombreCel(a.celulaSugerida) : '', a.usuario, a.progreso, a.promedio, a.ppm, a.completo ? 'Sí' : 'No', a.creado, a.aprobadoFecha, a.ultimoAcceso].map(q).join(';'));
     const blob = new Blob(['﻿' + [cols.map(q).join(';')].concat(filas).join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const el = document.createElement('a'); el.href = URL.createObjectURL(blob); el.download = 'postulaciones-' + new Date().toISOString().slice(0, 10) + '.csv';
     document.body.appendChild(el); el.click(); el.remove();
@@ -253,6 +264,10 @@
         d.ruta.modulos.map(m => '<tr><td><b>' + esc(m.titulo) + '</b><div class="small muted">' + esc(nombreCel(m.celula)) + '</div></td><td>' + ({ aprobado: '<span class="pill pill-ok">Aprobado</span>', disponible: '<span class="pill pill-brand">En curso</span>', bloqueado: '<span class="pill">Bloqueado</span>', agotado: '<span class="pill pill-bad">Sin intentos</span>' }[m.estado]) + '</td>' +
           '<td class="num">' + m.examen.intentos + ' / ' + A.reglas.intentosMax + '</td><td class="num">' + (m.examen.mejor != null ? m.examen.mejor + '%' : '—') + '</td>' +
           '<td>' + (m.examen.intentos && !m.examen.aprobado && puede('admin', 'reclutador') ? '<button class="btn btn-secondary btn-sm" data-reset="' + esc(m._id) + '">Reiniciar intentos</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="small muted">Sin módulos en su ruta.</p>') + '</div>' : '') +
+      (r.estado === 'aprobado' ? '<hr class="divider"><div class="stack-sm"><div class="row-between"><h3>Boost · Mecanografía</h3><button class="btn btn-secondary btn-sm" id="d-chat">' + icon('chat') + 'Abrir chat</button></div>' +
+        (a.boost && a.boost.mecanografia && a.boost.mecanografia.intentos
+          ? (() => { const b = a.boost.mecanografia, u = b.historial[0] || {}; return '<div class="cert-grid small"><div><span class="muted">Mejor marca</span><b class="num">' + b.mejor + ' PPM</b></div><div><span class="muted">Último intento</span><b class="num">' + u.ppm + ' PPM · ' + u.precision + '%</b></div><div><span class="muted">Intentos</span><b class="num">' + b.intentos + '</b></div><div><span class="muted">Última práctica</span><b>' + fecha(u.fecha) + '</b></div></div>'; })()
+          : '<p class="small muted">Todavía no ha practicado.</p>') + '</div>' : '') +
       (a.origen === 'manual' ? '<p class="small muted">Agregado a mano desde el panel' + (a.nota ? ': ' + esc(a.nota) : '') + '</p>' : '') +
       '<div class="modal-actions" style="justify-content:space-between">' + (puede('admin') ? '<button class="btn btn-danger btn-sm" id="d-del">' + icon('trash') + 'Eliminar registro</button>' : '<span></span>') + '<button class="btn btn-secondary" data-x>Cerrar</button></div></div>';
     const cerrar = () => { w.remove(); document.removeEventListener('keydown', k); };
@@ -272,6 +287,7 @@
         if (clave) mostrarAcceso(a.nombre, x.usuario, clave, celula); else toast(a.nombre.split(' ')[0] + ' ya es aspirante (usa su contraseña anterior).');
       } catch (e) { manejar(e); }
     });
+    if ($('#d-chat')) $('#d-chat').addEventListener('click', () => { cerrar(); abrir('assessment', id); });
     if ($('#d-desc')) $('#d-desc').addEventListener('click', async () => {
       if (!await confirmar({ titulo: '¿Descartar a ' + a.nombre + '?', texto: 'No podrá entrar a la formación. Puedes devolverlo a «Por revisar» después.', ok: 'Descartar', peligro: true })) return;
       try { await call('cambiarEstado', { id, estado: 'descartado' }); toast('Postulación descartada'); cerrar(); tabAspirantes(); } catch (e) { manejar(e); }
@@ -573,6 +589,111 @@
         r.porModulo.map(m => '<tr><td><b>' + esc(m.titulo) + '</b></td><td>' + esc(nombreCel(m.celula)) + '</td><td class="num">' + m.personas + '</td><td class="num">' + m.aprobaron + ' <span class="muted small">(' + Math.round(m.aprobaron * 100 / Math.max(1, m.personas)) + '%)</span></td><td class="num">' + m.intentos + '</td><td class="num">' + (m.promedio != null ? m.promedio + '%' : '—') + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="card empty"><p>Aún nadie presentó exámenes.</p></div>') + '</div>' +
       '<div class="stack-sm"><h2>Preguntas que más se fallan</h2><p class="small muted">Si una pregunta tiene una tasa de error muy alta, revisa si la lección la explica bien o si la pregunta es confusa.</p>' + (r.masFalladas.length ? '<div class="table-wrap"><table><thead><tr><th>Pregunta</th><th>Módulo</th><th>Respuestas</th><th>% de error</th></tr></thead><tbody>' +
         r.masFalladas.map(f => '<tr><td>' + esc(f.texto) + '</td><td class="small">' + esc(f.moduloTitulo) + '</td><td class="num">' + f.total + '</td><td><span class="pill ' + (f.tasa >= 50 ? 'pill-bad' : f.tasa >= 25 ? 'pill-warn' : '') + ' num">' + f.tasa + '%</span></td></tr>').join('') + '</tbody></table></div>' : '<div class="card empty"><p>Sin errores registrados todavía.</p></div>') + '</div>';
+  }
+
+  /* ============ Assessment (chat con aspirantes) ============ */
+  async function tabAssessment(abrirId) {
+    let lista = [], actual = abrirId || A.chatActual || null, q = '', pararHilo = null, vivo = true, t = null;
+    main.innerHTML = encabezado('Assessment', 'Conversa con los aspirantes en tiempo real: dudas, seguimiento y evaluaciones.') +
+      '<section class="card inbox" id="inbox"><aside class="inbox-side"><input class="input" id="ib-q" placeholder="Buscar aspirante" aria-label="Buscar aspirante"><div class="inbox-list" id="ib-list"></div></aside>' +
+      '<div class="inbox-main" id="ib-main"><div class="inbox-vacio">' + icon('chat') + '<p>Elige un aspirante de la lista para ver o empezar la conversación.</p></div></div></section>';
+    const box = main.querySelector('#inbox'), ul = main.querySelector('#ib-list'), panel = main.querySelector('#ib-main');
+    const hace = iso => { if (!iso) return ''; const d = new Date(iso), h = new Date(); return d.toDateString() === h.toDateString() ? d.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString('es-VE', { day: 'numeric', month: 'short' }); };
+    const pintarLista = () => {
+      const f = lista.filter(c => !q || c.nombre.toLowerCase().includes(q) || (c.usuario || '').includes(q));
+      ul.innerHTML = f.length ? f.map(c => '<button class="inbox-item' + (c.id === actual ? ' active' : '') + '" data-id="' + esc(c.id) + '"><span class="avatar">' + esc(iniciales(c.nombre)) + '</span>' +
+        '<span style="min-width:0"><b>' + esc(c.nombre) + '</b><span class="prev">' + (c.ultimoTexto ? (c.ultimoDe === 'equipo' ? 'Tú: ' : '') + esc(c.ultimoTexto) : esc(nombreCel(c.celula)) + ' · sin mensajes') + '</span></span>' +
+        '<span class="meta">' + hace(c.ultimo) + (c.noLeidos ? '<span class="badge">' + c.noLeidos + '</span>' : '') + '</span></button>').join('')
+        : '<p class="small muted" style="padding:16px">' + (lista.length ? 'Nadie coincide con la búsqueda.' : 'Todavía no hay aspirantes aprobados.') + '</p>';
+      ul.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => abrirHilo(b.dataset.id)));
+    };
+    const cargarLista = async () => {
+      try { const r = await call('chats'); lista = r.chats; pintarBadge(r.noLeidos); pintarLista(); } catch (e) { if (e.status === 401) { vivo = false; manejar(e); } }
+    };
+    const abrirHilo = id => {
+      if (pararHilo) pararHilo();
+      actual = id; A.chatActual = id;
+      const c = lista.find(x => x.id === id) || { nombre: 'Aspirante', celula: '' };
+      c.noLeidos = 0; pintarLista(); pintarBadge(lista.reduce((t, x) => t + (x.noLeidos || 0), 0));
+      box.classList.add('viendo');
+      panel.innerHTML = '<div class="inbox-head"><button class="icon-btn" id="ib-back" aria-label="Volver a la lista">' + icon('left') + '</button><span class="avatar">' + esc(iniciales(c.nombre)) + '</span>' +
+        '<div class="grow" style="min-width:0"><b>' + esc(c.nombre) + '</b><div class="small muted">' + esc(nombreCel(c.celula)) + (c.usuario ? ' · @' + esc(c.usuario) : '') + '</div></div><button class="btn btn-ghost btn-sm" id="ib-ficha">Ver ficha</button></div>' +
+        '<div class="chat-list" id="ib-msgs" aria-live="polite"></div>' +
+        '<form class="chat-form" id="ib-form"><textarea class="textarea" rows="1" placeholder="Escribe a ' + esc(c.nombre.split(' ')[0]) + '…" aria-label="Mensaje" maxlength="2000"></textarea><button class="btn btn-primary" type="submit" aria-label="Enviar">' + icon('send') + '<span class="hide-sm">Enviar</span></button></form>';
+      panel.querySelector('#ib-back').addEventListener('click', () => { box.classList.remove('viendo'); });
+      panel.querySelector('#ib-ficha').addEventListener('click', () => detalleAspirante(id));
+      pararHilo = montarChatAdmin(panel.querySelector('#ib-msgs'), panel.querySelector('#ib-form'), id);
+      panel.querySelector('textarea').focus();
+    };
+    main.querySelector('#ib-q').addEventListener('input', e => { q = e.target.value.trim().toLowerCase(); pintarLista(); });
+    await cargarLista();
+    if (actual && lista.some(c => c.id === actual)) abrirHilo(actual);
+    const ciclo = async () => { if (!vivo) return; if (!document.hidden) await cargarLista(); t = setTimeout(ciclo, 6000); };
+    t = setTimeout(ciclo, 6000);
+    A.parar = () => { vivo = false; clearTimeout(t); if (pararHilo) pararHilo(); };
+  }
+  function montarChatAdmin(lista, form, id) {
+    const vistos = new Set(); let ultimo = null, ultimoDia = null, vivo = true, t = null, abajo1 = true;
+    const burbuja = m => '<div class="msg ' + (m.de === 'equipo' ? 'me' : 'them') + '">' + '<span class="msg-autor"' + (m.de === 'equipo' ? ' style="color:inherit;opacity:.75"' : '') + '>' + esc(m.autor || '') + '</span>' +
+      '<div class="msg-txt">' + esc(m.texto).replace(/\n/g, '<br>') + '</div><span class="msg-hora">' + new Date(m.fecha).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }) + '</span></div>';
+    const agregar = ms => {
+      const vacio = lista.querySelector('.chat-vacio');
+      const nuevos = ms.filter(m => !vistos.has(m._id));
+      if (!nuevos.length) { if (vacio === null && !vistos.size) lista.innerHTML = '<div class="chat-vacio">' + icon('chat') + '<p>No hay mensajes todavía. Escribe el primero.</p></div>'; return; }
+      if (vacio) vacio.remove();
+      const pegado = abajo1 || lista.scrollHeight - lista.scrollTop - lista.clientHeight < 80;
+      let html = '';
+      nuevos.forEach(m => { vistos.add(m._id); const dia = String(m.fecha).slice(0, 10); if (dia !== ultimoDia) { html += '<div class="msg-dia"><span>' + fecha(m.fecha) + '</span></div>'; ultimoDia = dia; } html += burbuja(m); if (!ultimo || String(m.fecha) > ultimo) ultimo = m.fecha; });
+      lista.insertAdjacentHTML('beforeend', html);
+      if (pegado) lista.scrollTop = lista.scrollHeight; abajo1 = false;
+    };
+    const ciclo = async () => {
+      if (!vivo) return;
+      if (!document.hidden) { try { agregar((await call('chatHilo', { id, desde: ultimo })).mensajes); } catch (e) { if (e.status === 401) { vivo = false; return manejar(e); } } }
+      t = setTimeout(ciclo, document.hidden ? 8000 : 2000);
+    };
+    ciclo();
+    const ta = form.querySelector('textarea'), btn = form.querySelector('button');
+    const ajustar = () => { ta.style.height = 'auto'; ta.style.height = Math.min(140, ta.scrollHeight) + 'px'; };
+    ta.addEventListener('input', ajustar);
+    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const texto = ta.value.trim(); if (!texto) return;
+      btn.disabled = true;
+      try { const r = await call('chatResponder', { id, texto }); ta.value = ''; ajustar(); abajo1 = true; agregar([r.mensaje]); } catch (x) { manejar(x); }
+      btn.disabled = false; ta.focus();
+    });
+    return () => { vivo = false; clearTimeout(t); };
+  }
+
+  /* ============ Boost (configuración) ============ */
+  async function tabBoost() {
+    let b;
+    try { b = (await call('boostConfig')).boost; } catch (e) { return manejar(e); }
+    const m = b.mecanografia;
+    const DUR = [[30, '30 s'], [60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min']];
+    main.innerHTML = encabezado('Boost', 'Actividades que el aspirante puede practicar en cualquier momento para mejorar sus cuellos de botella.') +
+      '<div class="card stack"><div class="row-between"><div class="row"><span class="boost-ic">' + icon('keyboard') + '</span><div><h2>Mecanografía</h2><span class="small muted">Copiar textos de atención al cliente contra el reloj.</span></div></div>' +
+      '<label class="switch"><input type="checkbox" id="bo-act"' + (m.activa ? ' checked' : '') + '>Activa</label></div>' +
+      '<div class="two"><div class="field"><label for="bo-meta">Meta de velocidad</label><div class="row" style="flex-wrap:nowrap"><input class="input num" type="number" id="bo-meta" value="' + m.meta + '" style="max-width:110px"><span class="muted">palabras por minuto</span></div><span class="hint">Referencia común para agentes de chat: 35 a 45 PPM.</span></div>' +
+      '<div class="field"><label for="bo-prec">Precisión esperada</label><div class="row" style="flex-wrap:nowrap"><input class="input num" type="number" id="bo-prec" value="' + m.precisionMin + '" style="max-width:110px"><span class="muted">%</span></div></div></div>' +
+      '<div class="field"><span class="label">Duraciones disponibles</span><div class="row">' + DUR.map(([d, n]) => '<label class="switch"><input type="checkbox" data-dur="' + d + '"' + (m.duraciones.includes(d) ? ' checked' : '') + '>' + n + '</label>').join('') + '</div></div>' +
+      '<div class="field"><label for="bo-txt">Textos de práctica</label><textarea class="textarea" id="bo-txt" style="min-height:260px">' + esc(m.textos.join('\n\n')) + '</textarea>' +
+      '<span class="hint">Separa cada texto con una línea en blanco. Se mezclan al azar en cada intento. Usa frases reales de atención (sin datos de clientes).</span></div>' +
+      '<div class="row"><button class="btn btn-primary" id="bo-save">Guardar</button><span class="small muted" id="bo-count"></span></div></div>' +
+      '<div class="notice info">Los resultados de cada aspirante (mejor marca, último intento e intentos) aparecen en su ficha, en Postulaciones → Aspirantes.</div>';
+    const txt = main.querySelector('#bo-txt'), cnt = main.querySelector('#bo-count');
+    const textos = () => txt.value.split(/\n\s*\n/).map(t => t.trim()).filter(Boolean);
+    const contar = () => { cnt.textContent = textos().length + ' textos'; };
+    txt.addEventListener('input', contar); contar();
+    main.querySelector('#bo-save').addEventListener('click', async () => {
+      try {
+        await call('guardarBoost', { mecanografia: { activa: main.querySelector('#bo-act').checked, meta: main.querySelector('#bo-meta').value, precisionMin: main.querySelector('#bo-prec').value,
+          duraciones: [...main.querySelectorAll('[data-dur]:checked')].map(x => Number(x.dataset.dur)), textos: textos() } });
+        toast('Boost guardado');
+      } catch (e) { manejar(e); }
+    });
   }
 
   /* ============ Usuarios del panel ============ */

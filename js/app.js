@@ -9,7 +9,7 @@
   const { API, esc, prosa, icon, youtubeId, tipoImagen, toast, confirmar, lightbox, fecha, iniciales } = window.Elx;
   const app = document.getElementById('app');
   const call = (accion, data) => API.llamar('asp', 'aspirante', accion, data);
-  const S = { asp: null, reglas: null, celulas: [], ruta: null, vista: null, abiertos: {}, post: null, examen: null };
+  const S = { asp: null, reglas: null, celulas: [], ruta: null, vista: null, abiertos: {}, post: null, examen: null, seccion: 'formacion', noLeidos: 0, boostActivo: true };
   let limpiezas = [];
   const limpiar = () => { limpiezas.forEach(f => { try { f(); } catch (e) {} }); limpiezas = []; };
 
@@ -22,6 +22,7 @@
   async function refrescar() {
     const r = await call('estado');
     S.asp = r.aspirante; S.reglas = r.reglas; S.celulas = r.celulas; S.ruta = r.ruta;
+    S.noLeidos = r.noLeidos || 0; S.boostActivo = r.boostActivo !== false;
   }
   function manejar(e) {
     if (e.status === 401) { API.salir('asp'); S.asp = null; S.ruta = null; return verIngreso('Tu sesión expiró. Vuelve a entrar con tu usuario y contraseña.'); }
@@ -36,6 +37,7 @@
     return '<header class="topbar">' +
       (curso ? '<button class="icon-btn drawer-toggle" data-act="drawer" aria-label="Abrir contenido del curso">' + icon('menu') + '</button>' : '') +
       '<a class="brand" href="#" data-act="inicio"><img class="brand-mark" src="img/logo-192.png" alt="Ridery" width="32" height="32"><span>Ridery Academy <small>· Formación CX</small></span></a>' +
+      (S.asp ? navAsp() : '') +
       '<div class="grow"></div>' +
       (curso ? '<div class="top-progress" title="Progreso del curso"><div class="bar"><span style="width:' + p + '%"></span></div><span class="small num"><b>' + p + '%</b><span class="hide-sm"> completado</span></span></div>' : '') +
       (S.asp ? '<div style="position:relative"><button class="user-chip" data-act="menu" aria-haspopup="true" aria-expanded="false"><span class="avatar avatar-top">' + icon('user') + '</span><span class="hide-sm small">' + esc(S.asp.nombre.split(' ')[0]) + '</span>' + icon('chev') + '</button>' +
@@ -43,10 +45,32 @@
         '<button data-act="salir">' + icon('out') + 'Salir</button></div></div>' : '') +
       '</header>';
   }
+  /* Navegación del aspirante: Mi formación · Boost · Assessment (en el celular va abajo, como una app) */
+  function navAsp() {
+    const items = [['formacion', 'Mi formación', 'book'], ['boost', 'Boost', 'bolt'], ['assessment', 'Assessment', 'chat']];
+    return '<nav class="asp-nav" aria-label="Secciones">' + items.map(([k, n, ic]) =>
+      '<button type="button" data-sec="' + k + '" class="' + (S.seccion === k ? 'active' : '') + '"' + (S.seccion === k ? ' aria-current="page"' : '') + '>' + icon(ic) + '<span>' + n + '</span>' +
+      (k === 'assessment' ? '<span class="badge" data-badge' + (S.noLeidos ? '' : ' hidden') + '>' + S.noLeidos + '</span>' : '') + '</button>').join('') + '</nav>';
+  }
+  function irSeccion(k) {
+    if (k === 'boost') return verBoost();
+    if (k === 'assessment') return verAssessment();
+    verCurso({ tipo: 'inicio' }); window.scrollTo(0, 0);
+  }
+  function pintarBadge() {
+    document.querySelectorAll('[data-badge]').forEach(b => { b.textContent = S.noLeidos; b.hidden = !S.noLeidos; });
+  }
+  // Revisa mensajes nuevos del equipo cada 20 s cuando no estás en el chat
+  setInterval(async () => {
+    if (!S.asp || S.seccion === 'assessment' || document.hidden) return;
+    try { const r = await call('chatNoLeidos'); if (r.noLeidos !== S.noLeidos) { const nuevo = r.noLeidos > S.noLeidos; S.noLeidos = r.noLeidos; pintarBadge(); if (nuevo) toast('Tienes un mensaje nuevo del equipo en Assessment'); } } catch (e) {}
+  }, 20000);
+
   function enlazarTop() {
+    app.querySelectorAll('[data-sec]').forEach(b => b.addEventListener('click', () => irSeccion(b.dataset.sec)));
     app.querySelectorAll('[data-act="inicio"]').forEach(a => a.addEventListener('click', async e => {
       e.preventDefault();
-      if (S.asp) return verCurso({ tipo: 'inicio' });
+      if (S.asp) return irSeccion('formacion');
       if (S.post && S.post.paso && !S.post.enviado && !await confirmar({ titulo: '¿Salir de la postulación?', texto: 'Tus respuestas quedan guardadas en este dispositivo para continuar después.', ok: 'Salir', cancelar: 'Seguir' })) return;
       verInicio();
     }));
@@ -344,7 +368,7 @@
 
   function verCurso(v) {
     limpiar();
-    S.vista = v;
+    S.vista = v; S.seccion = 'formacion';
     app.innerHTML = topbar({ curso: true }) + '<div class="course">' + sidebar(v) + '<main class="content" id="main"><div class="content-inner" id="inner"></div></main></div>';
     enlazarTop();
     const sb = app.querySelector('#sidebar');
@@ -631,6 +655,188 @@
       '<p class="muted">Tu resultado ya está disponible para tu supervisor. Te contactarán con los siguientes pasos para tu ingreso.</p>' +
       (!window.ElxDemo ? '<div class="row no-print"><button class="btn btn-secondary" id="c-print">' + icon('download') + 'Guardar como PDF</button></div>' : '');
     const p = el.querySelector('#c-print'); if (p) p.addEventListener('click', () => window.print());
+  }
+
+  /* ================= Boost ================= */
+  function pagina(contenido) {
+    app.innerHTML = topbar({}) + '<main class="page"><div class="page-inner" id="inner">' + contenido + '</div></main>';
+    enlazarTop();
+    return app.querySelector('#inner');
+  }
+  async function verBoost() {
+    limpiar(); S.seccion = 'boost';
+    const el = pagina('<div class="loading"><div class="spinner"></div></div>');
+    let d;
+    try { d = await call('boost'); } catch (e) { return manejar(e); }
+    S.boost = d;
+    const m = d.mecanografia, r = m.resultados || {};
+    el.innerHTML = '<div class="stack-sm"><span class="eyebrow">Boost</span><h1>Entrena tus habilidades</h1><p class="muted" style="max-width:62ch">Actividades cortas para mejorar lo que más usa un agente de CX en su día a día. Practica cuando quieras: no afecta tu ruta de formación, pero tu equipo ve tu mejor resultado.</p></div>' +
+      (m.activa ? '<div class="boost-grid"><article class="boost-card"><div class="row-between"><span class="boost-ic">' + icon('keyboard') + '</span>' +
+        (r.mejor != null ? (r.mejor >= m.meta ? '<span class="pill pill-ok">' + icon('check') + 'Meta alcanzada</span>' : '<span class="pill pill-warn">Meta: ' + m.meta + ' PPM</span>') : '<span class="pill">Sin intentos</span>') + '</div>' +
+        '<div class="stack-sm" style="gap:4px"><h2>Mecanografía</h2><p class="muted small">Escribe respuestas reales de atención al cliente contra el reloj. Mide tu velocidad (palabras por minuto) y tu precisión.</p></div>' +
+        '<div class="boost-stats"><div><span class="small muted">Mejor</span><b class="num">' + (r.mejor != null ? r.mejor : '—') + '</b><span class="small muted">PPM</span></div><div><span class="small muted">Meta</span><b class="num">' + m.meta + '</b><span class="small muted">PPM</span></div><div><span class="small muted">Intentos</span><b class="num">' + (r.intentos || 0) + '</b></div></div>' +
+        '<button class="btn btn-primary" id="b-meca">' + icon('timer') + 'Practicar</button></article></div>'
+        : '<div class="card empty">' + icon('bolt') + '<p>Todavía no hay actividades activas. Vuelve pronto.</p></div>');
+    const b = el.querySelector('#b-meca'); if (b) b.addEventListener('click', () => verMecanografia());
+  }
+
+  function textoPractica(textos, segundos) {
+    const largo = Math.max(400, segundos * 11);
+    const pool = textos.slice().sort(() => Math.random() - .5);
+    let t = '', i = 0;
+    while (t.length < largo) { t += (t ? ' ' : '') + pool[i % pool.length]; i++; }
+    return t;
+  }
+  function verMecanografia(durElegida) {
+    limpiar(); S.seccion = 'boost';
+    const m = S.boost.mecanografia, r = m.resultados || {};
+    let dur = durElegida || m.duraciones[Math.min(1, m.duraciones.length - 1)];
+    const etiquetaDur = d => d < 60 ? d + ' s' : (d / 60) + ' min';
+    const el = pagina('');
+    const pintarInicio = () => {
+      el.innerHTML = '<nav class="crumbs"><a href="#" data-volver>Boost</a><span>›</span><span>Mecanografía</span></nav>' +
+        '<div class="stack-sm"><h1>Mecanografía</h1><p class="muted" style="max-width:62ch">Copia el texto lo más rápido y exacto que puedas. El reloj arranca con tu primera tecla. Los errores se marcan en rojo y puedes corregirlos con la tecla de borrar.</p></div>' +
+        '<div class="card stack"><div class="stack-sm"><span class="label">Duración</span><div class="seg" role="radiogroup">' + m.duraciones.map(d => '<button type="button" role="radio" aria-checked="' + (d === dur) + '" data-dur="' + d + '" class="' + (d === dur ? 'active' : '') + '">' + etiquetaDur(d) + '</button>').join('') + '</div></div>' +
+        '<div class="boost-stats"><div><span class="small muted">Tu mejor marca</span><b class="num">' + (r.mejor != null ? r.mejor : '—') + '</b><span class="small muted">PPM</span></div><div><span class="small muted">Meta del equipo</span><b class="num">' + m.meta + '</b><span class="small muted">PPM</span></div><div><span class="small muted">Precisión esperada</span><b class="num">' + m.precisionMin + '%</b></div></div>' +
+        '<div class="row"><button class="btn btn-primary" id="m-go">' + icon('keyboard') + 'Empezar</button></div></div>' +
+        historialHTML(r);
+      el.querySelector('[data-volver]').addEventListener('click', e => { e.preventDefault(); verBoost(); });
+      el.querySelectorAll('[data-dur]').forEach(b => b.addEventListener('click', () => { dur = Number(b.dataset.dur); pintarInicio(); }));
+      el.querySelector('#m-go').addEventListener('click', jugar);
+    };
+    const jugar = () => {
+      const texto = textoPractica(m.textos, dur);
+      el.innerHTML = '<nav class="crumbs"><a href="#" data-volver>Boost</a><span>›</span><span>Mecanografía · ' + etiquetaDur(dur) + '</span></nav>' +
+        '<div class="type-head"><div class="type-timer num" id="t-reloj" aria-live="off">' + fmt(dur) + '</div><div class="type-live"><div><span class="small muted">PPM</span><b class="num" id="t-ppm">0</b></div><div><span class="small muted">Precisión</span><b class="num" id="t-prec">100%</b></div><div><span class="small muted">Errores</span><b class="num" id="t-err">0</b></div></div></div>' +
+        '<div class="type-box" id="t-box" tabindex="-1"><div class="type-text" id="t-text">' + [...texto].map(c => '<span>' + esc(c) + '</span>').join('') + '</div>' +
+        '<p class="type-hint" id="t-hint">Haz clic aquí y empieza a escribir</p>' +
+        '<textarea id="t-in" class="type-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Escribe el texto"></textarea></div>' +
+        '<div class="row"><button class="btn btn-secondary" id="t-reset">' + icon('refresh') + 'Reiniciar</button><button class="btn btn-ghost" id="t-salir">Terminar ahora</button></div>';
+      el.querySelector('[data-volver]').addEventListener('click', e => { e.preventDefault(); verBoost(); });
+      const inp = el.querySelector('#t-in'), box = el.querySelector('#t-box'), spans = el.querySelectorAll('#t-text span'), hint = el.querySelector('#t-hint');
+      const reloj = el.querySelector('#t-reloj'), oPpm = el.querySelector('#t-ppm'), oPrec = el.querySelector('#t-prec'), oErr = el.querySelector('#t-err');
+      let inicio = null, timer = null, terminado = false, previo = 0, teclas = 0, fallos = 0;
+      const enfocar = () => { inp.focus({ preventScroll: true }); hint.hidden = true; };
+      box.addEventListener('click', enfocar);
+      ['paste', 'drop'].forEach(ev => inp.addEventListener(ev, e => { e.preventDefault(); toast('Aquí no se puede pegar texto: escríbelo.'); }));
+      const estado = () => {
+        const v = inp.value; let ok = 0;
+        for (let i = 0; i < v.length; i++) if (v[i] === texto[i]) ok++;
+        const seg = inicio ? Math.max(1, (Date.now() - inicio) / 1000) : 1;
+        return { ok, escritos: v.length, errores: v.length - ok, ppm: inicio ? Math.round((ok / 5) / (seg / 60)) : 0, precision: teclas ? Math.max(0, Math.round((teclas - fallos) * 100 / teclas)) : 100, seg };
+      };
+      const pintarVivo = () => { const e = estado(); oPpm.textContent = e.ppm; oPrec.textContent = e.precision + '%'; oErr.textContent = e.errores; };
+      const terminar = async () => {
+        if (terminado) return; terminado = true; clearInterval(timer); inp.disabled = true;
+        const e = estado();
+        if (!inicio || e.escritos < 5) { toast('No alcanzaste a escribir. Intenta de nuevo.'); return pintarInicio(); }
+        const usados = Math.min(dur, Math.round(e.seg));
+        let resp = null;
+        try { resp = await call('boostGuardar', { actividad: 'mecanografia', ppm: e.ppm, precision: e.precision, duracion: usados, errores: e.errores, caracteres: e.escritos }); S.boost.mecanografia.resultados = resp.resultados; } catch (x) { manejar(x); }
+        resultado(e, usados, resp && resp.record);
+      };
+      inp.addEventListener('input', () => {
+        if (terminado) return;
+        if (!inicio) {
+          inicio = Date.now();
+          timer = setInterval(() => { const q = dur - Math.floor((Date.now() - inicio) / 1000); reloj.textContent = fmt(Math.max(0, q)); reloj.classList.toggle('low', q <= 10); pintarVivo(); if (q <= 0) terminar(); }, 250);
+        }
+        const v = inp.value;
+        if (v.length > previo) { for (let i = previo; i < v.length; i++) { teclas++; if (v[i] !== texto[i]) fallos++; } }
+        const desde = Math.min(previo, v.length), hasta = Math.max(previo, v.length) + 1;
+        for (let i = Math.max(0, desde - 1); i < Math.min(spans.length, hasta + 1); i++) {
+          spans[i].className = i < v.length ? (v[i] === texto[i] ? 'ok' : 'bad') : (i === v.length ? 'cur' : '');
+        }
+        previo = v.length;
+        const cur = spans[v.length]; if (cur) { const top = cur.offsetTop - box.querySelector('#t-text').offsetTop; box.scrollTop = Math.max(0, top - 40); }
+        pintarVivo();
+        if (v.length >= texto.length) terminar();
+      });
+      spans[0] && (spans[0].className = 'cur');
+      el.querySelector('#t-reset').addEventListener('click', () => { clearInterval(timer); jugar(); });
+      el.querySelector('#t-salir').addEventListener('click', () => inicio ? terminar() : pintarInicio());
+      limpiezas.push(() => clearInterval(timer));
+      enfocar();
+    };
+    const resultado = (e, usados, record) => {
+      const r2 = S.boost.mecanografia.resultados || {};
+      const okMeta = e.ppm >= m.meta, okPrec = e.precision >= m.precisionMin;
+      el.innerHTML = '<nav class="crumbs"><a href="#" data-volver>Boost</a><span>›</span><span>Resultado</span></nav>' +
+        '<div class="card stack"><div class="row-between"><span class="eyebrow">Mecanografía · ' + etiquetaDur(dur) + '</span>' + (record ? '<span class="pill pill-ok">' + icon('award') + '¡Nuevo récord!</span>' : '') + '</div>' +
+        '<div class="type-result"><div><b class="num">' + e.ppm + '</b><span>palabras por minuto</span></div><div><b class="num">' + e.precision + '%</b><span>precisión</span></div><div><b class="num">' + e.errores + '</b><span>errores sin corregir</span></div></div>' +
+        '<div class="feedback ' + (okMeta && okPrec ? 'ok' : 'bad') + '">' + icon(okMeta && okPrec ? 'check' : 'alert') + '<span class="body">' +
+        (okMeta && okPrec ? 'Cumpliste la meta del equipo: ' + m.meta + ' PPM con al menos ' + m.precisionMin + '% de precisión.' :
+          !okMeta ? 'Te faltan ' + (m.meta - e.ppm) + ' PPM para la meta de ' + m.meta + '. Practica unos minutos al día y verás el avance.' :
+          'Buena velocidad. Cuida la precisión: la meta es ' + m.precisionMin + '% y lograste ' + e.precision + '%.') + '</span></div>' +
+        '<div class="row"><button class="btn btn-primary" id="r-otra">' + icon('refresh') + 'Intentar de nuevo</button><button class="btn btn-secondary" id="r-boost">Volver a Boost</button></div></div>' + historialHTML(r2);
+      el.querySelector('[data-volver]').addEventListener('click', ev => { ev.preventDefault(); verBoost(); });
+      el.querySelector('#r-otra').addEventListener('click', () => verMecanografia(dur));
+      el.querySelector('#r-boost').addEventListener('click', verBoost);
+    };
+    pintarInicio();
+  }
+  const fmt = sg => Math.floor(sg / 60) + ':' + String(sg % 60).padStart(2, '0');
+  function historialHTML(r) {
+    const h = (r && r.historial) || [];
+    if (!h.length) return '';
+    return '<div class="stack-sm"><h3>Tus últimos intentos</h3><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Duración</th><th>PPM</th><th>Precisión</th><th>Errores</th></tr></thead><tbody>' +
+      h.slice(0, 8).map(x => '<tr><td class="small">' + Elx.fechaHora(x.fecha) + '</td><td class="num">' + fmt(x.duracion) + '</td><td class="num"><b>' + x.ppm + '</b></td><td class="num">' + x.precision + '%</td><td class="num">' + x.errores + '</td></tr>').join('') + '</tbody></table></div></div>';
+  }
+
+  /* ================= Assessment (chat con el equipo) ================= */
+  function burbuja(m, propio) {
+    return '<div class="msg ' + (propio ? 'me' : 'them') + '" data-id="' + esc(m._id) + '">' + (!propio ? '<span class="msg-autor">' + esc(m.autor || 'Equipo') + '</span>' : '') +
+      '<div class="msg-txt">' + esc(m.texto).replace(/\n/g, '<br>') + '</div><span class="msg-hora">' + new Date(m.fecha).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }) + '</span></div>';
+  }
+  function separadorDia(fecha) { return '<div class="msg-dia"><span>' + Elx.fecha(fecha) + '</span></div>'; }
+  // Monta un chat con consulta periódica. opts: { lista, form, traer(desde), enviar(texto), propio(m), vacio }
+  function montarChat(opts) {
+    const vistos = new Set(); let ultimo = null, ultimoDia = null, vivo = true, t = null;
+    const agregar = ms => {
+      if (!ms.length) return;
+      const abajo = opts.lista.scrollHeight - opts.lista.scrollTop - opts.lista.clientHeight < 80;
+      const vacio = opts.lista.querySelector('.chat-vacio'); if (vacio) vacio.remove();
+      let html = '';
+      ms.forEach(m => {
+        if (vistos.has(m._id)) return; vistos.add(m._id);
+        const dia = String(m.fecha).slice(0, 10); if (dia !== ultimoDia) { html += separadorDia(m.fecha); ultimoDia = dia; }
+        html += burbuja(m, opts.propio(m));
+        if (!ultimo || String(m.fecha) > ultimo) ultimo = m.fecha;
+      });
+      if (html) { opts.lista.insertAdjacentHTML('beforeend', html); if (abajo || opts.forzarAbajo) opts.lista.scrollTop = opts.lista.scrollHeight; opts.forzarAbajo = false; }
+    };
+    const ciclo = async () => {
+      if (!vivo) return;
+      if (!document.hidden) { try { agregar((await opts.traer(ultimo)).mensajes); } catch (e) { if (e.status === 401) { vivo = false; return manejar(e); } } }
+      t = setTimeout(ciclo, document.hidden ? 8000 : 2000);
+    };
+    opts.lista.innerHTML = '<div class="chat-vacio">' + icon('chat') + '<p>' + opts.vacio + '</p></div>';
+    opts.forzarAbajo = true;
+    ciclo();
+    const ta = opts.form.querySelector('textarea'), btn = opts.form.querySelector('button');
+    const ajustar = () => { ta.style.height = 'auto'; ta.style.height = Math.min(140, ta.scrollHeight) + 'px'; };
+    ta.addEventListener('input', ajustar);
+    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); opts.form.requestSubmit(); } });
+    opts.form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const texto = ta.value.trim(); if (!texto) return;
+      btn.disabled = true;
+      try { const r = await opts.enviar(texto); ta.value = ''; ajustar(); opts.forzarAbajo = true; agregar([r.mensaje]); } catch (x) { manejar(x); }
+      btn.disabled = false; ta.focus();
+    });
+    return () => { vivo = false; clearTimeout(t); };
+  }
+  function verAssessment() {
+    limpiar(); S.seccion = 'assessment'; S.noLeidos = 0;
+    const el = pagina('<div class="stack-sm"><span class="eyebrow">Assessment</span><h1>Habla con el equipo</h1><p class="muted" style="max-width:62ch">Escríbele al equipo de Ridery: dudas sobre la formación, seguimiento de tu proceso o tus evaluaciones. Te responden aquí mismo.</p></div>' +
+      '<section class="chat card" aria-label="Chat con el equipo"><div class="chat-list" id="c-list" aria-live="polite"></div>' +
+      '<form class="chat-form" id="c-form"><textarea class="textarea" rows="1" placeholder="Escribe un mensaje…" aria-label="Mensaje" maxlength="2000"></textarea><button class="btn btn-primary" type="submit" aria-label="Enviar">' + icon('send') + '<span class="hide-sm">Enviar</span></button></form>' +
+      '<p class="small muted chat-nota">Enter para enviar · Shift + Enter para nueva línea</p></section>');
+    pintarBadge();
+    const parar = montarChat({ lista: el.querySelector('#c-list'), form: el.querySelector('#c-form'), vacio: 'Aún no hay mensajes. Escribe tu primera pregunta y el equipo te responderá aquí.',
+      traer: desde => call('chat', { desde }), enviar: texto => call('chatEnviar', { texto }), propio: m => m.de === 'aspirante' });
+    limpiezas.push(parar);
+    el.querySelector('#c-form textarea').focus();
   }
 
   Elx.barraDemo('admin.html' + (window.ElxDemo && !window.ELX_DEMO ? '?demo=1' : ''), 'Abrir panel admin');

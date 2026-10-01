@@ -118,6 +118,24 @@
       ] } }
   ];
 
+  /* ---------- Boost: actividades para mejorar cuellos de botella ---------- */
+  const BOOST_DEFAULT = {
+    mecanografia: {
+      activa: true,
+      meta: 40,                 // palabras por minuto objetivo
+      precisionMin: 95,         // % de precisión esperado
+      duraciones: [60, 120, 180],
+      textos: [
+        'Hola, gracias por escribirnos. Lamento el inconveniente con tu viaje de hoy. Ya revisé tu cuenta y encontré el cobro que mencionas. Te explico los pasos para resolverlo en pocos minutos.',
+        'Entiendo tu molestia y quiero ayudarte. Para continuar, por favor confírmame la fecha del viaje, el punto de origen y el método de pago que usaste. Con esa información reviso el caso de inmediato.',
+        'Buenas tardes, te saluda el equipo de atención de Ridery. Tu reembolso ya fue procesado y verás el monto reflejado en tu método de pago en un plazo de tres a cinco días hábiles.',
+        'Gracias por tu paciencia. Revisé la ruta del viaje y el conductor tomó un desvío por un cierre de vía. Por eso la tarifa final fue mayor a la estimada. Aplicamos un ajuste a tu favor.',
+        'Para proteger tu cuenta, nunca compartas tu código de verificación con nadie. Si recibiste una llamada pidiéndolo, cambia tu contraseña y avísanos para revisar la actividad reciente.',
+        'Hola, conductor. Tus documentos fueron aprobados y ya puedes conectarte para recibir viajes. Recuerda mantener tu licencia y el seguro del vehículo vigentes para evitar suspensiones.'
+      ]
+    }
+  };
+
   /* ---------- Utilidades ---------- */
   function err(status, mensaje) { const e = new Error(mensaje); e.status = status; return e; }
   function nuevoId(prefijo) { return (prefijo || 'id') + '-' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4); }
@@ -135,6 +153,8 @@
       await store.put('cohortes', { _id: 'CX-2026-10', nombre: 'Cohorte de ejemplo · octubre 2026', activa: true, creado: ahora() });
     }
     cfg.reglas = Object.assign({}, REGLAS_DEFAULT, cfg.reglas || {});
+    cfg.boost = cfg.boost || {};
+    cfg.boost.mecanografia = Object.assign({}, BOOST_DEFAULT.mecanografia, cfg.boost.mecanografia || {});
     return cfg;
   }
 
@@ -297,13 +317,79 @@
   };
 
   /* ---------- Acciones del aspirante ---------- */
+  /* ---------- Chat de Assessment ----------
+     mensajes: { _id, aspirante, de: 'aspirante'|'equipo', autor, texto, fecha, leido }
+     conversaciones: { _id: aspiranteId, nombre, celula, ultimo, ultimoTexto, ultimoDe, noLeidosEquipo, noLeidosAsp } */
+  async function hilo(store, aspId, desde) {
+    const ms = (await store.find('mensajes', { aspirante: aspId })).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || String(a._id).localeCompare(String(b._id)));
+    return desde ? ms.filter(m => String(m.fecha) >= String(desde)) : ms.slice(-200);
+  }
+  async function enviarMensaje(store, asp, de, autor, texto) {
+    const t = limpiar(texto, 2000);
+    if (!t) throw err(400, 'Escribe un mensaje.');
+    const msg = { _id: nuevoId('msg'), aspirante: asp._id, de, autor: limpiar(autor, 80), texto: t, fecha: ahora(), leido: false };
+    await store.put('mensajes', msg);
+    const c = (await store.get('conversaciones', asp._id)) || { _id: asp._id, noLeidosEquipo: 0, noLeidosAsp: 0 };
+    Object.assign(c, { nombre: asp.nombre, celula: asp.celula, ultimo: msg.fecha, ultimoTexto: t.slice(0, 140), ultimoDe: de });
+    if (de === 'aspirante') c.noLeidosEquipo = (c.noLeidosEquipo || 0) + 1; else c.noLeidosAsp = (c.noLeidosAsp || 0) + 1;
+    await store.put('conversaciones', c);
+    return msg;
+  }
+  async function marcarLeidos(store, aspId, deQuien) {
+    const c = await store.get('conversaciones', aspId);
+    const campo = deQuien === 'aspirante' ? 'noLeidosEquipo' : 'noLeidosAsp';
+    if (!c || !c[campo]) return;                 // nada pendiente: no escribe en cada consulta
+    const ms = (await store.find('mensajes', { aspirante: aspId })).filter(m => m.de === deQuien && !m.leido);
+    for (const m of ms) { m.leido = true; await store.put('mensajes', m); }
+    c[campo] = 0; await store.put('conversaciones', c);
+  }
+  const vistaMsg = m => ({ _id: m._id, de: m.de, autor: m.autor, texto: m.texto, fecha: m.fecha, leido: !!m.leido });
+
   const aspirante = {
+    async boost({ store, user }) {
+      const cfg = await cargarConfig(store);
+      const asp = await requerirAspirante(store, user);
+      const m = cfg.boost.mecanografia;
+      return { mecanografia: { activa: m.activa, meta: m.meta, precisionMin: m.precisionMin, duraciones: m.duraciones, textos: m.textos,
+        resultados: (asp.boost && asp.boost.mecanografia) || { mejor: null, intentos: 0, historial: [] } } };
+    },
+    async boostGuardar({ store, user, body }) {
+      await cargarConfig(store);
+      const asp = await requerirAspirante(store, user);
+      if (body.actividad !== 'mecanografia') throw err(400, 'Actividad desconocida.');
+      const n = (v, max) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
+      const r = { fecha: ahora(), ppm: n(body.ppm, 250), precision: n(body.precision, 100), duracion: n(body.duracion, 600), errores: n(body.errores, 5000), caracteres: n(body.caracteres, 20000) };
+      asp.boost = asp.boost || {};
+      const b = asp.boost.mecanografia || { mejor: null, intentos: 0, historial: [] };
+      b.intentos += 1;
+      const record = b.mejor == null || r.ppm > b.mejor;
+      if (record) { b.mejor = r.ppm; b.mejorFecha = r.fecha; }
+      b.historial = [r].concat(b.historial || []).slice(0, 20);
+      asp.boost.mecanografia = b;
+      await store.put('aspirantes', asp);
+      return { resultados: b, record };
+    },
+    async chat({ store, user, body }) {
+      const asp = await requerirAspirante(store, user);
+      await marcarLeidos(store, asp._id, 'equipo');
+      return { mensajes: (await hilo(store, asp._id, body.desde)).map(vistaMsg), ahora: ahora() };
+    },
+    async chatEnviar({ store, user, body }) {
+      const asp = await requerirAspirante(store, user);
+      return { mensaje: vistaMsg(await enviarMensaje(store, asp, 'aspirante', asp.nombre, body.texto)) };
+    },
+    async chatNoLeidos({ store, user }) {
+      const asp = await requerirAspirante(store, user);
+      const c = await store.get('conversaciones', asp._id);
+      return { noLeidos: (c && c.noLeidosAsp) || 0 };
+    },
     async estado({ store, user }) {
       const cfg = await cargarConfig(store);
       const asp = await requerirAspirante(store, user);
       const modulos = await store.find('modulos', {});
       const ruta = construirRuta(modulos, asp, cfg.reglas);
-      return { aspirante: vistaAspirante(asp), reglas: cfg.reglas, celulas: cfg.celulas, ruta };
+      const conv = await store.get('conversaciones', asp._id);
+      return { aspirante: vistaAspirante(asp), reglas: cfg.reglas, celulas: cfg.celulas, ruta, noLeidos: (conv && conv.noLeidosAsp) || 0, boostActivo: cfg.boost.mecanografia.activa };
     },
     async progreso({ store, user, body }) {
       const cfg = await cargarConfig(store);
@@ -378,7 +464,7 @@
     return { _id: asp._id, nombre: asp.nombre, cedula: asp.cedula, email: asp.email, telefono: asp.telefono, ciudad: asp.ciudad || '', cohorte: asp.cohorte,
       usuario: asp.usuario || '', tieneClave: !!asp.hash, celula: asp.celula, celulaSugerida: asp.test ? asp.test.celulaSugerida : null, estado: estadoDe(asp), estadoTest: asp.test ? asp.test.estado : 'pendiente',
       creado: asp.creado, aprobadoFecha: asp.aprobadoFecha || null, ultimoAcceso: asp.ultimoAcceso,
-      progreso: p.progreso, completo: p.completo, promedio: p.promedio };
+      progreso: p.progreso, completo: p.completo, promedio: p.promedio, ppm: asp.boost && asp.boost.mecanografia ? asp.boost.mecanografia.mejor : null };
   }
 
   const admin = {
@@ -587,6 +673,46 @@
       await store.del('usuarios', id);
       return { ok: true };
     },
+    /* ----- Boost ----- */
+    async boostConfig({ store }) {
+      const cfg = await cargarConfig(store);
+      return { boost: cfg.boost };
+    },
+    async guardarBoost({ store, body }) {
+      const cfg = await cargarConfig(store);
+      const m = body.mecanografia || {};
+      const textos = (m.textos || []).map(t => limpiar(t, 1500).replace(/\s+/g, ' ')).filter(t => t.length >= 40);
+      if (!textos.length) throw err(400, 'Agrega al menos un texto de práctica (mínimo 40 caracteres).');
+      const dur = (m.duraciones || []).map(Number).filter(d => [30, 60, 120, 180, 300].includes(d));
+      if (!dur.length) throw err(400, 'Elige al menos una duración.');
+      cfg.boost.mecanografia = { activa: m.activa !== false, meta: Math.max(5, Math.min(150, Math.round(Number(m.meta) || 40))),
+        precisionMin: Math.max(50, Math.min(100, Math.round(Number(m.precisionMin) || 95))), duraciones: dur.sort((a, b) => a - b), textos };
+      await store.put('config', cfg);
+      return { boost: cfg.boost };
+    },
+
+    /* ----- Assessment (chat) ----- */
+    async chats({ store }) {
+      const [convs, asps] = await Promise.all([store.find('conversaciones', {}), store.find('aspirantes', {})]);
+      const porId = Object.fromEntries(convs.map(c => [c._id, c]));
+      const lista = asps.filter(a => estadoDe(a) === 'aprobado' || porId[a._id]).map(a => {
+        const c = porId[a._id] || {};
+        return { id: a._id, nombre: a.nombre, celula: a.celula, usuario: a.usuario || '', estado: estadoDe(a), ultimo: c.ultimo || null, ultimoTexto: c.ultimoTexto || '', ultimoDe: c.ultimoDe || null, noLeidos: c.noLeidosEquipo || 0 };
+      }).sort((x, y) => String(y.ultimo || '').localeCompare(String(x.ultimo || '')) || x.nombre.localeCompare(y.nombre));
+      return { chats: lista, noLeidos: lista.reduce((t, c) => t + c.noLeidos, 0) };
+    },
+    async chatHilo({ store, body }) {
+      const asp = await store.get('aspirantes', body.id);
+      if (!asp) throw err(404, 'Aspirante no encontrado.');
+      await marcarLeidos(store, asp._id, 'aspirante');
+      return { mensajes: (await hilo(store, asp._id, body.desde)).map(vistaMsg), ahora: ahora() };
+    },
+    async chatResponder({ store, body, user }) {
+      const asp = await store.get('aspirantes', body.id);
+      if (!asp) throw err(404, 'Aspirante no encontrado.');
+      return { mensaje: vistaMsg(await enviarMensaje(store, asp, 'equipo', user.nombre || user.usuario, body.texto)) };
+    },
+
     async cambiarMiClave({ store, body, user, cripto }) {
       if (user.principal) throw err(400, 'La clave de la cuenta principal se cambia en Vercel (variable ADMIN_PASS).');
       const u = await store.get('usuarios', user.cuenta);
@@ -601,8 +727,8 @@
   /* ---------- Roles del panel ---------- */
   const PERFILES = {
     admin: { nombre: 'Admin', acciones: '*' },
-    reclutador: { nombre: 'Reclutador', acciones: ['resumen', 'aspirantes', 'aspirante', 'aprobar', 'cambiarEstado', 'guardarAcceso', 'reiniciarIntentos', 'crearAspirante', 'guardarCohorte', 'metricas', 'cambiarMiClave'] },
-    calidad: { nombre: 'Calidad', acciones: ['resumen', 'aspirantes', 'aspirante', 'metricas', 'cambiarMiClave'] }
+    reclutador: { nombre: 'Reclutador', acciones: ['resumen', 'aspirantes', 'aspirante', 'aprobar', 'cambiarEstado', 'guardarAcceso', 'reiniciarIntentos', 'crearAspirante', 'guardarCohorte', 'metricas', 'cambiarMiClave', 'chats', 'chatHilo', 'chatResponder'] },
+    calidad: { nombre: 'Calidad', acciones: ['resumen', 'aspirantes', 'aspirante', 'metricas', 'cambiarMiClave', 'chats', 'chatHilo', 'chatResponder'] }
   };
   const limpiarUsuario = u => limpiar(u, 30).toLowerCase();
   function vistaUsuario(u) { return { usuario: u._id, nombre: u.nombre, perfil: u.perfil, activo: u.activo !== false, creado: u.creado, ultimoAcceso: u.ultimoAcceso || null }; }
