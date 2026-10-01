@@ -707,6 +707,13 @@
       await marcarLeidos(store, asp._id, 'aspirante');
       return { mensajes: (await hilo(store, asp._id, body.desde)).map(vistaMsg), ahora: ahora() };
     },
+    async chatEliminar({ store, body }) {
+      const id = String(body.id || '');
+      const ms = await store.find('mensajes', { aspirante: id });
+      for (const m of ms) await store.del('mensajes', m._id);
+      await store.del('conversaciones', id);
+      return { ok: true, eliminados: ms.length };
+    },
     async chatResponder({ store, body, user }) {
       const asp = await store.get('aspirantes', body.id);
       if (!asp) throw err(404, 'Aspirante no encontrado.');
@@ -727,7 +734,7 @@
   /* ---------- Roles del panel ---------- */
   const PERFILES = {
     admin: { nombre: 'Admin', acciones: '*' },
-    reclutador: { nombre: 'Reclutador', acciones: ['resumen', 'aspirantes', 'aspirante', 'aprobar', 'cambiarEstado', 'guardarAcceso', 'reiniciarIntentos', 'crearAspirante', 'guardarCohorte', 'metricas', 'cambiarMiClave', 'chats', 'chatHilo', 'chatResponder'] },
+    reclutador: { nombre: 'Reclutador', acciones: ['resumen', 'aspirantes', 'aspirante', 'aprobar', 'cambiarEstado', 'guardarAcceso', 'reiniciarIntentos', 'crearAspirante', 'guardarCohorte', 'metricas', 'cambiarMiClave', 'chats', 'chatHilo', 'chatResponder', 'chatEliminar'] },
     calidad: { nombre: 'Calidad', acciones: ['resumen', 'aspirantes', 'aspirante', 'metricas', 'cambiarMiClave', 'chats', 'chatHilo', 'chatResponder'] }
   };
   const limpiarUsuario = u => limpiar(u, 30).toLowerCase();

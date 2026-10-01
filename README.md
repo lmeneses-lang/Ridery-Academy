@@ -124,6 +124,7 @@ Es un chat entre el aspirante (pestaña **Assessment**) y el equipo (panel → *
 
 - **Panel:** una bandeja con todos los aspirantes aprobados, buscador, contador de no leídos y aviso cuando llega un mensaje nuevo.
 - **Quién responde:** Admin, Reclutador y Calidad.
+- **Eliminar un chat:** la **X** en cada conversación (Admin y Reclutador) borra todo el historial, también para el aspirante.
 - **Aspirante:** ve un contador en la pestaña y un aviso si le escriben mientras está en otra sección.
 - **Velocidad:** los mensajes llegan en unos 2 segundos. Con el chat abierto, la página revisa si hay mensajes nuevos cada 2 s, y pausa la revisión si la pestaña está en segundo plano. Funciona en Vercel Hobby sin servicios extra.
 - **Si se necesita instantáneo con muchos usuarios a la vez:** se puede conectar un servicio de tiempo real como Ably o Pusher (tienen plan gratuito) sin cambiar la interfaz.

@@ -113,6 +113,7 @@
   }
   async function tabAspirantes() {
     try { A.aspirantes = (await call('aspirantes')).aspirantes; } catch (e) { return manejar(e); }
+    if (A.tab !== 'aspirantes') return;   // el usuario ya cambió de sección
     const f = A.filtros;
     if (!f.estado || !ESTADOS.some(x => x[0] === f.estado)) f.estado = 'postulado';
     const cuenta = e => A.aspirantes.filter(a => a.estado === e).length;
@@ -317,6 +318,7 @@
   async function tabTest() {
     let preguntas;
     try { preguntas = (await call('preguntas')).preguntas; } catch (e) { return manejar(e); }
+    if (A.tab !== 'test') return;   // el usuario ya cambió de sección
     A.preguntas = preguntas;
     const r = A.reglas;
     main.innerHTML = encabezado('Test de perfil', preguntas.filter(p => p.activa !== false).length + ' preguntas activas', '<button class="btn btn-secondary" id="sim">Probar el test</button><button class="btn btn-primary" id="nueva">' + icon('plus') + 'Nueva pregunta</button>') +
@@ -402,6 +404,7 @@
   async function tabContenido() {
     let todos;
     try { todos = (await call('modulos', {})).modulos; } catch (e) { return manejar(e); }
+    if (A.tab !== 'contenido') return;   // el usuario ya cambió de sección
     const cel = A.celContenido;
     const mods = todos.filter(m => m.celula === cel);
     const cuenta = id => todos.filter(m => m.celula === id).length;
@@ -579,6 +582,7 @@
   async function tabMetricas() {
     let r;
     try { r = await call('metricas'); } catch (e) { return manejar(e); }
+    if (A.tab !== 'metricas') return;   // el usuario ya cambió de sección
     const filas = Object.entries(r.porCelula).map(([k, v]) => [k === 'REVISION' ? 'Sin célula sugerida' : nombreCel(k), v]).sort((a, b) => b[1] - a[1]);
     const max = Math.max(1, ...filas.map(f => f[1]));
     main.innerHTML = encabezado('Métricas') +
@@ -601,11 +605,27 @@
     const hace = iso => { if (!iso) return ''; const d = new Date(iso), h = new Date(); return d.toDateString() === h.toDateString() ? d.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString('es-VE', { day: 'numeric', month: 'short' }); };
     const pintarLista = () => {
       const f = lista.filter(c => !q || c.nombre.toLowerCase().includes(q) || (c.usuario || '').includes(q));
-      ul.innerHTML = f.length ? f.map(c => '<button class="inbox-item' + (c.id === actual ? ' active' : '') + '" data-id="' + esc(c.id) + '"><span class="avatar">' + esc(iniciales(c.nombre)) + '</span>' +
+      const borrar = puede('admin', 'reclutador');
+      ul.innerHTML = f.length ? f.map(c => '<div class="inbox-item' + (c.id === actual ? ' active' : '') + '" data-id="' + esc(c.id) + '" role="button" tabindex="0"><span class="avatar">' + esc(iniciales(c.nombre)) + '</span>' +
         '<span style="min-width:0"><b>' + esc(c.nombre) + '</b><span class="prev">' + (c.ultimoTexto ? (c.ultimoDe === 'equipo' ? 'Tú: ' : '') + esc(c.ultimoTexto) : esc(nombreCel(c.celula)) + ' · sin mensajes') + '</span></span>' +
-        '<span class="meta">' + hace(c.ultimo) + (c.noLeidos ? '<span class="badge">' + c.noLeidos + '</span>' : '') + '</span></button>').join('')
+        '<span class="meta">' + (borrar && c.ultimo ? '<button class="inbox-x" data-del="' + esc(c.id) + '" aria-label="Eliminar el chat con ' + esc(c.nombre) + '" title="Eliminar chat">' + icon('x') + '</button>' : '') +
+        hace(c.ultimo) + (c.noLeidos ? '<span class="badge">' + c.noLeidos + '</span>' : '') + '</span></div>').join('')
         : '<p class="small muted" style="padding:16px">' + (lista.length ? 'Nadie coincide con la búsqueda.' : 'Todavía no hay aspirantes aprobados.') + '</p>';
-      ul.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => abrirHilo(b.dataset.id)));
+      ul.querySelectorAll('.inbox-item').forEach(b => {
+        b.addEventListener('click', e => { if (!e.target.closest('[data-del]')) abrirHilo(b.dataset.id); });
+        b.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === b) { e.preventDefault(); abrirHilo(b.dataset.id); } });
+      });
+      ul.querySelectorAll('[data-del]').forEach(x => x.addEventListener('click', async e => {
+        e.stopPropagation();
+        const c = lista.find(y => y.id === x.dataset.del);
+        if (!await confirmar({ titulo: '¿Eliminar el chat con ' + c.nombre + '?', texto: 'Se borran todos los mensajes de esta conversación, también para el aspirante. No se puede deshacer.', ok: 'Eliminar chat', peligro: true })) return;
+        try {
+          await call('chatEliminar', { id: c.id });
+          toast('Chat eliminado');
+          if (actual === c.id) { if (pararHilo) pararHilo(); pararHilo = null; actual = null; A.chatActual = null; box.classList.remove('viendo'); panel.innerHTML = '<div class="inbox-vacio">' + icon('chat') + '<p>Elige un aspirante de la lista para ver o empezar la conversación.</p></div>'; }
+          await cargarLista();
+        } catch (er) { manejar(er); }
+      }));
     };
     const cargarLista = async () => {
       try { const r = await call('chats'); lista = r.chats; pintarBadge(r.noLeidos); pintarLista(); } catch (e) { if (e.status === 401) { vivo = false; manejar(e); } }
@@ -626,7 +646,9 @@
       panel.querySelector('textarea').focus();
     };
     main.querySelector('#ib-q').addEventListener('input', e => { q = e.target.value.trim().toLowerCase(); pintarLista(); });
+    A.parar = () => { vivo = false; clearTimeout(t); if (pararHilo) pararHilo(); };
     await cargarLista();
+    if (A.tab !== 'assessment' || !vivo) return;
     if (actual && lista.some(c => c.id === actual)) abrirHilo(actual);
     const ciclo = async () => { if (!vivo) return; if (!document.hidden) await cargarLista(); t = setTimeout(ciclo, 6000); };
     t = setTimeout(ciclo, 6000);
@@ -671,6 +693,7 @@
   async function tabBoost() {
     let b;
     try { b = (await call('boostConfig')).boost; } catch (e) { return manejar(e); }
+    if (A.tab !== 'boost') return;   // el usuario ya cambió de sección
     const m = b.mecanografia;
     const DUR = [[30, '30 s'], [60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min']];
     main.innerHTML = encabezado('Boost', 'Actividades que el aspirante puede practicar en cualquier momento para mejorar sus cuellos de botella.') +
@@ -700,6 +723,7 @@
   async function tabUsuarios() {
     let us;
     try { us = (await call('usuarios')).usuarios; } catch (e) { return manejar(e); }
+    if (A.tab !== 'usuarios') return;   // el usuario ya cambió de sección
     const pill = p => '<span class="pill ' + (p === 'admin' ? 'pill-brand' : p === 'reclutador' ? 'pill-ok' : '') + '">' + esc(ROL_NOMBRE[p] || p) + '</span>';
     main.innerHTML = encabezado('Usuarios', 'Cuentas para entrar a este panel. Cada persona entra con su usuario y su clave.', '<button class="btn btn-primary" id="nu">' + icon('plus') + 'Nuevo usuario</button>') +
       '<div class="cert-grid">' + Object.keys(ROL_NOMBRE).map(k => '<div class="card card-tight stack-sm">' + pill(k) + '<span class="small muted">' + ROL_TEXTO[k] + '</span></div>').join('') + '</div>' +
