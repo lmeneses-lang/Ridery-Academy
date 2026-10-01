@@ -89,14 +89,44 @@ Todo está en variables al inicio de `css/styles.css`.
 | Rol | Puede |
 |---|---|
 | Admin | Todo: contenido, test, ajustes y usuarios |
-| Reclutador | Postulaciones (aprobar, descartar, agregar aspirantes y darles acceso) y métricas |
-| Calidad | Ver postulaciones, aspirantes y métricas, sin editar |
+| Reclutador | Postulaciones (aprobar, descartar, agregar aspirantes y darles acceso), Assessment y métricas |
+| Calidad | Ver postulaciones, aspirantes y métricas, y responder en Assessment |
 
 Las claves se guardan cifradas (scrypt) y no se pueden volver a ver: si alguien la olvida, le pones una nueva. Si desactivas o eliminas una cuenta, esa persona pierde el acceso en su siguiente acción.
 
 ## Agregar aspirantes a mano
 
 En **Postulaciones → Agregar aspirante** registras a alguien sin que haga el test (referidos o reingresos). Queda aprobado con la célula, el usuario y la contraseña que le asignes, y entra por "Inicia sesión".
+
+## Boost
+
+Es un área que el aspirante tiene siempre disponible (pestaña **Boost**) para entrenar sus cuellos de botella. Las actividades no afectan su ruta de formación.
+
+**Mecanografía.** El aspirante copia textos reales de atención al cliente contra el reloj:
+
+- Elige la duración (por defecto 1, 2 o 3 minutos).
+- El reloj arranca con la primera tecla. No se puede pegar texto.
+- Ve en vivo sus palabras por minuto (PPM), su precisión y sus errores.
+- Al terminar ve su resultado comparado con la meta, si fue récord y su historial.
+
+En el panel, **Boost** (solo Admin) te deja:
+
+- activar o desactivar la actividad;
+- fijar la meta de PPM y la precisión esperada;
+- elegir las duraciones;
+- editar los textos de práctica.
+
+El resultado de cada aspirante (mejor marca, último intento, intentos) aparece en su ficha y en el CSV.
+
+## Assessment (chat)
+
+Es un chat entre el aspirante (pestaña **Assessment**) y el equipo (panel → **Assessment**).
+
+- **Panel:** una bandeja con todos los aspirantes aprobados, buscador, contador de no leídos y aviso cuando llega un mensaje nuevo.
+- **Quién responde:** Admin, Reclutador y Calidad.
+- **Aspirante:** ve un contador en la pestaña y un aviso si le escriben mientras está en otra sección.
+- **Velocidad:** los mensajes llegan en unos 2 segundos. Con el chat abierto, la página revisa si hay mensajes nuevos cada 2 s, y pausa la revisión si la pestaña está en segundo plano. Funciona en Vercel Hobby sin servicios extra.
+- **Si se necesita instantáneo con muchos usuarios a la vez:** se puede conectar un servicio de tiempo real como Ably o Pusher (tienen plan gratuito) sin cambiar la interfaz.
 
 ## Imágenes con Lightshot
 
