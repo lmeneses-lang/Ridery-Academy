@@ -75,6 +75,7 @@ Nunca pongas estos valores en el código, en un issue ni en capturas de pantalla
 
 ## Checklist antes de publicar un cambio
 
+- [ ] ¿Vas a subir un archivo de preguntas (`.json`)? **No lo pongas en el repo:** se publicaría con las respuestas correctas. Cárgalo desde Formulario → Importar.
 - [ ] ¿Muestras un dato del usuario en pantalla? Pásalo por `esc()`.
 - [ ] ¿Creaste una acción nueva en `handlers.js`? Decide qué perfiles la pueden usar en `PERFILES`. Por defecto solo Admin.
 - [ ] ¿La acción solo lee datos? Agrégala a `SOLO_LECTURA` en `api/admin.js` para que no llene la bitácora.

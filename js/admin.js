@@ -352,6 +352,7 @@
     A.preguntas = r.preguntas; A.secciones = r.secciones;
     const activas = r.preguntas.filter(p => p.activa !== false).length;
     main.innerHTML = encabezado('Formulario de postulación', activas + ' preguntas activas en ' + r.secciones.length + ' secciones. Cada sección es una página para el aspirante.',
+      '<button class="btn btn-secondary" id="imp">Importar</button><button class="btn btn-secondary" id="exp">' + icon('download') + 'Exportar</button>' +
       '<button class="btn btn-secondary" id="sim">Probar célula</button><button class="btn btn-primary" id="nsec">' + icon('plus') + 'Nueva sección</button>') +
       '<div class="info-grid small">' +
       '<div class="card card-tight stack-sm"><span class="pill pill-brand">Célula</span><span class="muted">Las opciones con puntos suman a una célula. Gana la que llegue a <b>' + A.reglas.minPuntos + '</b> y le saque <b>' + A.reglas.margenEmpate + '</b> a la segunda (Ajustes).</span></div>' +
@@ -360,7 +361,17 @@
       '<div class="stack" id="secs"></div>';
     const cont = main.querySelector('#secs');
     r.secciones.forEach((sec, si) => cont.appendChild(bloqueSeccion(sec, si)));
-    if (!r.secciones.length) cont.innerHTML = '<div class="card empty">' + icon('list') + '<p>Crea la primera sección del formulario.</p></div>';
+    if (!r.secciones.length) cont.innerHTML = '<div class="card empty">' + icon('list') + '<p>El formulario está vacío. Usa <b>Importar</b> para cargar un archivo de preguntas, o crea la primera sección.</p></div>';
+    main.querySelector('#imp').addEventListener('click', modalImportar);
+    main.querySelector('#exp').addEventListener('click', async () => {
+      try {
+        const { archivo } = await call('exportarFormulario');
+        const blob = new Blob([JSON.stringify(archivo, null, 1)], { type: 'application/json' });
+        const el = document.createElement('a'); el.href = URL.createObjectURL(blob); el.download = 'formulario-ridery-academy-' + new Date().toISOString().slice(0, 10) + '.json';
+        document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(el.href), 2000);
+        toast('Formulario exportado');
+      } catch (e) { manejar(e); }
+    });
     main.querySelector('#nsec').addEventListener('click', () => modalSeccion(null));
     main.querySelector('#sim').addEventListener('click', () => simulador(A.preguntas.filter(p => p.activa !== false && (p.opciones || []).some(o => Object.keys(o.puntos || {}).length))));
   }
@@ -386,6 +397,49 @@
       lista.appendChild(blk); blk.querySelector('textarea').focus();
     });
     return card;
+  }
+  // Importar un archivo .json de formulario (el mismo formato que descarga «Exportar»)
+  function modalImportar() {
+    let archivo = null;
+    const w = document.createElement('div'); w.className = 'modal-wrap';
+    w.innerHTML = '<form class="modal" role="dialog" aria-modal="true" novalidate><h2>Importar preguntas</h2>' +
+      '<p class="small muted">Carga un archivo <b>.json</b> de formulario de Ridery Academy (el mismo que descarga «Exportar»). Las preguntas quedan guardadas en la base de datos.</p>' +
+      '<div class="form-error" role="alert" hidden></div>' +
+      '<div class="field"><label for="im-f">Archivo</label><input class="input" id="im-f" type="file" accept=".json,application/json"></div>' +
+      '<div id="im-res" class="small" hidden></div>' +
+      '<div class="stack-sm"><label class="switch"><input type="radio" name="im-m" value="agregar" checked><span><b>Agregar</b> · suma lo del archivo y actualiza lo que ya exista. No borra nada.</span></label>' +
+      '<label class="switch"><input type="radio" name="im-m" value="reemplazar"><span><b>Reemplazar todo</b> · borra todas las preguntas actuales y deja solo las del archivo.</span></label></div>' +
+      '<div class="modal-actions"><button type="button" class="btn btn-secondary" data-x>Cancelar</button><button class="btn btn-primary" type="submit" disabled>Importar</button></div></form>';
+    w.addEventListener('click', e => { if (e.target === w || e.target.closest('[data-x]')) w.remove(); });
+    document.body.appendChild(w);
+    const f = w.querySelector('form'), er = f.querySelector('.form-error'), res = f.querySelector('#im-res'), ok = f.querySelector('[type="submit"]');
+    f.querySelector('#im-f').addEventListener('change', e => {
+      const file = e.target.files[0]; archivo = null; ok.disabled = true; er.hidden = true; res.hidden = true;
+      if (!file) return;
+      if (file.size > 3 * 1024 * 1024) { er.hidden = false; er.textContent = 'El archivo pesa más de 3 MB.'; return; }
+      const lector = new FileReader();
+      lector.onload = () => {
+        try { archivo = JSON.parse(lector.result); } catch (x) { er.hidden = false; er.textContent = 'El archivo no es un JSON válido.'; return; }
+        if (!archivo || archivo.formato !== H.FORMATO_ARCHIVO) { archivo = null; er.hidden = false; er.textContent = 'Este archivo no es un formulario de Ridery Academy.'; return; }
+        const ps = archivo.preguntas || [], ss = archivo.secciones || [];
+        res.hidden = false;
+        res.innerHTML = '<div class="notice info">' + ss.length + ' secciones · ' + ps.length + ' preguntas · ' + ps.filter(p => (p.opciones || []).some(o => o.correcta)).length + ' con respuesta correcta</div>' +
+          '<div class="chips">' + ss.map(x => '<span class="chip">' + esc(x.titulo) + ' · ' + ps.filter(p => p.seccion === x.id).length + '</span>').join('') + '</div>';
+        ok.disabled = false;
+      };
+      lector.readAsText(file);
+    });
+    f.addEventListener('submit', async e => {
+      e.preventDefault();
+      if (!archivo) return;
+      const modo = f.querySelector('[name="im-m"]:checked').value;
+      if (modo === 'reemplazar' && !await confirmar({ titulo: '¿Reemplazar todo el formulario?', texto: 'Se borran todas las preguntas actuales. Las postulaciones ya enviadas conservan sus respuestas.', ok: 'Reemplazar', peligro: true })) return;
+      ok.disabled = true; ok.textContent = 'Importando…';
+      try {
+        const r = await call('importarFormulario', { archivo, modo });
+        w.remove(); toast('Listo: ' + r.preguntas + ' preguntas en ' + r.secciones + ' secciones'); tabTest();
+      } catch (x) { er.hidden = false; er.textContent = x.message; ok.disabled = false; ok.textContent = 'Importar'; }
+    });
   }
   function modalSeccion(sec) {
     const nueva = !sec; sec = sec || { id: '', titulo: '', descripcion: '' };

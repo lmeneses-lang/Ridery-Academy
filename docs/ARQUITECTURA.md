@@ -45,8 +45,8 @@ Base: `elearning_cx` (variable `MONGODB_DB`). Colecciones:
 
 | Colección | Qué guarda | `_id` |
 |---|---|---|
-| `config` | Células, reglas (nota mínima, intentos…), Boost | `general` |
-| `preguntas` | Test de perfil | `p-…` |
+| `config` | Células, reglas (nota mínima, intentos…), secciones del formulario, Boost | `general` |
+| `preguntas` | Preguntas de Postúlate (con respuesta correcta, puntos por célula y filtros) | id del archivo o `p-…` |
 | `modulos` | Módulos con lecciones y examen (incluye respuestas correctas) | `m-…` |
 | `aspirantes` | Postulación, test, acceso (clave cifrada), progreso, exámenes | `asp-<cédula>` |
 | `intentos` | Cada envío de examen (para métricas) | `int-…` |
@@ -56,7 +56,7 @@ Base: `elearning_cx` (variable `MONGODB_DB`). Colecciones:
 | `limites` | Contadores anti abuso. **Se borran solos.** | `regla:quién` |
 | `auditoria` | Bitácora de seguridad. **Se borra sola a los 180 días.** | `aud-…` |
 
-La primera vez que alguien entra, `cargarConfig()` crea las células, 5 preguntas y 4 módulos de ejemplo.
+La primera vez que alguien entra, `cargarConfig()` crea las células y 4 módulos de ejemplo. **El formulario de Postúlate empieza vacío:** sus preguntas no están en el código; viven solo en MongoDB y se cargan desde el panel (Formulario → Importar) o se crean a mano.
 
 `lib/store.js` solo expone `get`, `find`, `put`, `del` y `sumar`. Mantenerlo así de simple permite que el modo demo imite la base con pocas líneas.
 

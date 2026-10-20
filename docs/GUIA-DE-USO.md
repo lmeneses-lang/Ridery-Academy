@@ -13,7 +13,9 @@ La página abre con dos opciones.
 3. **Revisión:** ve todas sus respuestas y puede cambiar cualquier sección antes de enviar.
 4. **Gracias:** solo ve que su postulación fue recibida. **No ve su nota ni su célula.**
 
-Las secciones y preguntas se editan en el panel, en **Formulario**. Hay cuatro tipos de pregunta: una opción, varias opciones, respuesta corta y respuesta larga. Cada opción puede:
+Las secciones y preguntas viven en la base de datos (no en el código) y se editan en el panel, en **Formulario**. Con **Importar** cargas un archivo `.json` de preguntas (modo *Agregar* suma y actualiza; *Reemplazar todo* deja solo las del archivo) y con **Exportar** descargas el formulario completo para respaldarlo o reutilizarlo.
+
+**Ojo:** el archivo exportado incluye las respuestas correctas. Guárdalo en un lugar privado y **nunca lo subas al repositorio**, porque todo lo que está en el repo se publica en la web. Hay cuatro tipos de pregunta: una opción, varias opciones, respuesta corta y respuesta larga. Cada opción puede:
 
 - **Sumar puntos a una célula.** Con eso se sugiere la célula, igual que antes.
 - **Ser la respuesta correcta.** Esa pregunta cuenta para la **nota de casos**.

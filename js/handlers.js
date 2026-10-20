@@ -41,72 +41,10 @@
        filtro   'alerta' (marca en rojo) | 'descarta' (descarta automáticamente)
        exclusiva true        → en "multiple", al marcarla se desmarcan las demás */
   const TIPOS = { unica: 'Una opción', multiple: 'Varias opciones', corta: 'Respuesta corta', larga: 'Respuesta larga' };
-  const SECCIONES_DEFAULT = [
-    { id: 'experiencia', titulo: 'Experiencia', descripcion: 'Cuéntanos sobre tu trayectoria en atención al cliente.' },
-    { id: 'casos', titulo: 'Casos de atención', descripcion: 'Situaciones del día a día. Elige lo que harías tú.' },
-    { id: 'criterio', titulo: 'Comunicación y criterio', descripcion: 'Cómo hablas con el cliente y cómo decides.' },
-    { id: 'proactividad', titulo: 'Proactividad y herramientas', descripcion: 'Queremos conocer cómo trabajas.' },
-    { id: 'condiciones', titulo: 'Condiciones operativas', descripcion: 'El cargo es remoto y los picos de trabajo son en almuerzo, cena, fines de semana y feriados.' },
-    { id: 'afinidad', titulo: 'Tu estilo de trabajo', descripcion: 'Con esto vemos en qué célula encajas mejor. No hay respuestas buenas ni malas.' },
-    { id: 'escrita', titulo: 'Prueba escrita', descripcion: 'Estas respuestas las evalúa una persona del equipo. Cuidamos mucho la redacción y la ortografía.' }
-  ];
-  const op = (texto, puntos, extra) => Object.assign({ texto, puntos: puntos || {} }, extra || {});
-  const ok = texto => op(texto, {}, { correcta: true });
-  const preg = (_id, seccion, orden, tipo, texto, opciones, extra) => Object.assign({ _id, seccion, orden, tipo, texto, activa: true, obligatoria: true, opciones: (opciones || []).map(o => typeof o === 'string' ? op(o) : o) }, extra || {});
-  // Basado en la evaluación de Agente de Atención (célula Orders)
-  const FORMULARIO_EJEMPLO = [
-    preg('f-exp-1', 'experiencia', 1, 'unica', '¿Cuánto tiempo de experiencia tienes en atención al cliente?', ['Sin experiencia', 'Menos de 6 meses', 'Entre 6 meses y 1 año', 'Entre 1 y 2 años', 'Más de 2 años']),
-    preg('f-exp-2', 'experiencia', 2, 'unica', '¿En qué sector ha sido tu experiencia principal en atención?', ['Retail, banca o telecomunicaciones', 'Delivery, e-commerce o apps de movilidad', 'Otro sector', 'No tengo experiencia en atención']),
-    preg('f-exp-3', 'experiencia', 3, 'unica', '¿Cuántos casos por chat o mensajería atendías en promedio por turno?', ['Menos de 20', 'Entre 20 y 40', 'Más de 40', 'No he atendido casos por chat']),
-    preg('f-cas-1', 'casos', 1, 'unica', 'Un cliente escribe molesto: su pedido lleva 50 minutos de retraso y la app sigue mostrando "en preparación". ¿Qué haces?', ['Le pido disculpas y le digo que espere un poco más', 'Le explico que el retraso es responsabilidad del restaurante', ok('Empatizo, verifico el estado con el restaurante o el repartidor, le doy un tiempo estimado realista y le hago seguimiento'), 'Le ofrezco el reembolso total de inmediato para calmarlo']),
-    preg('f-cas-2', 'casos', 2, 'unica', 'El cliente recibió su pedido pero le falta una bebida y una hamburguesa. Exige reembolso total. ¿Qué haces?', ['Hago el reembolso total para evitar el conflicto', 'Le indico que reclame directamente al restaurante', 'Hago un reembolso parcial sin pedir más información', ok('Solicito evidencia (foto del pedido), valido y reembolso lo proporcional a lo faltante')]),
-    preg('f-cas-3', 'casos', 3, 'unica', 'Tienes 5 chats abiertos: cobro duplicado, consulta de menú, pedido no entregado, cambio de dirección y cupón que no funciona. ¿Cuál atiendes primero?', [ok('El pedido no entregado'), 'La consulta de menú, porque es la más rápida', 'Los atiendo en orden de llegada', 'El cupón que no funciona']),
-    preg('f-cas-4', 'casos', 4, 'unica', 'El cliente dice que pagó por pago móvil, pero el sistema no refleja el pago y el restaurante no quiere preparar el pedido. ¿Qué haces?', ['Le pido que vuelva a pagar', ok('Le pido el comprobante y la referencia, valido, escalo al área de pagos y le informo los tiempos'), 'Le pido al restaurante que prepare el pedido de todas formas', 'Le digo que el pago no existe en el sistema']),
-    preg('f-cas-5', 'casos', 5, 'unica', 'Notas que un cliente reporta "pedido no recibido" de forma recurrente y siempre pide reembolso. ¿Qué haces?', ['Le hago el reembolso, el cliente siempre tiene la razón', 'Le digo que sospechamos que está cometiendo fraude', ok('Reviso su historial, lo atiendo con cordialidad y escalo el caso al área de seguridad y fraude'), 'Ignoro el reclamo']),
-    preg('f-cri-1', 'criterio', 1, 'unica', 'Un cliente te insulta y amenaza con publicar en redes sociales. ¿Qué haces?', ['Le pido respeto o no podré seguir atendiéndolo', 'Le ofrezco una compensación para que no publique', 'Cierro el chat', ok('Mantengo la calma, valido su molestia, me enfoco en la solución y escalo si persiste')]),
-    preg('f-cri-2', 'criterio', 2, 'unica', '¿Cuál sería tu primer mensaje a un cliente molesto porque su pedido no llega?', ['"Estimado cliente, su caso ha sido recibido."', ok('"Entiendo lo frustrante que es esperar, sobre todo si tienes a tu familia esperando. Ya mismo reviso tu pedido."'), '"Calma, eso pasa a veces."', '"Por políticas no puedo hacer nada hasta que pase el tiempo estimado."']),
-    preg('f-cri-3', 'criterio', 3, 'unica', 'El cliente pide algo que la política no permite. ¿Qué haces?', ['Le prometo resolverlo luego, aunque no sé si será posible', ok('Le explico el motivo y le ofrezco una alternativa viable'), 'Le digo que no se puede y cierro el caso', 'Lo transfiero de inmediato a mi supervisor']),
-    preg('f-cri-4', 'criterio', 4, 'unica', 'Te das cuenta de que le diste información incorrecta a un cliente. ¿Qué haces?', ['Lo corrijo sin decirle nada a nadie', 'Lo atribuyo a una falla del sistema', 'No digo nada si el cliente no lo nota', ok('Lo reconozco, lo corrijo con el cliente, informo a mi supervisor y aprendo del error')]),
-    preg('f-pro-1', 'proactividad', 1, 'unica', 'Detectas que muchos clientes reclaman por el mismo problema. ¿Qué haces?', ['Lo comento con mis compañeros', ok('Documento el patrón con ejemplos y se lo reporto a mi supervisor con una propuesta de mejora'), 'Sigo resolviendo caso por caso', 'No es mi responsabilidad']),
-    preg('f-pro-2', 'proactividad', 2, 'multiple', '¿Cuáles de estas herramientas has usado?', ['Zendesk', 'Freshdesk', 'Intercom', 'WhatsApp Business', 'CRM (HubSpot, Salesforce u otro)', 'Slack', 'Google Sheets o Excel', op('Ninguna de las anteriores', {}, { exclusiva: true })], { ayuda: 'Marca todas las que apliquen.', permiteOtro: true }),
-    preg('f-con-1', 'condiciones', 1, 'unica', '¿Con qué conexión a internet cuentas para trabajar?', ['Conexión estable con respaldo (datos móviles, planta o UPS)', 'Conexión estable, sin respaldo', op('Conexión inestable o intermitente', {}, { filtro: 'descarta' })]),
-    preg('f-con-2', 'condiciones', 2, 'multiple', 'En caso de que te quedes sin luz o internet, ¿cuál es tu plan B para continuar con tu guardia?', ['Me movilizo a otra casa', 'Me movilizo a un cowork, restaurant, café o centro comercial', 'Trabajo con mis datos compartidos desde el teléfono', op('No tengo opciones para continuar con la guardia', {}, { exclusiva: true })], { ayuda: 'Si puedes resolver con más de una opción, marca varias.' }),
-    preg('f-con-3', 'condiciones', 3, 'multiple', '¿Qué disponibilidad tienes?', [op('Tengo disponibilidad en cualquier horario', {}, { exclusiva: true }), 'Lunes a viernes 7:00 AM - 4:00 PM', 'Lunes a viernes 3:00 PM - 12:00 AM', 'Lunes a viernes 6:00 PM - 3:00 AM', 'Sábado y domingo 7:00 AM - 4:00 PM', 'Sábado y domingo 3:00 PM - 12:00 AM', 'Sábado y domingo 6:00 PM - 3:00 AM'], { ayuda: 'Si tienes disponibilidad en más de un horario, marca varios.' }),
-    preg('f-esc-1', 'escrita', 1, 'larga', 'Responde como agente de Ridery a este cliente: «Hola, pedí hace una hora y nadie me dice nada. Ya pagué y tengo a mis hijos esperando. Esto es una estafa, quiero mi dinero YA.»', [], { ayuda: 'Escribe exactamente el mensaje que le enviarías. Tiempo recomendado: 3 minutos.', sinPegar: true }),
-    preg('f-esc-2', 'escrita', 2, 'larga', 'Cuéntanos una situación real en la que no pudiste darle a un cliente lo que pedía: qué pasó, qué hiciste y cómo terminó.', [], { ayuda: 'Sé concreto: situación, acción que tomaste y resultado.', sinPegar: true })
-  ];
-  const PREGUNTAS_EJEMPLO = [
-    { _id: 'p1', seccion: 'afinidad', tipo: 'unica', orden: 1, activa: true, texto: 'Un usuario escribe que le cobraron dos veces el mismo viaje. ¿Qué haces primero?', opciones: [
-      op('Reviso el historial de pagos y la transacción duplicada', { PAYMENTS: 2 }),
-      op('Le pido los detalles del viaje y reviso la ruta', { TRIPS: 2 }),
-      op('Verifico si la cuenta tiene movimientos fuera de lo normal', { FRAUD: 2 }),
-      op('Le explico cómo se calculó la tarifa', { 'MATCH AND PRICING': 2 })
-    ] },
-    { _id: 'p2', seccion: 'afinidad', tipo: 'unica', orden: 2, activa: true, texto: '¿Qué tipo de tarea disfrutas más?', opciones: [
-      op('Cuadrar montos y trabajar con números', { PAYMENTS: 2, 'MATCH AND PRICING': 1 }),
-      op('Investigar casos y encontrar patrones raros', { FRAUD: 2 }),
-      op('Conversar con personas molestas y calmarlas', { CX: 2, TRIPS: 1 }),
-      op('Guiar a alguien paso a paso en un trámite', { SUPPLY: 2, CX: 1 })
-    ] },
-    { _id: 'p3', seccion: 'afinidad', tipo: 'unica', orden: 3, activa: true, texto: 'El manual no tiene una respuesta clara para un caso. ¿Qué haces?', opciones: [
-      op('Busco datos y comparo con casos parecidos', { FRAUD: 1, PAYMENTS: 1 }),
-      op('Escalo rápido para que el cliente no espere', { CX: 2 }),
-      op('Propongo que se agregue al manual', { TRANSVERSAL: 2, GROWTH: 1 }),
-      op('Reviso las reglas y tarifas que aplican', { 'MATCH AND PRICING': 2 })
-    ] },
-    { _id: 'p4', seccion: 'afinidad', tipo: 'unica', orden: 4, activa: true, texto: '¿Con qué herramienta te sientes más cómodo?', opciones: [
-      op('Hojas de cálculo (Excel o Google Sheets)', { 'MATCH AND PRICING': 2, PAYMENTS: 1, TRANSVERSAL: 1 }),
-      op('Chats y redes sociales', { CX: 2, GROWTH: 1 }),
-      op('Mapas y seguimiento GPS', { TRIPS: 2, 'MATCH AND PRICING': 1 }),
-      op('Formularios y revisión de documentos', { SUPPLY: 2, FRAUD: 1 })
-    ] },
-    { _id: 'p5', seccion: 'afinidad', tipo: 'unica', orden: 5, activa: true, texto: 'Un conductor dice que la app no le asigna viajes en su zona. ¿Qué revisas primero?', opciones: [
-      op('Si tiene documentos vencidos en su cuenta', { SUPPLY: 2 }),
-      op('Cómo están la demanda y la tarifa en esa zona', { 'MATCH AND PRICING': 2 }),
-      op('Si hay reportes recientes sobre su cuenta', { FRAUD: 2 }),
-      op('Le explico paso a paso cómo ponerse disponible', { CX: 2 })
-    ] }
-  ];
+  // Sección a la que pasan las preguntas antiguas que no tenían sección
+  const SECCION_ANTIGUA = { id: 'afinidad', titulo: 'Tu estilo de trabajo', descripcion: 'Con esto vemos en qué célula encajas mejor. No hay respuestas buenas ni malas.' };
+  // Las preguntas NO viven en el código: se crean en el panel (Formulario) o se importan desde un archivo .json.
+  const FORMATO_ARCHIVO = 'ridery-academy-formulario';
 
   const VIDEO_EJEMPLO = 'https://www.youtube.com/watch?v=aqz-KE-bpKQ';
   const q = (id, texto, opciones, correcta, explicacion) => ({ id, texto, opciones, correcta, explicacion });
@@ -191,23 +129,44 @@
     if (!cfg) {
       cfg = { _id: 'general', celulas: CELULAS_DEFAULT, reglas: REGLAS_DEFAULT };
       await store.put('config', cfg);
-      for (const p of PREGUNTAS_EJEMPLO) await store.put('preguntas', p);
-      for (const p of FORMULARIO_EJEMPLO) await store.put('preguntas', p);
-      cfg.secciones = SECCIONES_DEFAULT; cfg.formulario = 2;
+      cfg.secciones = []; cfg.formulario = 2;   // formulario vacío: se arma en el panel o se importa
       for (const m of MODULOS_EJEMPLO) await store.put('modulos', m);
       await store.put('cohortes', { _id: 'CX-2026-10', nombre: 'Cohorte de ejemplo · octubre 2026', activa: true, creado: ahora() });
     }
     if (!cfg.formulario) {                       // migración: el test de antes pasa a la sección "Tu estilo de trabajo"
-      for (const p of await store.find('preguntas', {})) if (!p.seccion) { p.seccion = 'afinidad'; p.tipo = 'unica'; await store.put('preguntas', p); }
-      for (const p of FORMULARIO_EJEMPLO) if (!(await store.get('preguntas', p._id))) await store.put('preguntas', p);
-      cfg.secciones = cfg.secciones || SECCIONES_DEFAULT; cfg.formulario = 2;
+      const viejas = (await store.find('preguntas', {})).filter(p => !p.seccion);
+      for (const p of viejas) { p.seccion = SECCION_ANTIGUA.id; p.tipo = 'unica'; await store.put('preguntas', p); }
+      cfg.secciones = cfg.secciones || (viejas.length ? [SECCION_ANTIGUA] : []); cfg.formulario = 2;
       await store.put('config', cfg);
     }
-    cfg.secciones = cfg.secciones || SECCIONES_DEFAULT;
+    cfg.secciones = cfg.secciones || [];
     cfg.reglas = Object.assign({}, REGLAS_DEFAULT, cfg.reglas || {});
     cfg.boost = cfg.boost || {};
     cfg.boost.mecanografia = Object.assign({}, BOOST_DEFAULT.mecanografia, cfg.boost.mecanografia || {});
     return cfg;
+  }
+
+  // Valida y limpia una pregunta (desde el panel o desde un archivo importado). Lanza error si algo no cuadra.
+  function normalizarPregunta(p, secciones) {
+      const texto = limpiar(p.texto, 600);
+      const tipo = TIPOS[p.tipo] ? p.tipo : 'unica';
+      const seccion = secciones.some(s => s.id === p.seccion) ? p.seccion : null;
+      if (!seccion) throw err(400, 'Elige la sección de la pregunta.');
+      const conOpciones = tipo === 'unica' || tipo === 'multiple';
+      const opciones = !conOpciones ? [] : (p.opciones || []).map(o => {
+        const x = { texto: limpiar(o.texto, 300), puntos: Object.fromEntries(Object.entries(o.puntos || {}).filter(([, v]) => Number(v)).map(([k, v]) => [limpiar(k, 40), Number(v)])) };
+        if (tipo === 'unica' && o.correcta) x.correcta = true;
+        if (o.filtro === 'alerta' || o.filtro === 'descarta') x.filtro = o.filtro;
+        if (tipo === 'multiple' && o.exclusiva) x.exclusiva = true;
+        return x;
+      }).filter(o => o.texto);
+      if (!texto) throw err(400, 'Escribe el texto de la pregunta.');
+      if (conOpciones && opciones.length < 2) throw err(400, 'Agrega al menos dos opciones.');
+      if (opciones.filter(o => o.correcta).length > 1) throw err(400, 'Marca solo una respuesta correcta.');
+      const doc = { _id: p._id ? limpiar(p._id, 60) : nuevoId('p'), seccion, tipo, texto, ayuda: limpiar(p.ayuda, 300), opciones, activa: p.activa !== false, obligatoria: p.obligatoria !== false, orden: Number(p.orden) || 0 };
+      if (tipo === 'multiple' && p.permiteOtro) doc.permiteOtro = true;
+      if (tipo === 'larga' && p.sinPegar) doc.sinPegar = true;
+      return doc;
   }
 
   /* ---------- Test de perfil ---------- */
@@ -676,29 +635,51 @@
     },
     async guardarPregunta({ store, body }) {
       const cfg = await cargarConfig(store);
-      const p = body.pregunta || {};
-      const texto = limpiar(p.texto, 600);
-      const tipo = TIPOS[p.tipo] ? p.tipo : 'unica';
-      const seccion = cfg.secciones.some(s => s.id === p.seccion) ? p.seccion : null;
-      if (!seccion) throw err(400, 'Elige la sección de la pregunta.');
-      const conOpciones = tipo === 'unica' || tipo === 'multiple';
-      const opciones = !conOpciones ? [] : (p.opciones || []).map(o => {
-        const x = { texto: limpiar(o.texto, 300), puntos: Object.fromEntries(Object.entries(o.puntos || {}).filter(([, v]) => Number(v)).map(([k, v]) => [limpiar(k, 40), Number(v)])) };
-        if (tipo === 'unica' && o.correcta) x.correcta = true;
-        if (o.filtro === 'alerta' || o.filtro === 'descarta') x.filtro = o.filtro;
-        if (tipo === 'multiple' && o.exclusiva) x.exclusiva = true;
-        return x;
-      }).filter(o => o.texto);
-      if (!texto) throw err(400, 'Escribe el texto de la pregunta.');
-      if (conOpciones && opciones.length < 2) throw err(400, 'Agrega al menos dos opciones.');
-      if (opciones.filter(o => o.correcta).length > 1) throw err(400, 'Marca solo una respuesta correcta.');
-      const doc = { _id: p._id || nuevoId('p'), seccion, tipo, texto, ayuda: limpiar(p.ayuda, 300), opciones, activa: p.activa !== false, obligatoria: p.obligatoria !== false, orden: Number(p.orden) || 0 };
-      if (tipo === 'multiple' && p.permiteOtro) doc.permiteOtro = true;
-      if (tipo === 'larga' && p.sinPegar) doc.sinPegar = true;
-      const previa = p._id ? await store.get('preguntas', p._id) : null;
-      if (!previa || previa.seccion !== seccion) doc.orden = (await store.find('preguntas', { seccion })).filter(x => x._id !== doc._id).length + 1;
+      const doc = normalizarPregunta(body.pregunta || {}, cfg.secciones);
+      const previa = (body.pregunta || {})._id ? await store.get('preguntas', doc._id) : null;
+      if (!previa || previa.seccion !== doc.seccion) doc.orden = (await store.find('preguntas', { seccion: doc.seccion })).filter(x => x._id !== doc._id).length + 1;
       await store.put('preguntas', doc);
       return { pregunta: doc };
+    },
+    // Descarga todo el formulario (secciones + preguntas con respuestas, puntos y filtros) como archivo
+    async exportarFormulario({ store }) {
+      const cfg = await cargarConfig(store);
+      const preguntas = ordenarPreguntas(await store.find('preguntas', {}), cfg.secciones).map(({ _id, orden, ...p }) => Object.assign({ id: _id }, p));
+      return { archivo: { formato: FORMATO_ARCHIVO, version: 1, exportado: ahora(), secciones: cfg.secciones, preguntas } };
+    },
+    // Carga un archivo de formulario.
+    //   modo "agregar":    suma secciones y preguntas nuevas; si un id ya existe, lo actualiza. No borra nada.
+    //   modo "reemplazar": borra todas las preguntas y deja solo lo que trae el archivo.
+    async importarFormulario({ store, body }) {
+      const cfg = await cargarConfig(store);
+      const a = body.archivo || {};
+      if (a.formato !== FORMATO_ARCHIVO) throw err(400, 'Este archivo no es un formulario de Ridery Academy.');
+      const modo = body.modo === 'reemplazar' ? 'reemplazar' : 'agregar';
+      const secsArchivo = (Array.isArray(a.secciones) ? a.secciones : []).slice(0, 40)
+        .map(x => ({ id: limpiar(x.id, 40).toLowerCase().replace(/[^a-z0-9-]/g, '-'), titulo: limpiar(x.titulo, 80), descripcion: limpiar(x.descripcion, 400) }))
+        .filter(x => x.id && x.titulo);
+      const enArchivo = new Set(secsArchivo.map(x => x.id));
+      const secciones = modo === 'reemplazar' ? secsArchivo : secsArchivo.concat(cfg.secciones.filter(x => !enArchivo.has(x.id)));
+      const lista = (Array.isArray(a.preguntas) ? a.preguntas : []).slice(0, 300);
+      const docs = lista.map((p, i) => {
+        try { return normalizarPregunta(Object.assign({}, p, { _id: p.id || p._id }), secciones); }
+        catch (e) { throw err(400, 'Pregunta ' + (i + 1) + ' del archivo: ' + e.message); }
+      });
+      const actuales = modo === 'reemplazar' ? [] : await store.find('preguntas', {});
+      if (modo === 'reemplazar') for (const p of await store.find('preguntas', {})) await store.del('preguntas', p._id);
+      const siguiente = {};
+      for (const d of docs) {
+        const previa = actuales.find(x => x._id === d._id);
+        if (previa && previa.seccion === d.seccion) d.orden = previa.orden;
+        else {
+          if (siguiente[d.seccion] == null) siguiente[d.seccion] = actuales.filter(x => x.seccion === d.seccion && !docs.some(y => y._id === x._id)).length;
+          d.orden = ++siguiente[d.seccion];
+        }
+        await store.put('preguntas', d);
+      }
+      cfg.secciones = secciones;
+      await store.put('config', cfg);
+      return { modo, secciones: secsArchivo.length, preguntas: docs.length };
     },
     async ordenarPreguntas({ store, body }) {
       const ids = body.ids || [];
@@ -933,6 +914,6 @@
     return tabla[accion](ctx);
   }
 
-  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, TIPOS, SECCIONES_DEFAULT, elegidas, ordenarPreguntas, evaluarPostulacion, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, iniciarSesion, vistaAspirante, estadoDe, PERFILES, ejecutar };
+  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, TIPOS, FORMATO_ARCHIVO, elegidas, ordenarPreguntas, evaluarPostulacion, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, iniciarSesion, vistaAspirante, estadoDe, PERFILES, ejecutar };
   if (typeof module !== 'undefined' && module.exports) module.exports = H; else root.ElxHandlers = H;
 })(typeof window !== 'undefined' ? window : globalThis);
