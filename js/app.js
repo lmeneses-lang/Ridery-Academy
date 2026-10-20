@@ -1,12 +1,13 @@
 /* ============================================================
    Ridery Academy · aplicación del aspirante
-   Inicio: Postúlate (datos + test → célula sugerida, fin) o
+   Inicio: Postúlate (datos + evaluación por secciones → gracias) o
    Inicia sesión (aspirante aprobado o equipo del panel) → ruta (tronco común + célula)
    → lecciones (video, texto, imágenes) → examen → certificado
    ============================================================ */
 (function () {
   'use strict';
   const { API, esc, prosa, icon, youtubeId, tipoImagen, toast, confirmar, lightbox, fecha, iniciales } = window.Elx;
+  const H = window.ElxHandlers;
   const app = document.getElementById('app');
   const call = (accion, data) => API.llamar('asp', 'aspirante', accion, data);
   const S = { asp: null, reglas: null, celulas: [], ruta: null, vista: null, abiertos: {}, post: null, examen: null, seccion: 'formacion', noLeidos: 0, boostActivo: true };
@@ -101,7 +102,7 @@
       ['book', 'Inicia sesión', 'Si ya te seleccionaron, entra con el usuario y la contraseña que te envió tu reclutador.']]);
     app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="login">' + lado +
       '<div class="login-form"><div class="stack-sm"><h2>¿Cómo quieres entrar?</h2><p class="muted small">Elige una opción para continuar.</p></div><div class="choices">' +
-      '<button class="choice" data-ir="postulate"><span class="ic">' + icon('plus') + '</span><span><b>Postúlate</b><span>Es tu primera vez. Completa tus datos y el test de perfil.</span></span>' + icon('right') + '</button>' +
+      '<button class="choice" data-ir="postulate"><span class="ic">' + icon('plus') + '</span><span><b>Postúlate</b><span>Es tu primera vez. Completa tus datos y la evaluación (unos 20 minutos).</span></span>' + icon('right') + '</button>' +
       '<button class="choice alt" data-ir="aspirante"><span class="ic">' + icon('book') + '</span><span><b>Inicia sesión</b><span>Ya tienes usuario y contraseña. Entra a tu formación o al panel.</span></span>' + icon('right') + '</button>' +
       '</div></div></div></main>';
     enlazarTop();
@@ -154,108 +155,167 @@
     f.querySelector('#lg-usuario').focus();
   }
 
-  /* ---------- Postúlate: datos → test → revisión → resultado (fin) ---------- */
+  /* ---------- Postúlate: datos → una página por sección → revisión → gracias ----------
+     Las secciones y preguntas vienen del servidor (acción "test") y se editan en el panel.
+     Las respuestas se guardan en este dispositivo mientras la persona avanza. */
   const POST_KEY = 'elx_postulacion';
   const guardarPost = () => Elx.Store.set(POST_KEY, JSON.stringify({ datos: S.post.datos, resp: S.post.resp }));
-  function cabeceraPaso(n, etiqueta, pct) {
-    return '<div class="stepper-head"><div class="row-between"><span class="eyebrow">Postulación · Paso ' + n + ' de 3</span><span class="small muted num">' + etiqueta + '</span></div>' +
-      '<div class="bar"><span style="width:' + pct + '%"></span></div></div>';
+  const totalPasos = () => 2 + ((S.post && S.post.secciones) ? S.post.secciones.length : 1);
+  function cabeceraPaso(n, etiqueta) {
+    const total = totalPasos();
+    return '<div class="stepper-head"><div class="row-between"><span class="eyebrow">Postulación · Paso ' + n + ' de ' + total + '</span><span class="small muted">' + esc(etiqueta) + '</span></div>' +
+      '<div class="bar"><span style="width:' + Math.round(n * 100 / total) + '%"></span></div></div>';
   }
+  const elegidasDe = v => H.elegidas(v);
+  const respondida = (p, v) => {
+    if (p.tipo === 'multiple') return elegidasDe(v).length > 0 || !!(v && v.otro && v.otro.trim());
+    if (p.tipo === 'corta' || p.tipo === 'larga') return !!String(v || '').trim();
+    return v != null && v !== '';
+  };
+  async function cargarFormulario() {
+    if (S.post.preguntas) return;
+    const r = await API.llamar('asp', 'auth', 'test', {});
+    S.post.secciones = r.secciones; S.post.preguntas = r.preguntas;
+  }
+
   function verPostulacion() {
     limpiar();
     if (!S.post) {
       let guardado = {};
       try { guardado = JSON.parse(Elx.Store.get(POST_KEY) || '{}'); } catch (e) {}
-      S.post = { datos: guardado.datos || {}, resp: guardado.resp || {}, preguntas: null, idx: 0, paso: 1 };
+      S.post = { datos: guardado.datos || {}, resp: guardado.resp || {}, preguntas: null, secciones: null, sec: 0 };
     }
-    S.post.paso = 1;
+    S.post.paso = 1;   // activa el aviso «¿Salir de la postulación?»
     const d = S.post.datos;
-    app.innerHTML = topbar({}) + '<main class="center-wrap"><form class="panel" id="f-post" novalidate>' + cabeceraPaso(1, 'Tus datos', 8) +
-      '<div class="stack-sm"><h1>Cuéntanos de ti</h1><p class="muted">Con estos datos te contactamos si eres seleccionado.</p></div>' +
+    const campo = (id, label, k, attrs) => '<div class="field"><label for="' + id + '">' + label + '</label><input class="input" id="' + id + '" data-k="' + k + '" value="' + esc(d[k] || '') + '" ' + attrs + '></div>';
+    app.innerHTML = topbar({}) + '<main class="center-wrap"><form class="panel" id="f-post" novalidate>' + cabeceraPaso(1, 'Tus datos') +
+      '<div class="stack-sm"><h1>Cuéntanos de ti</h1><p class="muted">La evaluación toma unos 20 minutos. Responde con sinceridad: no hay trampas, buscamos conocer cómo trabajas.</p></div>' +
       '<div class="form-error" role="alert" hidden></div>' +
-      '<div class="card stack"><div class="field"><label for="p-nombre">Nombre y apellido</label><input class="input" id="p-nombre" autocomplete="name" value="' + esc(d.nombre || '') + '" required></div>' +
-      '<div class="two"><div class="field"><label for="p-cedula">Cédula</label><input class="input" id="p-cedula" inputmode="numeric" autocomplete="off" placeholder="Solo números" value="' + esc(d.cedula || '') + '" required></div>' +
-      '<div class="field"><label for="p-ciudad">Ciudad</label><input class="input" id="p-ciudad" autocomplete="address-level2" placeholder="Ej. Caracas" value="' + esc(d.ciudad || '') + '"></div></div>' +
-      '<div class="two"><div class="field"><label for="p-email">Correo</label><input class="input" id="p-email" type="email" autocomplete="email" value="' + esc(d.email || '') + '" required></div>' +
-      '<div class="field"><label for="p-tel">Teléfono (WhatsApp)</label><input class="input" id="p-tel" type="tel" autocomplete="tel" placeholder="0414 000 0000" value="' + esc(d.telefono || '') + '" required></div></div></div>' +
-      '<div class="nav-row"><button type="button" class="btn btn-secondary" id="p-back">' + icon('left') + 'Volver</button><button class="btn btn-primary" type="submit">Continuar al test' + icon('right') + '</button></div></form></main>';
+      '<div class="card stack">' + campo('p-nombre', 'Nombre y apellido', 'nombre', 'autocomplete="name"') +
+      '<div class="two">' + campo('p-cedula', 'Cédula', 'cedula', 'inputmode="numeric" autocomplete="off" placeholder="Solo números"') + campo('p-edad', 'Edad', 'edad', 'inputmode="numeric" maxlength="2" placeholder="Ej. 24"') + '</div>' +
+      '<div class="two">' + campo('p-email', 'Correo', 'email', 'type="email" autocomplete="email"') + campo('p-tel', 'Teléfono (WhatsApp)', 'telefono', 'type="tel" autocomplete="tel" placeholder="0414 000 0000"') + '</div>' +
+      campo('p-ciudad', 'Ciudad de residencia', 'ciudad', 'autocomplete="address-level2" placeholder="Ej. Caracas"') + '</div>' +
+      '<div class="nav-row"><button type="button" class="btn btn-secondary" id="p-back">' + icon('left') + 'Volver</button><button class="btn btn-primary" type="submit">Empezar evaluación' + icon('right') + '</button></div></form></main>';
     enlazarTop();
     const f = app.querySelector('#f-post');
+    const leer = () => { f.querySelectorAll('[data-k]').forEach(i => { S.post.datos[i.dataset.k] = i.value.trim(); }); guardarPost(); };
     f.querySelector('#p-back').addEventListener('click', verInicio);
-    f.querySelectorAll('input').forEach(i => i.addEventListener('input', () => {
-      S.post.datos = { nombre: f.querySelector('#p-nombre').value.trim(), cedula: f.querySelector('#p-cedula').value.trim(), ciudad: f.querySelector('#p-ciudad').value.trim(),
-        email: f.querySelector('#p-email').value.trim(), telefono: f.querySelector('#p-tel').value.trim() };
-      guardarPost();
-    }));
+    f.querySelectorAll('input').forEach(i => i.addEventListener('input', leer));
     f.addEventListener('submit', async e => {
-      e.preventDefault();
-      const errBox = f.querySelector('.form-error');
-      const v = id => f.querySelector('#' + id).value.trim();
-      S.post.datos = { nombre: v('p-nombre'), cedula: v('p-cedula'), ciudad: v('p-ciudad'), email: v('p-email'), telefono: v('p-tel') };
-      guardarPost();
-      const falta = v('p-nombre').length < 3 ? 'Escribe tu nombre y apellido.' : !v('p-cedula') ? 'Escribe tu cédula.'
-        : !/^\S+@\S+\.\S+$/.test(v('p-email')) ? 'Escribe un correo válido, por ejemplo nombre@gmail.com.' : v('p-tel').replace(/\D/g, '').length < 10 ? 'Escribe tu teléfono con código de área (11 dígitos).' : '';
+      e.preventDefault(); leer();
+      const errBox = f.querySelector('.form-error'), v = S.post.datos, edad = Number(v.edad);
+      const falta = (v.nombre || '').length < 3 ? 'Escribe tu nombre y apellido.' : !v.cedula ? 'Escribe tu cédula.'
+        : !(edad >= 16 && edad <= 80) ? 'Escribe tu edad en números.'
+        : !/^\S+@\S+\.\S+$/.test(v.email || '') ? 'Escribe un correo válido, por ejemplo nombre@gmail.com.'
+        : (v.telefono || '').replace(/\D/g, '').length < 10 ? 'Escribe tu teléfono con código de área (11 dígitos).'
+        : !v.ciudad ? 'Escribe tu ciudad de residencia.' : '';
       if (falta) { errBox.hidden = false; errBox.textContent = falta; window.scrollTo(0, 0); return; }
       const btn = f.querySelector('button[type="submit"]'); btn.disabled = true;
       try {
-        await API.llamar('asp', 'auth', 'verificarCedula', { cedula: v('p-cedula') });
-        if (!S.post.preguntas) S.post.preguntas = (await API.llamar('asp', 'auth', 'test', {})).preguntas;
-        const primeraSin = S.post.preguntas.findIndex(p => S.post.resp[p._id] == null);
-        if (primeraSin === -1) verRevisionTest(); else { S.post.idx = primeraSin; verPregunta(); }
+        await API.llamar('asp', 'auth', 'verificarCedula', { cedula: v.cedula });
+        await cargarFormulario();
+        // retoma en la primera sección con algo pendiente
+        const t = S.post, i = t.secciones.findIndex(sec => t.preguntas.some(p => p.seccion === sec.id && p.obligatoria && !respondida(p, t.resp[p._id])));
+        if (i === -1) verRevisionTest(); else { t.sec = i; verSeccion(); }
       } catch (er) { errBox.hidden = false; errBox.textContent = er.message; btn.disabled = false; window.scrollTo(0, 0); }
     });
     f.querySelector('#p-nombre').focus();
   }
-  function verPregunta() {
+
+  // Una pregunta dentro de la página de su sección
+  function htmlPregunta(p, n) {
+    const v = S.post.resp[p._id];
+    const cab = '<div class="q-head"><span class="q-num num">' + n + '</span><div class="stack-sm" style="gap:4px"><h3 id="qt-' + esc(p._id) + '">' + esc(p.texto) + (p.obligatoria ? '' : ' <span class="small muted">(opcional)</span>') + '</h3>' +
+      (p.ayuda ? '<span class="small muted">' + esc(p.ayuda) + '</span>' : '') + '</div></div>';
+    let cuerpo = '';
+    if (p.tipo === 'unica' || p.tipo === 'multiple') {
+      const multi = p.tipo === 'multiple', sel = elegidasDe(v);
+      cuerpo = '<div class="options" role="' + (multi ? 'group' : 'radiogroup') + '" aria-labelledby="qt-' + esc(p._id) + '">' + p.opciones.map((o, i) =>
+        '<button type="button" class="option' + (multi ? ' multi' : '') + (sel.includes(i) ? ' selected' : '') + '" role="' + (multi ? 'checkbox' : 'radio') + '" aria-checked="' + sel.includes(i) + '" data-i="' + i + '">' +
+        '<span class="key">' + (multi ? icon('check') : String.fromCharCode(65 + i)) + '</span><span>' + esc(o) + '</span></button>').join('') + '</div>' +
+        (multi && p.permiteOtro ? '<div class="field"><label class="small" for="ot-' + esc(p._id) + '">Otra (opcional)</label><input class="input" id="ot-' + esc(p._id) + '" data-otro maxlength="200" placeholder="Escribe cuál" value="' + esc((v && v.otro) || '') + '"></div>' : '');
+    } else if (p.tipo === 'corta') {
+      cuerpo = '<input class="input" data-txt maxlength="300" aria-labelledby="qt-' + esc(p._id) + '" value="' + esc(v || '') + '">';
+    } else {
+      cuerpo = '<textarea class="textarea" data-txt maxlength="4000" rows="6" aria-labelledby="qt-' + esc(p._id) + '" placeholder="Escribe tu respuesta aquí">' + esc(v || '') + '</textarea>' +
+        '<div class="row-between small muted"><span>' + (p.sinPegar ? icon('lock') + ' En esta pregunta no se puede pegar texto: escríbelo tú.' : '') + '</span><span class="num" data-cnt>' + String(v || '').length + ' / 4000</span></div>';
+    }
+    return '<section class="card stack q-card" data-q="' + esc(p._id) + '"><div class="q-error" role="alert" hidden>Responde esta pregunta para continuar.</div>' + cab + cuerpo + '</section>';
+  }
+
+  function verSeccion() {
     limpiar();
-    const t = S.post, p = t.preguntas[t.idx], n = t.preguntas.length, sel = t.resp[p._id];
-    t.paso = 2;
-    app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="panel">' + cabeceraPaso(2, 'Pregunta ' + (t.idx + 1) + ' de ' + n, Math.round(15 + t.idx * 75 / n)) +
-      (t.idx === 0 ? '<p class="muted">Responde con lo que harías en tu día a día. No hay respuestas buenas ni malas.</p>' : '') +
-      '<h2 id="q-t">' + esc(p.texto) + '</h2>' +
-      '<div class="options" role="radiogroup" aria-labelledby="q-t">' + p.opciones.map((o, i) =>
-        '<button type="button" class="option' + (sel === i ? ' selected' : '') + '" role="radio" aria-checked="' + (sel === i) + '" data-i="' + i + '"><span class="key">' + String.fromCharCode(65 + i) + '</span><span>' + esc(o) + '</span></button>').join('') + '</div>' +
-      '<p class="small muted hide-sm">Atajo: presiona A, B, C o D para elegir y Enter para seguir.</p>' +
-      '<div class="nav-row"><button class="btn btn-secondary" id="q-prev">' + icon('left') + 'Atrás</button>' +
-      '<button class="btn btn-primary" id="q-next"' + (sel == null ? ' disabled' : '') + '>' + (t.idx === n - 1 ? 'Revisar respuestas' : 'Siguiente') + icon('right') + '</button></div></div></main>';
+    const t = S.post, sec = t.secciones[t.sec];
+    const preguntas = t.preguntas.filter(p => p.seccion === sec.id);
+    const ultima = t.sec === t.secciones.length - 1;
+    app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="panel">' + cabeceraPaso(t.sec + 2, sec.titulo) +
+      '<div class="stack-sm"><h1>' + esc(sec.titulo) + '</h1>' + (sec.descripcion ? '<p class="muted">' + esc(sec.descripcion) + '</p>' : '') + '</div>' +
+      preguntas.map((p, i) => htmlPregunta(p, i + 1)).join('') +
+      '<div class="nav-row"><button class="btn btn-secondary" id="s-prev">' + icon('left') + 'Atrás</button>' +
+      '<button class="btn btn-primary" id="s-next">' + (ultima ? 'Revisar respuestas' : 'Siguiente') + icon('right') + '</button></div></div></main>';
     enlazarTop();
-    const elegir = i => {
-      if (i < 0 || i >= p.opciones.length) return;
-      t.resp[p._id] = i; guardarPost();
-      app.querySelectorAll('.option').forEach(b => { const on = Number(b.dataset.i) === i; b.classList.toggle('selected', on); b.setAttribute('aria-checked', String(on)); });
-      app.querySelector('#q-next').disabled = false;
-    };
-    const siguiente = () => { if (t.resp[p._id] == null) return; if (t.idx === n - 1) verRevisionTest(); else { t.idx++; verPregunta(); } };
-    app.querySelectorAll('.option').forEach(b => b.addEventListener('click', () => elegir(Number(b.dataset.i))));
-    app.querySelector('#q-prev').addEventListener('click', () => { if (t.idx === 0) verPostulacion(); else { t.idx--; verPregunta(); } });
-    app.querySelector('#q-next').addEventListener('click', siguiente);
-    const tecla = e => {
-      if (e.target.closest('input, textarea')) return;
-      const k = e.key.toUpperCase();
-      if (/^[A-H]$/.test(k)) elegir(k.charCodeAt(0) - 65);
-      else if (/^[1-8]$/.test(k)) elegir(Number(k) - 1);
-      else if (e.key === 'Enter' && !e.target.closest('button')) siguiente();
-    };
-    document.addEventListener('keydown', tecla);
-    limpiezas.push(() => document.removeEventListener('keydown', tecla));
+    window.scrollTo(0, 0);
+    app.querySelectorAll('.q-card').forEach(card => {
+      const p = preguntas.find(x => x._id === card.dataset.q);
+      const quitarError = () => { card.classList.remove('invalid'); card.querySelector('.q-error').hidden = true; };
+      card.querySelectorAll('.option').forEach(b => b.addEventListener('click', () => {
+        const i = Number(b.dataset.i);
+        if (p.tipo === 'unica') t.resp[p._id] = i;
+        else {
+          const v = t.resp[p._id] && typeof t.resp[p._id] === 'object' ? t.resp[p._id] : { sel: [], otro: '' };
+          let sel = elegidasDe(v).filter(x => x !== i);
+          if (!elegidasDe(v).includes(i)) sel = p.exclusivas.includes(i) ? [i] : sel.filter(x => !p.exclusivas.includes(x)).concat(i);
+          t.resp[p._id] = { sel, otro: v.otro || '' };
+        }
+        const sel = elegidasDe(t.resp[p._id]);
+        card.querySelectorAll('.option').forEach(o => { const on = sel.includes(Number(o.dataset.i)); o.classList.toggle('selected', on); o.setAttribute('aria-checked', String(on)); });
+        guardarPost(); quitarError();
+      }));
+      const otro = card.querySelector('[data-otro]');
+      if (otro) otro.addEventListener('input', () => { const v = t.resp[p._id] && typeof t.resp[p._id] === 'object' ? t.resp[p._id] : { sel: [] }; t.resp[p._id] = { sel: elegidasDe(v), otro: otro.value }; guardarPost(); quitarError(); });
+      const txt = card.querySelector('[data-txt]');
+      if (txt) {
+        txt.addEventListener('input', () => { t.resp[p._id] = txt.value; guardarPost(); quitarError(); const c = card.querySelector('[data-cnt]'); if (c) c.textContent = txt.value.length + ' / 4000'; });
+        if (p.sinPegar) ['paste', 'drop'].forEach(ev => txt.addEventListener(ev, e => { e.preventDefault(); Elx.toast('En esta pregunta no se puede pegar texto.', 'bad'); }));
+      }
+    });
+    app.querySelector('#s-prev').addEventListener('click', () => { if (t.sec === 0) verPostulacion(); else { t.sec--; verSeccion(); } });
+    app.querySelector('#s-next').addEventListener('click', () => {
+      const pendientes = preguntas.filter(p => p.obligatoria && !respondida(p, t.resp[p._id]));
+      if (pendientes.length) {
+        pendientes.forEach(p => { const c = app.querySelector('.q-card[data-q="' + CSS.escape(p._id) + '"]'); c.classList.add('invalid'); c.querySelector('.q-error').hidden = false; });
+        app.querySelector('.q-card.invalid').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (ultima) verRevisionTest(); else { t.sec++; verSeccion(); }
+    });
+  }
+
+  function textoRespuesta(p, v) {
+    if (!respondida(p, v)) return '<span class="muted">Sin responder</span>';
+    if (p.tipo === 'corta' || p.tipo === 'larga') { const s = String(v); return esc(s.length > 160 ? s.slice(0, 160) + '…' : s); }
+    const partes = elegidasDe(v).map(i => p.opciones[i]);
+    if (v && v.otro) partes.push('Otra: ' + v.otro);
+    return esc(partes.join(' · '));
   }
   function verRevisionTest() {
     limpiar();
     const t = S.post, d = t.datos;
-    t.paso = 3;
-    app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="panel">' + cabeceraPaso(3, 'Revisión', 95) +
+    app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="panel">' + cabeceraPaso(totalPasos(), 'Revisión') +
       '<div class="stack-sm"><h1>Revisa y envía</h1><p class="muted">Puedes cambiar lo que quieras. Después de enviar ya no se puede modificar.</p></div>' +
-      '<div class="card card-tight review"><div class="review-item"><span class="n">' + icon('users') + '</span><div class="grow stack-sm"><span class="small muted">Tus datos</span><b>' + esc(d.nombre) + ' · C.I. ' + esc(d.cedula) + '</b><span class="small">' + esc(d.email) + ' · ' + esc(d.telefono) + (d.ciudad ? ' · ' + esc(d.ciudad) : '') + '</span></div>' +
-      '<button class="btn btn-ghost btn-sm" id="r-datos">Cambiar</button></div>' + t.preguntas.map((p, i) =>
-        '<div class="review-item"><span class="n num">' + (i + 1) + '</span><div class="grow stack-sm"><span class="small muted">' + esc(p.texto) + '</span><b>' + esc(p.opciones[t.resp[p._id]] || 'Sin responder') + '</b></div>' +
-        '<button class="btn btn-ghost btn-sm" data-ir="' + i + '">Cambiar</button></div>').join('') + '</div>' +
+      '<div class="card card-tight review"><div class="review-item"><span class="n">' + icon('users') + '</span><div class="grow stack-sm"><span class="small muted">Tus datos</span><b>' + esc(d.nombre) + ' · C.I. ' + esc(d.cedula) + ' · ' + esc(d.edad) + ' años</b>' +
+      '<span class="small">' + esc(d.email) + ' · ' + esc(d.telefono) + ' · ' + esc(d.ciudad) + '</span></div><button class="btn btn-ghost btn-sm" id="r-datos">Cambiar</button></div></div>' +
+      t.secciones.map((sec, si) => '<div class="card card-tight stack-sm"><div class="row-between"><h3>' + esc(sec.titulo) + '</h3><button class="btn btn-ghost btn-sm" data-ir="' + si + '">Cambiar</button></div><div class="review">' +
+        t.preguntas.filter(p => p.seccion === sec.id).map((p, i) => '<div class="review-item"><span class="n num">' + (i + 1) + '</span><div class="grow stack-sm"><span class="small muted">' + esc(p.texto) + '</span><b>' + textoRespuesta(p, t.resp[p._id]) + '</b></div></div>').join('') +
+        '</div></div>').join('') +
       '<div class="nav-row"><button class="btn btn-secondary" id="r-back">' + icon('left') + 'Atrás</button><button class="btn btn-primary" id="r-send">Enviar postulación</button></div></div></main>';
     enlazarTop();
+    window.scrollTo(0, 0);
     app.querySelector('#r-datos').addEventListener('click', verPostulacion);
-    app.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => { t.idx = Number(b.dataset.ir); verPregunta(); }));
-    app.querySelector('#r-back').addEventListener('click', () => { t.idx = t.preguntas.length - 1; verPregunta(); });
+    app.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => { t.sec = Number(b.dataset.ir); verSeccion(); }));
+    app.querySelector('#r-back').addEventListener('click', () => { t.sec = t.secciones.length - 1; verSeccion(); });
     app.querySelector('#r-send').addEventListener('click', async () => {
-      const ok = await confirmar({ titulo: '¿Enviar tu postulación?', texto: 'Con tus respuestas vemos en qué célula encajas. No podrás cambiarlas después.', ok: 'Enviar' });
+      const ok = await confirmar({ titulo: '¿Enviar tu postulación?', texto: 'Después de enviarla no podrás cambiar tus respuestas.', ok: 'Enviar' });
       if (!ok) return;
       const btn = app.querySelector('#r-send'); btn.disabled = true; btn.textContent = 'Enviando…';
       try {
@@ -267,16 +327,13 @@
   }
   function verFinPostulacion(r) {
     limpiar();
-    const asignado = r.estado === 'asignado' && r.celula;
     app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="panel"><div class="card stack">' +
       '<span class="pill pill-ok" style="align-self:flex-start">' + icon('check') + 'Postulación enviada</span>' +
-      (asignado
-        ? '<div class="result-hero"><h1>¡Gracias, ' + esc(r.nombre.split(' ')[0]) + '! Tu perfil encaja en</h1><span class="cell-badge">' + icon('tag') + esc(r.celula.nombre) + '</span><p class="muted">' + esc(r.celula.descripcion || '') + '</p></div>'
-        : '<div class="result-hero"><h1>¡Gracias, ' + esc(r.nombre.split(' ')[0]) + '!</h1><p class="muted">Tus respuestas encajan con más de una célula. El equipo de reclutamiento revisará tu perfil para ubicarte donde mejor te vaya.</p></div>') +
+      '<div class="result-hero"><h1>¡Gracias, ' + esc(String(r.nombre || '').split(' ')[0]) + '!</h1><p class="muted">Recibimos tus respuestas. El equipo de reclutamiento las va a revisar con calma.</p></div>' +
       '<hr class="divider"><div class="stack-sm"><h3>Qué sigue</h3><ul class="steps" style="color:var(--fg)">' +
-      '<li><span class="n">' + icon('users') + '</span><div><b>Revisamos tu postulación</b><span class="muted">El equipo de reclutamiento evalúa tu perfil.</span></div></li>' +
-      '<li><span class="n">' + icon('tag') + '</span><div><b>Te contactamos</b><span class="muted">Si eres seleccionado, te enviamos tu usuario y contraseña por correo o WhatsApp.</span></div></li>' +
-      '<li><span class="n">' + icon('book') + '</span><div><b>Empiezas tu formación</b><span class="muted">Entras por «Inicia sesión» con tu usuario y contraseña.</span></div></li></ul></div>' +
+      '<li><span class="n">' + icon('users') + '</span><div><b>Revisamos tu evaluación</b><span class="muted">Leemos tus respuestas y tu prueba escrita.</span></div></li>' +
+      '<li><span class="n">' + icon('chat') + '</span><div><b>Te contactamos</b><span class="muted">Si avanzas, te escribimos por WhatsApp o correo con tu usuario y contraseña.</span></div></li>' +
+      '<li><span class="n">' + icon('book') + '</span><div><b>Empiezas tu formación</b><span class="muted">Entras por «Inicia sesión» y haces los módulos de tu célula.</span></div></li></ul></div>' +
       '<div class="row"><button class="btn btn-secondary" id="fin-ok">Volver al inicio</button></div></div></div></main>';
     enlazarTop();
     app.querySelector('#fin-ok').addEventListener('click', verInicio);

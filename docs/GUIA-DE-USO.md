@@ -6,12 +6,23 @@ Qué hace la plataforma, pantalla por pantalla. Para el código, mira [ARQUITECT
 
 La página abre con dos opciones.
 
-**Postúlate** (público, sin registro previo). Sirve como filtro:
+**Postúlate** (público, sin registro previo). Es la evaluación de ingreso, de unos 20 minutos:
 
-1. La persona deja sus datos: nombre, cédula, ciudad, correo y teléfono.
-2. Responde el test de perfil de selección simple. Cada opción suma puntos a una o varias células.
-3. Al enviar, ve en qué célula encaja y termina ahí. Si hay empate o nadie llega al mínimo, se le dice que su perfil será revisado.
-4. La postulación queda en el panel, en **Postulaciones → Por revisar**.
+1. **Tus datos:** nombre, cédula, edad, correo, teléfono (WhatsApp) y ciudad.
+2. **Una página por sección**, en este orden por defecto: Experiencia, Casos de atención, Comunicación y criterio, Proactividad y herramientas, Condiciones operativas, Tu estilo de trabajo y Prueba escrita.
+3. **Revisión:** ve todas sus respuestas y puede cambiar cualquier sección antes de enviar.
+4. **Gracias:** solo ve que su postulación fue recibida. **No ve su nota ni su célula.**
+
+Las secciones y preguntas se editan en el panel, en **Formulario**. Hay cuatro tipos de pregunta: una opción, varias opciones, respuesta corta y respuesta larga. Cada opción puede:
+
+- **Sumar puntos a una célula.** Con eso se sugiere la célula, igual que antes.
+- **Ser la respuesta correcta.** Esa pregunta cuenta para la **nota de casos**.
+- **Tener un filtro:** *Marcar alerta* (sale en rojo en la postulación) o *Descartar automáticamente* (la postulación cae directo en Descartados). Por defecto, «Conexión inestable o intermitente» descarta.
+- **Desmarcar las demás** (en varias opciones), para respuestas como «Ninguna de las anteriores».
+
+En las preguntas de respuesta larga puedes bloquear el pegado de texto, para que la prueba escrita la escriba la persona.
+
+En **Postulaciones** ves la nota de casos y las alertas de cada persona. Al abrirla ves sus respuestas por sección: cuáles acertó, cuál era la correcta y su prueba escrita completa.
 
 **En el panel** abres la postulación, revisas los puntajes y la apruebas eligiendo su **célula** y creándole un **usuario** (por defecto, su cédula) y una **contraseña** (botón Generar), o la descartas. Al aprobar te aparece el mensaje con su acceso para copiarlo y enviarlo por WhatsApp. La contraseña se guarda cifrada y no se puede volver a ver: si la olvida, le generas una nueva desde su ficha.
 

@@ -31,33 +31,76 @@
     porcentajeVideo: 90  // % del video que debe verse
   };
 
-  const op = (texto, puntos) => ({ texto, puntos });
+  /* ---------- Formulario de Postúlate ----------
+     Secciones (una página cada una) y preguntas. Tipos de pregunta:
+       unica     · elige una opción          multiple · marca varias
+       corta     · texto de una línea        larga    · texto largo (prueba escrita)
+     Cada opción puede tener:
+       puntos   { CÉLULA: n } → suma para sugerir la célula
+       correcta true         → la pregunta cuenta para la nota de casos
+       filtro   'alerta' (marca en rojo) | 'descarta' (descarta automáticamente)
+       exclusiva true        → en "multiple", al marcarla se desmarcan las demás */
+  const TIPOS = { unica: 'Una opción', multiple: 'Varias opciones', corta: 'Respuesta corta', larga: 'Respuesta larga' };
+  const SECCIONES_DEFAULT = [
+    { id: 'experiencia', titulo: 'Experiencia', descripcion: 'Cuéntanos sobre tu trayectoria en atención al cliente.' },
+    { id: 'casos', titulo: 'Casos de atención', descripcion: 'Situaciones del día a día. Elige lo que harías tú.' },
+    { id: 'criterio', titulo: 'Comunicación y criterio', descripcion: 'Cómo hablas con el cliente y cómo decides.' },
+    { id: 'proactividad', titulo: 'Proactividad y herramientas', descripcion: 'Queremos conocer cómo trabajas.' },
+    { id: 'condiciones', titulo: 'Condiciones operativas', descripcion: 'El cargo es remoto y los picos de trabajo son en almuerzo, cena, fines de semana y feriados.' },
+    { id: 'afinidad', titulo: 'Tu estilo de trabajo', descripcion: 'Con esto vemos en qué célula encajas mejor. No hay respuestas buenas ni malas.' },
+    { id: 'escrita', titulo: 'Prueba escrita', descripcion: 'Estas respuestas las evalúa una persona del equipo. Cuidamos mucho la redacción y la ortografía.' }
+  ];
+  const op = (texto, puntos, extra) => Object.assign({ texto, puntos: puntos || {} }, extra || {});
+  const ok = texto => op(texto, {}, { correcta: true });
+  const preg = (_id, seccion, orden, tipo, texto, opciones, extra) => Object.assign({ _id, seccion, orden, tipo, texto, activa: true, obligatoria: true, opciones: (opciones || []).map(o => typeof o === 'string' ? op(o) : o) }, extra || {});
+  // Basado en la evaluación de Agente de Atención (célula Orders)
+  const FORMULARIO_EJEMPLO = [
+    preg('f-exp-1', 'experiencia', 1, 'unica', '¿Cuánto tiempo de experiencia tienes en atención al cliente?', ['Sin experiencia', 'Menos de 6 meses', 'Entre 6 meses y 1 año', 'Entre 1 y 2 años', 'Más de 2 años']),
+    preg('f-exp-2', 'experiencia', 2, 'unica', '¿En qué sector ha sido tu experiencia principal en atención?', ['Retail, banca o telecomunicaciones', 'Delivery, e-commerce o apps de movilidad', 'Otro sector', 'No tengo experiencia en atención']),
+    preg('f-exp-3', 'experiencia', 3, 'unica', '¿Cuántos casos por chat o mensajería atendías en promedio por turno?', ['Menos de 20', 'Entre 20 y 40', 'Más de 40', 'No he atendido casos por chat']),
+    preg('f-cas-1', 'casos', 1, 'unica', 'Un cliente escribe molesto: su pedido lleva 50 minutos de retraso y la app sigue mostrando "en preparación". ¿Qué haces?', ['Le pido disculpas y le digo que espere un poco más', 'Le explico que el retraso es responsabilidad del restaurante', ok('Empatizo, verifico el estado con el restaurante o el repartidor, le doy un tiempo estimado realista y le hago seguimiento'), 'Le ofrezco el reembolso total de inmediato para calmarlo']),
+    preg('f-cas-2', 'casos', 2, 'unica', 'El cliente recibió su pedido pero le falta una bebida y una hamburguesa. Exige reembolso total. ¿Qué haces?', ['Hago el reembolso total para evitar el conflicto', 'Le indico que reclame directamente al restaurante', 'Hago un reembolso parcial sin pedir más información', ok('Solicito evidencia (foto del pedido), valido y reembolso lo proporcional a lo faltante')]),
+    preg('f-cas-3', 'casos', 3, 'unica', 'Tienes 5 chats abiertos: cobro duplicado, consulta de menú, pedido no entregado, cambio de dirección y cupón que no funciona. ¿Cuál atiendes primero?', [ok('El pedido no entregado'), 'La consulta de menú, porque es la más rápida', 'Los atiendo en orden de llegada', 'El cupón que no funciona']),
+    preg('f-cas-4', 'casos', 4, 'unica', 'El cliente dice que pagó por pago móvil, pero el sistema no refleja el pago y el restaurante no quiere preparar el pedido. ¿Qué haces?', ['Le pido que vuelva a pagar', ok('Le pido el comprobante y la referencia, valido, escalo al área de pagos y le informo los tiempos'), 'Le pido al restaurante que prepare el pedido de todas formas', 'Le digo que el pago no existe en el sistema']),
+    preg('f-cas-5', 'casos', 5, 'unica', 'Notas que un cliente reporta "pedido no recibido" de forma recurrente y siempre pide reembolso. ¿Qué haces?', ['Le hago el reembolso, el cliente siempre tiene la razón', 'Le digo que sospechamos que está cometiendo fraude', ok('Reviso su historial, lo atiendo con cordialidad y escalo el caso al área de seguridad y fraude'), 'Ignoro el reclamo']),
+    preg('f-cri-1', 'criterio', 1, 'unica', 'Un cliente te insulta y amenaza con publicar en redes sociales. ¿Qué haces?', ['Le pido respeto o no podré seguir atendiéndolo', 'Le ofrezco una compensación para que no publique', 'Cierro el chat', ok('Mantengo la calma, valido su molestia, me enfoco en la solución y escalo si persiste')]),
+    preg('f-cri-2', 'criterio', 2, 'unica', '¿Cuál sería tu primer mensaje a un cliente molesto porque su pedido no llega?', ['"Estimado cliente, su caso ha sido recibido."', ok('"Entiendo lo frustrante que es esperar, sobre todo si tienes a tu familia esperando. Ya mismo reviso tu pedido."'), '"Calma, eso pasa a veces."', '"Por políticas no puedo hacer nada hasta que pase el tiempo estimado."']),
+    preg('f-cri-3', 'criterio', 3, 'unica', 'El cliente pide algo que la política no permite. ¿Qué haces?', ['Le prometo resolverlo luego, aunque no sé si será posible', ok('Le explico el motivo y le ofrezco una alternativa viable'), 'Le digo que no se puede y cierro el caso', 'Lo transfiero de inmediato a mi supervisor']),
+    preg('f-cri-4', 'criterio', 4, 'unica', 'Te das cuenta de que le diste información incorrecta a un cliente. ¿Qué haces?', ['Lo corrijo sin decirle nada a nadie', 'Lo atribuyo a una falla del sistema', 'No digo nada si el cliente no lo nota', ok('Lo reconozco, lo corrijo con el cliente, informo a mi supervisor y aprendo del error')]),
+    preg('f-pro-1', 'proactividad', 1, 'unica', 'Detectas que muchos clientes reclaman por el mismo problema. ¿Qué haces?', ['Lo comento con mis compañeros', ok('Documento el patrón con ejemplos y se lo reporto a mi supervisor con una propuesta de mejora'), 'Sigo resolviendo caso por caso', 'No es mi responsabilidad']),
+    preg('f-pro-2', 'proactividad', 2, 'multiple', '¿Cuáles de estas herramientas has usado?', ['Zendesk', 'Freshdesk', 'Intercom', 'WhatsApp Business', 'CRM (HubSpot, Salesforce u otro)', 'Slack', 'Google Sheets o Excel', op('Ninguna de las anteriores', {}, { exclusiva: true })], { ayuda: 'Marca todas las que apliquen.', permiteOtro: true }),
+    preg('f-con-1', 'condiciones', 1, 'unica', '¿Con qué conexión a internet cuentas para trabajar?', ['Conexión estable con respaldo (datos móviles, planta o UPS)', 'Conexión estable, sin respaldo', op('Conexión inestable o intermitente', {}, { filtro: 'descarta' })]),
+    preg('f-con-2', 'condiciones', 2, 'multiple', 'En caso de que te quedes sin luz o internet, ¿cuál es tu plan B para continuar con tu guardia?', ['Me movilizo a otra casa', 'Me movilizo a un cowork, restaurant, café o centro comercial', 'Trabajo con mis datos compartidos desde el teléfono', op('No tengo opciones para continuar con la guardia', {}, { exclusiva: true })], { ayuda: 'Si puedes resolver con más de una opción, marca varias.' }),
+    preg('f-con-3', 'condiciones', 3, 'multiple', '¿Qué disponibilidad tienes?', [op('Tengo disponibilidad en cualquier horario', {}, { exclusiva: true }), 'Lunes a viernes 7:00 AM - 4:00 PM', 'Lunes a viernes 3:00 PM - 12:00 AM', 'Lunes a viernes 6:00 PM - 3:00 AM', 'Sábado y domingo 7:00 AM - 4:00 PM', 'Sábado y domingo 3:00 PM - 12:00 AM', 'Sábado y domingo 6:00 PM - 3:00 AM'], { ayuda: 'Si tienes disponibilidad en más de un horario, marca varios.' }),
+    preg('f-esc-1', 'escrita', 1, 'larga', 'Responde como agente de Ridery a este cliente: «Hola, pedí hace una hora y nadie me dice nada. Ya pagué y tengo a mis hijos esperando. Esto es una estafa, quiero mi dinero YA.»', [], { ayuda: 'Escribe exactamente el mensaje que le enviarías. Tiempo recomendado: 3 minutos.', sinPegar: true }),
+    preg('f-esc-2', 'escrita', 2, 'larga', 'Cuéntanos una situación real en la que no pudiste darle a un cliente lo que pedía: qué pasó, qué hiciste y cómo terminó.', [], { ayuda: 'Sé concreto: situación, acción que tomaste y resultado.', sinPegar: true })
+  ];
   const PREGUNTAS_EJEMPLO = [
-    { _id: 'p1', orden: 1, activa: true, texto: 'Un usuario escribe que le cobraron dos veces el mismo viaje. ¿Qué haces primero?', opciones: [
+    { _id: 'p1', seccion: 'afinidad', tipo: 'unica', orden: 1, activa: true, texto: 'Un usuario escribe que le cobraron dos veces el mismo viaje. ¿Qué haces primero?', opciones: [
       op('Reviso el historial de pagos y la transacción duplicada', { PAYMENTS: 2 }),
       op('Le pido los detalles del viaje y reviso la ruta', { TRIPS: 2 }),
       op('Verifico si la cuenta tiene movimientos fuera de lo normal', { FRAUD: 2 }),
       op('Le explico cómo se calculó la tarifa', { 'MATCH AND PRICING': 2 })
     ] },
-    { _id: 'p2', orden: 2, activa: true, texto: '¿Qué tipo de tarea disfrutas más?', opciones: [
+    { _id: 'p2', seccion: 'afinidad', tipo: 'unica', orden: 2, activa: true, texto: '¿Qué tipo de tarea disfrutas más?', opciones: [
       op('Cuadrar montos y trabajar con números', { PAYMENTS: 2, 'MATCH AND PRICING': 1 }),
       op('Investigar casos y encontrar patrones raros', { FRAUD: 2 }),
       op('Conversar con personas molestas y calmarlas', { CX: 2, TRIPS: 1 }),
       op('Guiar a alguien paso a paso en un trámite', { SUPPLY: 2, CX: 1 })
     ] },
-    { _id: 'p3', orden: 3, activa: true, texto: 'El manual no tiene una respuesta clara para un caso. ¿Qué haces?', opciones: [
+    { _id: 'p3', seccion: 'afinidad', tipo: 'unica', orden: 3, activa: true, texto: 'El manual no tiene una respuesta clara para un caso. ¿Qué haces?', opciones: [
       op('Busco datos y comparo con casos parecidos', { FRAUD: 1, PAYMENTS: 1 }),
       op('Escalo rápido para que el cliente no espere', { CX: 2 }),
       op('Propongo que se agregue al manual', { TRANSVERSAL: 2, GROWTH: 1 }),
       op('Reviso las reglas y tarifas que aplican', { 'MATCH AND PRICING': 2 })
     ] },
-    { _id: 'p4', orden: 4, activa: true, texto: '¿Con qué herramienta te sientes más cómodo?', opciones: [
+    { _id: 'p4', seccion: 'afinidad', tipo: 'unica', orden: 4, activa: true, texto: '¿Con qué herramienta te sientes más cómodo?', opciones: [
       op('Hojas de cálculo (Excel o Google Sheets)', { 'MATCH AND PRICING': 2, PAYMENTS: 1, TRANSVERSAL: 1 }),
       op('Chats y redes sociales', { CX: 2, GROWTH: 1 }),
       op('Mapas y seguimiento GPS', { TRIPS: 2, 'MATCH AND PRICING': 1 }),
       op('Formularios y revisión de documentos', { SUPPLY: 2, FRAUD: 1 })
     ] },
-    { _id: 'p5', orden: 5, activa: true, texto: 'Un conductor dice que la app no le asigna viajes en su zona. ¿Qué revisas primero?', opciones: [
+    { _id: 'p5', seccion: 'afinidad', tipo: 'unica', orden: 5, activa: true, texto: 'Un conductor dice que la app no le asigna viajes en su zona. ¿Qué revisas primero?', opciones: [
       op('Si tiene documentos vencidos en su cuenta', { SUPPLY: 2 }),
       op('Cómo están la demanda y la tarifa en esa zona', { 'MATCH AND PRICING': 2 }),
       op('Si hay reportes recientes sobre su cuenta', { FRAUD: 2 }),
@@ -149,9 +192,18 @@
       cfg = { _id: 'general', celulas: CELULAS_DEFAULT, reglas: REGLAS_DEFAULT };
       await store.put('config', cfg);
       for (const p of PREGUNTAS_EJEMPLO) await store.put('preguntas', p);
+      for (const p of FORMULARIO_EJEMPLO) await store.put('preguntas', p);
+      cfg.secciones = SECCIONES_DEFAULT; cfg.formulario = 2;
       for (const m of MODULOS_EJEMPLO) await store.put('modulos', m);
       await store.put('cohortes', { _id: 'CX-2026-10', nombre: 'Cohorte de ejemplo · octubre 2026', activa: true, creado: ahora() });
     }
+    if (!cfg.formulario) {                       // migración: el test de antes pasa a la sección "Tu estilo de trabajo"
+      for (const p of await store.find('preguntas', {})) if (!p.seccion) { p.seccion = 'afinidad'; p.tipo = 'unica'; await store.put('preguntas', p); }
+      for (const p of FORMULARIO_EJEMPLO) if (!(await store.get('preguntas', p._id))) await store.put('preguntas', p);
+      cfg.secciones = cfg.secciones || SECCIONES_DEFAULT; cfg.formulario = 2;
+      await store.put('config', cfg);
+    }
+    cfg.secciones = cfg.secciones || SECCIONES_DEFAULT;
     cfg.reglas = Object.assign({}, REGLAS_DEFAULT, cfg.reglas || {});
     cfg.boost = cfg.boost || {};
     cfg.boost.mecanografia = Object.assign({}, BOOST_DEFAULT.mecanografia, cfg.boost.mecanografia || {});
@@ -159,13 +211,63 @@
   }
 
   /* ---------- Test de perfil ---------- */
+  // Índices elegidos: una respuesta "unica" es un número; una "multiple" es { sel: [..], otro: '' }
+  const elegidas = v => v == null || v === '' ? [] : Array.isArray(v) ? v : (typeof v === 'object' ? (v.sel || []) : [v]);
+  const ordenSeccion = (secciones, id) => { const i = secciones.findIndex(s => s.id === id); return i === -1 ? 999 : i; };
+  function ordenarPreguntas(preguntas, secciones) {
+    return preguntas.slice().sort((a, b) => (ordenSeccion(secciones, a.seccion) - ordenSeccion(secciones, b.seccion)) || ((a.orden || 0) - (b.orden || 0)));
+  }
+
+  // Revisa y califica las respuestas de Postúlate. Lanza error si falta algo obligatorio.
+  function evaluarPostulacion(preguntas, secciones, entrada, reglas) {
+    const limpias = {}, respuestas = {}, alertas = [], descartes = [], faltan = [];
+    let correctas = 0, evaluadas = 0;
+    for (const p of preguntas) {
+      const v = entrada[p._id], tipo = p.tipo || 'unica', ops = p.opciones || [];
+      let r;
+      if (tipo === 'unica') {
+        const i = v === '' || v == null ? null : Number(v);
+        r = Number.isInteger(i) && ops[i] ? i : null;
+      } else if (tipo === 'multiple') {
+        const sel = [...new Set(elegidas(v).map(Number))].filter(i => Number.isInteger(i) && ops[i]);
+        const otro = p.permiteOtro && v && typeof v === 'object' ? limpiar(v.otro, 200) : '';
+        r = (sel.length || otro) ? { sel, otro } : null;
+      } else {
+        const t = limpiar(v, tipo === 'larga' ? 4000 : 300);
+        r = t || null;
+      }
+      if (r == null) { if (p.obligatoria !== false) faltan.push(p); continue; }
+      limpias[p._id] = r;
+      const idxs = tipo === 'unica' || tipo === 'multiple' ? elegidas(r) : [], opsElegidas = idxs.map(i => ops[i]);
+      const evaluable = tipo === 'unica' && ops.some(o => o.correcta);
+      const acierto = evaluable ? !!ops[r].correcta : null;
+      if (evaluable) { evaluadas++; if (acierto) correctas++; }
+      opsElegidas.forEach(o => {
+        if (o.filtro === 'descarta') descartes.push(o.texto);
+        else if (o.filtro === 'alerta') alertas.push(o.texto);
+      });
+      respuestas[p._id] = { pregunta: p.texto, seccion: p.seccion, tipo,
+        opcion: tipo === 'unica' ? r : undefined, opciones: tipo === 'multiple' ? idxs : undefined,
+        texto: tipo === 'unica' || tipo === 'multiple' ? opsElegidas.map(o => o.texto).concat(r.otro ? ['Otro: ' + r.otro] : []).join(' · ') : r,
+        acierto, correcta: evaluable && !acierto ? (ops.find(o => o.correcta) || {}).texto : undefined };
+    }
+    if (faltan.length) {
+      const sec = secciones.find(s => s.id === faltan[0].seccion);
+      throw err(400, (faltan.length === 1 ? 'Falta 1 pregunta' : 'Faltan ' + faltan.length + ' preguntas') + ' por responder' + (sec ? ' (empieza por «' + sec.titulo + '»)' : '') + '.');
+    }
+    const cel = calcularCelula(preguntas, limpias, reglas);
+    return Object.assign(cel, { respuestas, alertas, descartes,
+      evaluacion: { correctas, total: evaluadas, nota: evaluadas ? Math.round(correctas * 100 / evaluadas) : null } });
+  }
+
   function calcularCelula(preguntas, respuestas, reglas) {
     const puntajes = {};
     for (const p of preguntas) {
-      const idx = respuestas[p._id];
-      const opcion = p.opciones && p.opciones[idx];
-      if (!opcion) continue;
-      for (const [cel, v] of Object.entries(opcion.puntos || {})) puntajes[cel] = (puntajes[cel] || 0) + Number(v || 0);
+      for (const idx of elegidas(respuestas[p._id])) {
+        const opcion = p.opciones && p.opciones[idx];
+        if (!opcion) continue;
+        for (const [cel, v] of Object.entries(opcion.puntos || {})) puntajes[cel] = (puntajes[cel] || 0) + Number(v || 0);
+      }
     }
     const ranking = Object.entries(puntajes).sort((a, b) => b[1] - a[1]);
     const [primera, segunda] = ranking;
@@ -283,8 +385,16 @@
   const publico = {
     async test({ store }) {
       await cargarConfig(store);
-      const preguntas = (await store.find('preguntas', {})).filter(p => p.activa !== false).sort((a, b) => (a.orden || 0) - (b.orden || 0));
-      return { preguntas: preguntas.map(p => ({ _id: p._id, texto: p.texto, opciones: p.opciones.map(o => o.texto) })) };
+      const cfg = await cargarConfig(store);
+      const preguntas = ordenarPreguntas((await store.find('preguntas', {})).filter(p => p.activa !== false), cfg.secciones);
+      const usadas = new Set(preguntas.map(p => p.seccion));
+      // Nunca se envían puntos, respuestas correctas ni filtros: solo lo que la persona necesita para responder
+      return {
+        secciones: cfg.secciones.filter(s => usadas.has(s.id)).map(s => ({ id: s.id, titulo: s.titulo, descripcion: s.descripcion || '' })),
+        preguntas: preguntas.filter(p => cfg.secciones.some(s => s.id === p.seccion)).map(p => ({ _id: p._id, seccion: p.seccion, tipo: p.tipo || 'unica', texto: p.texto, ayuda: p.ayuda || '',
+          obligatoria: p.obligatoria !== false, permiteOtro: !!p.permiteOtro, sinPegar: !!p.sinPegar,
+          opciones: (p.opciones || []).map(o => o.texto), exclusivas: (p.opciones || []).map((o, i) => o.exclusiva ? i : -1).filter(i => i >= 0) }))
+      };
     },
     async verificarCedula({ store, body }) {
       const cedula = limpiarCedula(body.cedula);
@@ -297,23 +407,21 @@
       const d = body.datos || {};
       const cedula = limpiarCedula(d.cedula);
       const nombre = limpiar(d.nombre, 80);
+      const edad = Math.round(Number(d.edad));
       if (nombre.length < 3) throw err(400, 'Escribe tu nombre y apellido.');
       if (!cedula) throw err(400, 'Escribe tu cédula.');
+      if (!(edad >= 16 && edad <= 80)) throw err(400, 'Escribe tu edad en números.');
       const id = 'asp-' + cedula;
       if (await store.get('aspirantes', id)) throw err(409, 'Ya existe una postulación con esta cédula.');
-      const preguntas = (await store.find('preguntas', {})).filter(p => p.activa !== false);
-      const respuestas = body.respuestas || {};
-      const faltan = preguntas.filter(p => respuestas[p._id] == null || !p.opciones[respuestas[p._id]]);
-      if (faltan.length) throw err(400, 'Faltan ' + faltan.length + ' preguntas por responder.');
-      const r = calcularCelula(preguntas, respuestas, cfg.reglas);
-      const resp = {};
-      preguntas.forEach(p => { resp[p._id] = { pregunta: p.texto, opcion: Number(respuestas[p._id]), texto: p.opciones[respuestas[p._id]].texto }; });
-      const asp = { _id: id, cedula, nombre, email: limpiar(d.email, 120), telefono: limpiar(d.telefono, 30), ciudad: limpiar(d.ciudad, 60),
-        estado: 'postulado', creado: ahora(), ultimoAcceso: ahora(), cohorte: null, celula: r.celula, progreso: {}, examenes: {},
-        test: { fecha: ahora(), respuestas: resp, puntajes: r.puntajes, ranking: r.ranking, estado: r.estado, motivo: r.motivo, celulaSugerida: r.celula } };
+      const preguntas = ordenarPreguntas((await store.find('preguntas', {})).filter(p => p.activa !== false && cfg.secciones.some(s => s.id === p.seccion)), cfg.secciones);
+      const r = evaluarPostulacion(preguntas, cfg.secciones, (body.respuestas && typeof body.respuestas === 'object') ? body.respuestas : {}, cfg.reglas);
+      const asp = { _id: id, cedula, nombre, edad, email: limpiar(d.email, 120), telefono: limpiar(d.telefono, 30), ciudad: limpiar(d.ciudad, 60),
+        estado: r.descartes.length ? 'descartado' : 'postulado', creado: ahora(), ultimoAcceso: ahora(), cohorte: null, celula: r.celula, progreso: {}, examenes: {},
+        test: { version: 2, fecha: ahora(), respuestas: r.respuestas, puntajes: r.puntajes, ranking: r.ranking, estado: r.estado, motivo: r.motivo, celulaSugerida: r.celula,
+          evaluacion: r.evaluacion, alertas: r.alertas, descartes: r.descartes } };
+      if (r.descartes.length) asp.motivoDescarte = 'Descarte automático: ' + r.descartes.join(' · ');
       await store.put('aspirantes', asp);
-      const cel = cfg.celulas.find(c => c.id === r.celula);
-      return { estado: r.estado, celula: cel || null, nombre };
+      return { ok: true, nombre };     // la persona no ve su nota ni su célula: eso lo revisa el equipo
     }
   };
 
@@ -463,6 +571,8 @@
   function fila(asp, modulos, cfg) {
     const p = progresoAspirante(asp, modulos, cfg.reglas);
     return { _id: asp._id, nombre: asp.nombre, cedula: asp.cedula, email: asp.email, telefono: asp.telefono, ciudad: asp.ciudad || '', cohorte: asp.cohorte,
+      edad: asp.edad || null, nota: asp.test && asp.test.evaluacion ? asp.test.evaluacion.nota : null,
+      alertas: asp.test ? (asp.test.alertas || []).length : 0, autoDescartado: !!asp.motivoDescarte,
       usuario: asp.usuario || '', tieneClave: !!asp.hash, celula: asp.celula, celulaSugerida: asp.test ? asp.test.celulaSugerida : null, estado: estadoDe(asp), estadoTest: asp.test ? asp.test.estado : 'pendiente',
       creado: asp.creado, aprobadoFecha: asp.aprobadoFecha || null, ultimoAcceso: asp.ultimoAcceso,
       progreso: p.progreso, completo: p.completo, promedio: p.promedio, ppm: asp.boost && asp.boost.mecanografia ? asp.boost.mecanografia.mejor : null };
@@ -484,7 +594,7 @@
       const id = 'asp-' + cedula;
       if (await store.get('aspirantes', id)) throw err(409, 'Ya existe un registro con esa cédula. Búscalo en Postulaciones.');
       if (!d.celula || !cfg.celulas.some(c => c.id === d.celula)) throw err(400, 'Elige la célula.');
-      const asp = { _id: id, cedula, nombre, email: limpiar(d.email, 120), telefono: limpiar(d.telefono, 30), ciudad: limpiar(d.ciudad, 60),
+      const asp = { _id: id, cedula, nombre, edad: Math.round(Number(d.edad)) || null, email: limpiar(d.email, 120), telefono: limpiar(d.telefono, 30), ciudad: limpiar(d.ciudad, 60),
         estado: 'aprobado', creado: ahora(), aprobadoFecha: ahora(), ultimoAcceso: null, celula: d.celula,
         progreso: {}, examenes: {}, test: null, origen: 'manual', nota: limpiar(d.nota, 300) };
       await asignarAcceso(store, asp, d.usuario, d.clave, cripto);
@@ -536,24 +646,57 @@
       if (!asp) throw err(404, 'Postulación no encontrada.');
       if (!['postulado', 'descartado'].includes(body.estado)) throw err(400, 'Estado no válido.');
       asp.estado = body.estado;
-      if (body.estado === 'postulado') { asp.aprobadoFecha = null; if (!asp.progreso || !Object.keys(asp.progreso).length) asp.celula = asp.test ? asp.test.celulaSugerida : asp.celula; }
+      if (body.estado === 'postulado') { asp.aprobadoFecha = null; delete asp.motivoDescarte; if (!asp.progreso || !Object.keys(asp.progreso).length) asp.celula = asp.test ? asp.test.celulaSugerida : asp.celula; }
       await store.put('aspirantes', asp);
       return { ok: true };
     },
     async eliminarAspirante({ store, body }) { await store.del('aspirantes', body.id); return { ok: true }; },
 
     async preguntas({ store }) {
-      await cargarConfig(store);
-      return { preguntas: (await store.find('preguntas', {})).sort((a, b) => (a.orden || 0) - (b.orden || 0)) };
+      const cfg = await cargarConfig(store);
+      return { preguntas: ordenarPreguntas(await store.find('preguntas', {}), cfg.secciones), secciones: cfg.secciones };
+    },
+    async guardarSecciones({ store, body }) {
+      const cfg = await cargarConfig(store);
+      const vistas = new Set();
+      const secciones = (Array.isArray(body.secciones) ? body.secciones : []).map(x => {
+        const id = limpiar(x.id, 40).toLowerCase().replace(/[^a-z0-9-]/g, '-') || nuevoId('s');
+        const titulo = limpiar(x.titulo, 80);
+        if (!titulo) throw err(400, 'Cada sección necesita un título.');
+        if (vistas.has(id)) throw err(400, 'Hay dos secciones con el mismo código.');
+        vistas.add(id);
+        return { id, titulo, descripcion: limpiar(x.descripcion, 400) };
+      });
+      const preguntas = await store.find('preguntas', {});
+      const quitada = cfg.secciones.find(s => !vistas.has(s.id) && preguntas.some(p => p.seccion === s.id));
+      if (quitada) throw err(400, 'La sección «' + quitada.titulo + '» todavía tiene preguntas. Muévelas o elimínalas primero.');
+      cfg.secciones = secciones;
+      await store.put('config', cfg);
+      return { secciones };
     },
     async guardarPregunta({ store, body }) {
+      const cfg = await cargarConfig(store);
       const p = body.pregunta || {};
-      const texto = limpiar(p.texto, 400);
-      const opciones = (p.opciones || []).map(o => ({ texto: limpiar(o.texto, 300), puntos: Object.fromEntries(Object.entries(o.puntos || {}).filter(([, v]) => Number(v)).map(([k, v]) => [k, Number(v)])) })).filter(o => o.texto);
+      const texto = limpiar(p.texto, 600);
+      const tipo = TIPOS[p.tipo] ? p.tipo : 'unica';
+      const seccion = cfg.secciones.some(s => s.id === p.seccion) ? p.seccion : null;
+      if (!seccion) throw err(400, 'Elige la sección de la pregunta.');
+      const conOpciones = tipo === 'unica' || tipo === 'multiple';
+      const opciones = !conOpciones ? [] : (p.opciones || []).map(o => {
+        const x = { texto: limpiar(o.texto, 300), puntos: Object.fromEntries(Object.entries(o.puntos || {}).filter(([, v]) => Number(v)).map(([k, v]) => [limpiar(k, 40), Number(v)])) };
+        if (tipo === 'unica' && o.correcta) x.correcta = true;
+        if (o.filtro === 'alerta' || o.filtro === 'descarta') x.filtro = o.filtro;
+        if (tipo === 'multiple' && o.exclusiva) x.exclusiva = true;
+        return x;
+      }).filter(o => o.texto);
       if (!texto) throw err(400, 'Escribe el texto de la pregunta.');
-      if (opciones.length < 2) throw err(400, 'Agrega al menos dos opciones.');
-      const doc = { _id: p._id || nuevoId('p'), texto, opciones, activa: p.activa !== false, orden: Number(p.orden) || 0 };
-      if (!p._id) doc.orden = (await store.find('preguntas', {})).length + 1;
+      if (conOpciones && opciones.length < 2) throw err(400, 'Agrega al menos dos opciones.');
+      if (opciones.filter(o => o.correcta).length > 1) throw err(400, 'Marca solo una respuesta correcta.');
+      const doc = { _id: p._id || nuevoId('p'), seccion, tipo, texto, ayuda: limpiar(p.ayuda, 300), opciones, activa: p.activa !== false, obligatoria: p.obligatoria !== false, orden: Number(p.orden) || 0 };
+      if (tipo === 'multiple' && p.permiteOtro) doc.permiteOtro = true;
+      if (tipo === 'larga' && p.sinPegar) doc.sinPegar = true;
+      const previa = p._id ? await store.get('preguntas', p._id) : null;
+      if (!previa || previa.seccion !== seccion) doc.orden = (await store.find('preguntas', { seccion })).filter(x => x._id !== doc._id).length + 1;
       await store.put('preguntas', doc);
       return { pregunta: doc };
     },
@@ -743,8 +886,8 @@
   /* ---------- Roles del panel ---------- */
   const PERFILES = {
     admin: { nombre: 'Admin', acciones: '*' },
-    reclutador: { nombre: 'Reclutador', acciones: ['resumen', 'aspirantes', 'aspirante', 'aprobar', 'cambiarEstado', 'guardarAcceso', 'reiniciarIntentos', 'crearAspirante', 'guardarCohorte', 'metricas', 'cambiarMiClave', 'chats', 'chatHilo', 'chatResponder', 'chatEliminar'] },
-    calidad: { nombre: 'Calidad', acciones: ['resumen', 'aspirantes', 'aspirante', 'metricas', 'cambiarMiClave', 'chats', 'chatHilo', 'chatResponder'] }
+    reclutador: { nombre: 'Reclutador', acciones: ['resumen', 'aspirantes', 'aspirante', 'preguntas', 'aprobar', 'cambiarEstado', 'guardarAcceso', 'reiniciarIntentos', 'crearAspirante', 'guardarCohorte', 'metricas', 'cambiarMiClave', 'chats', 'chatHilo', 'chatResponder', 'chatEliminar'] },
+    calidad: { nombre: 'Calidad', acciones: ['resumen', 'aspirantes', 'aspirante', 'preguntas', 'metricas', 'cambiarMiClave', 'chats', 'chatHilo', 'chatResponder'] }
   };
   const limpiarUsuario = u => limpiar(u, 30).toLowerCase();
   function vistaUsuario(u) { return { usuario: u._id, nombre: u.nombre, perfil: u.perfil, activo: u.activo !== false, creado: u.creado, ultimoAcceso: u.ultimoAcceso || null }; }
@@ -790,6 +933,6 @@
     return tabla[accion](ctx);
   }
 
-  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, iniciarSesion, vistaAspirante, estadoDe, PERFILES, ejecutar };
+  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, TIPOS, SECCIONES_DEFAULT, elegidas, ordenarPreguntas, evaluarPostulacion, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, iniciarSesion, vistaAspirante, estadoDe, PERFILES, ejecutar };
   if (typeof module !== 'undefined' && module.exports) module.exports = H; else root.ElxHandlers = H;
 })(typeof window !== 'undefined' ? window : globalThis);

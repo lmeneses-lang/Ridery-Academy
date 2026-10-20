@@ -9,7 +9,7 @@
   const call = (accion, data) => API.llamar('admin', 'admin', accion, data);
   const A = { usuario: null, celulas: [], reglas: {}, cohortes: [], tab: 'aspirantes', filtros: { q: '', cohorte: '', celula: '', estado: 'postulado' }, celContenido: H.COMUN, aspirantes: [] };
   const TABS = [
-    ['aspirantes', 'Postulaciones', 'users'], ['assessment', 'Assessment', 'chat'], ['test', 'Test de perfil', 'list'], ['contenido', 'Contenido', 'book'],
+    ['aspirantes', 'Postulaciones', 'users'], ['assessment', 'Assessment', 'chat'], ['test', 'Formulario', 'list'], ['contenido', 'Contenido', 'book'],
     ['boost', 'Boost', 'bolt'], ['metricas', 'Métricas', 'chart'], ['usuarios', 'Usuarios', 'lock'], ['ajustes', 'Ajustes', 'gear']
   ];
   // Qué ve cada rol en el menú (el servidor también valida cada acción)
@@ -108,9 +108,10 @@
   const ESTADOS = [['postulado', 'Por revisar'], ['aprobado', 'Aspirantes'], ['descartado', 'Descartados']];
   function pillEstado(a) {
     if (a.estado === 'aprobado') return '<span class="pill pill-ok">Aspirante</span>';
-    if (a.estado === 'descartado') return '<span class="pill">Descartado</span>';
+    if (a.estado === 'descartado') return '<span class="pill">' + (a.autoDescartado ? 'Descartado · filtro' : 'Descartado') + '</span>';
     return a.celulaSugerida ? '<span class="pill pill-brand">Por revisar</span>' : '<span class="pill pill-warn">Por revisar · sin célula</span>';
   }
+  const notaPill = n => n == null ? '<span class="muted">—</span>' : '<span class="pill ' + (n >= A.reglas.notaMinima ? 'pill-ok' : n >= 50 ? 'pill-warn' : 'pill-bad') + '">' + n + '%</span>';
   async function tabAspirantes() {
     try { A.aspirantes = (await call('aspirantes')).aspirantes; } catch (e) { return manejar(e); }
     if (A.tab !== 'aspirantes') return;   // el usuario ya cambió de sección
@@ -137,13 +138,13 @@
       }
       const esAsp = f.estado === 'aprobado';
       t.innerHTML = '<p class="small muted num">' + lista.length + ' resultado' + (lista.length === 1 ? '' : 's') + '</p><div class="table-wrap"><table><thead><tr><th>Persona</th><th>Contacto</th><th>' + (esAsp ? 'Célula' : 'Célula sugerida') + '</th>' +
-        (esAsp ? '<th>Usuario</th><th>Progreso</th><th>Promedio</th><th>Último acceso</th>' : '<th>Estado</th><th>Fecha</th>') + '</tr></thead><tbody>' +
+        (esAsp ? '<th>Usuario</th><th>Progreso</th><th>Promedio</th><th>Último acceso</th>' : '<th>Casos</th><th>Estado</th><th>Fecha</th>') + '</tr></thead><tbody>' +
         lista.map(a => '<tr class="click" data-id="' + esc(a._id) + '" tabindex="0"><td><b>' + esc(a.nombre) + '</b><div class="small muted num">C.I. ' + esc(a.cedula) + (a.ciudad ? ' · ' + esc(a.ciudad) : '') + '</div></td>' +
           '<td class="small">' + esc(a.telefono || '—') + '<div class="muted">' + esc(a.email || '') + '</div></td><td>' + esc(a.celula ? nombreCel(a.celula) : '—') + '</td>' +
           (esAsp
             ? '<td class="num">' + (a.usuario && a.tieneClave ? '@' + esc(a.usuario) : '<span class="pill pill-warn">Sin acceso</span>') + '</td><td><div class="row" style="gap:8px;flex-wrap:nowrap"><div class="bar' + (a.completo ? ' ok' : '') + '"><span style="width:' + a.progreso + '%"></span></div><span class="small num">' + a.progreso + '%</span></div></td>' +
               '<td class="num">' + (a.promedio != null ? a.promedio + '%' : '—') + '</td><td class="small muted">' + (a.ultimoAcceso ? fechaHora(a.ultimoAcceso) : 'Sin entrar') + '</td>'
-            : '<td>' + pillEstado(a) + '</td><td class="small muted">' + fechaHora(a.creado) + '</td>') + '</tr>').join('') + '</tbody></table></div>';
+            : '<td class="num">' + notaPill(a.nota) + '</td><td><div class="row" style="gap:6px">' + pillEstado(a) + (a.alertas ? '<span class="pill pill-bad">' + icon('alert') + a.alertas + '</span>' : '') + '</div></td><td class="small muted">' + fechaHora(a.creado) + '</td>') + '</tr>').join('') + '</tbody></table></div>';
       t.querySelectorAll('tr.click').forEach(tr => {
         tr.addEventListener('click', () => detalleAspirante(tr.dataset.id));
         tr.addEventListener('keydown', e => { if (e.key === 'Enter') detalleAspirante(tr.dataset.id); });
@@ -223,17 +224,47 @@
     });
   }
   function exportarCSV(lista) {
-    const cols = ['Nombre', 'Cédula', 'Correo', 'Teléfono', 'Ciudad', 'Estado', 'Célula', 'Célula sugerida', 'Usuario', 'Progreso %', 'Promedio %', 'Mecanografía PPM', 'Completó', 'Postulación', 'Aprobado', 'Último acceso'];
+    const cols = ['Nombre', 'Cédula', 'Edad', 'Nota casos %', 'Alertas', 'Correo', 'Teléfono', 'Ciudad', 'Estado', 'Célula', 'Célula sugerida', 'Usuario', 'Progreso %', 'Promedio %', 'Mecanografía PPM', 'Completó', 'Postulación', 'Aprobado', 'Último acceso'];
     const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
     const est = { postulado: 'Por revisar', aprobado: 'Aspirante', descartado: 'Descartado' };
-    const filas = lista.map(a => [a.nombre, a.cedula, a.email, a.telefono, a.ciudad, est[a.estado], a.celula ? nombreCel(a.celula) : '', a.celulaSugerida ? nombreCel(a.celulaSugerida) : '', a.usuario, a.progreso, a.promedio, a.ppm, a.completo ? 'Sí' : 'No', a.creado, a.aprobadoFecha, a.ultimoAcceso].map(q).join(';'));
+    const filas = lista.map(a => [a.nombre, a.cedula, a.edad, a.nota, a.alertas, a.email, a.telefono, a.ciudad, est[a.estado], a.celula ? nombreCel(a.celula) : '', a.celulaSugerida ? nombreCel(a.celulaSugerida) : '', a.usuario, a.progreso, a.promedio, a.ppm, a.completo ? 'Sí' : 'No', a.creado, a.aprobadoFecha, a.ultimoAcceso].map(q).join(';'));
     const blob = new Blob(['﻿' + [cols.map(q).join(';')].concat(filas).join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const el = document.createElement('a'); el.href = URL.createObjectURL(blob); el.download = 'postulaciones-' + new Date().toISOString().slice(0, 10) + '.csv';
     document.body.appendChild(el); el.click(); el.remove();
     toast('CSV exportado (' + lista.length + ')');
   }
 
+  // Resultado de Postúlate en la ficha: nota de casos, alertas, célula sugerida y respuestas por sección
+  function bloqueEvaluacion(a) {
+    const t = a.test;
+    if (!t) return '<div class="stack-sm"><h3>Evaluación</h3><p class="small muted">' + (a.origen === 'manual' ? 'Agregado a mano: no hizo la evaluación.' : 'Sin evaluación.') + '</p></div>';
+    const ev = t.evaluacion, max = Math.max(1, ...Object.values(t.puntajes || {}));
+    const secs = A.secciones || [];
+    const grupos = {};
+    Object.values(t.respuestas || {}).forEach(x => { const k = x.seccion || '_'; (grupos[k] = grupos[k] || []).push(x); });
+    const tituloSec = k => k === '_' ? 'Test de perfil' : ((secs.find(s => s.id === k) || {}).titulo || k);
+    const orden = Object.keys(grupos).sort((x, y) => secs.findIndex(s => s.id === x) - secs.findIndex(s => s.id === y));
+    const item = (x, i) => {
+      const largo = x.tipo === 'larga' || x.tipo === 'corta';
+      const marca = x.acierto === true ? '<span class="pill pill-ok">' + icon('check') + 'Correcta</span>' : x.acierto === false ? '<span class="pill pill-bad">' + icon('x') + 'Incorrecta</span>' : '';
+      return '<div class="review-item"><span class="n num">' + (i + 1) + '</span><div class="grow stack-sm" style="gap:4px"><span class="small muted">' + esc(x.pregunta) + '</span>' +
+        (largo ? '<div class="texto-libre">' + esc(x.texto) + '</div>' : '<b>' + esc(x.texto) + '</b>') +
+        (x.acierto === false && x.correcta ? '<span class="small muted">Correcta: ' + esc(x.correcta) + '</span>' : '') + '</div>' + marca + '</div>';
+    };
+    return '<div class="stack"><div class="row-between"><h3>Evaluación</h3><span class="small muted">' + fechaHora(t.fecha) + '</span></div>' +
+      (a.motivoDescarte ? '<div class="notice" style="border-color:var(--bad)">' + icon('alert') + ' ' + esc(a.motivoDescarte) + '. Si fue un error, usa «Volver a Por revisar».</div>' : '') +
+      '<div class="cert-grid small">' +
+      '<div><span class="muted">Nota de casos</span><b class="num">' + (ev && ev.total ? ev.correctas + ' de ' + ev.total + ' · ' + ev.nota + '%' : '—') + '</b></div>' +
+      '<div><span class="muted">Célula sugerida</span><b>' + esc(t.celulaSugerida ? nombreCel(t.celulaSugerida) : 'Ninguna') + '</b></div>' +
+      '<div><span class="muted">Alertas</span><b>' + ((t.alertas || []).length ? t.alertas.map(x => '<span class="pill pill-bad">' + esc(x) + '</span>').join(' ') : 'Ninguna') + '</b></div></div>' +
+      (t.motivo ? '<p class="small muted">Célula: ' + esc(t.motivo) + '</p>' : '') +
+      ((t.ranking || []).length ? '<div class="stack-sm">' + t.ranking.map(([c, v]) => '<div class="hbar"><span>' + esc(nombreCel(c)) + '</span><div class="bar"><span style="width:' + Math.round(v * 100 / max) + '%"></span></div><span class="num small">' + v + '</span></div>').join('') + '</div>' : '') +
+      orden.map(k => '<details' + (grupos[k].some(x => x.tipo === 'larga') ? ' open' : '') + '><summary class="small" style="cursor:pointer;font-weight:700">' + esc(tituloSec(k)) + ' (' + grupos[k].length + ')' +
+        (grupos[k].some(x => x.acierto != null) ? ' · ' + grupos[k].filter(x => x.acierto).length + '/' + grupos[k].filter(x => x.acierto != null).length + ' correctas' : '') + '</summary><div class="review">' + grupos[k].map(item).join('') + '</div></details>').join('') +
+      '</div>';
+  }
   async function detalleAspirante(id) {
+    if (!A.secciones) { try { A.secciones = (await call('preguntas')).secciones; } catch (e) { A.secciones = []; } }
     let d;
     try { d = await call('aspirante', { id }); } catch (e) { return manejar(e); }
     const a = d.aspirante, t = a.test, r = d.resumen;
@@ -252,15 +283,10 @@
       '<p class="small muted">Si olvidó su contraseña, genera una nueva y guárdala: te mostramos el mensaje para enviársela.</p></div>';
     const w = document.createElement('div'); w.className = 'modal-wrap';
     w.innerHTML = '<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="dt"><div class="row-between"><div class="row"><span class="avatar">' + esc(iniciales(a.nombre)) + '</span><div><h2 id="dt">' + esc(a.nombre) + '</h2><span class="small muted num">C.I. ' + esc(a.cedula) + '</span></div>' + pillEstado(r) + '</div><button class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
-      '<div class="cert-grid small"><div><span class="muted">Correo</span><b>' + esc(a.email || '—') + '</b></div><div><span class="muted">Teléfono</span><b>' + esc(a.telefono || '—') + '</b></div><div><span class="muted">Ciudad</span><b>' + esc(a.ciudad || '—') + '</b></div><div><span class="muted">Postulación</span><b>' + fecha(a.creado) + '</b></div>' +
+      '<div class="cert-grid small"><div><span class="muted">Correo</span><b>' + esc(a.email || '—') + '</b></div><div><span class="muted">Teléfono</span><b>' + esc(a.telefono || '—') + '</b></div>' + (a.edad ? '<div><span class="muted">Edad</span><b class="num">' + esc(a.edad) + ' años</b></div>' : '') + '<div><span class="muted">Ciudad</span><b>' + esc(a.ciudad || '—') + '</b></div><div><span class="muted">Postulación</span><b>' + fecha(a.creado) + '</b></div>' +
       (r.estado === 'aprobado' ? '<div><span class="muted">Progreso</span><b class="num">' + r.progreso + '%' + (r.completo ? ' · completó' : '') + '</b></div>' : '') + '</div>' +
       acciones +
-      '<hr class="divider"><div class="stack-sm"><div class="row-between"><h3>Test de perfil</h3><span class="small muted">Sugerida: <b>' + esc(t && t.celulaSugerida ? nombreCel(t.celulaSugerida) : 'ninguna') + '</b></span></div>' +
-      (t ? (t.motivo ? '<p class="small muted">' + esc(t.motivo) + '</p>' : '') +
-        '<div class="stack-sm">' + (t.ranking || []).map(([c, v]) => '<div class="hbar"><span>' + esc(nombreCel(c)) + '</span><div class="bar"><span style="width:' + Math.round(v * 100 / max) + '%"></span></div><span class="num small">' + v + '</span></div>').join('') + '</div>' +
-        (Object.keys(t.respuestas || {}).length ? '<details><summary class="small" style="cursor:pointer;font-weight:700">Ver respuestas (' + Object.keys(t.respuestas).length + ')</summary><div class="review">' +
-          Object.values(t.respuestas).map((x, i) => '<div class="review-item"><span class="n num">' + (i + 1) + '</span><div class="stack-sm" style="gap:2px"><span class="small muted">' + esc(x.pregunta) + '</span><b>' + esc(x.texto) + '</b></div></div>').join('') + '</div></details>' : '')
-        : '<p class="small muted">Sin test.</p>') + '</div>' +
+      '<hr class="divider">' + bloqueEvaluacion(a) +
       (r.estado === 'aprobado' ? '<hr class="divider"><div class="stack-sm"><h3>Módulos</h3>' + (d.ruta.modulos.length ? '<div class="table-wrap"><table><thead><tr><th>Módulo</th><th>Estado</th><th>Intentos</th><th>Mejor nota</th><th></th></tr></thead><tbody>' +
         d.ruta.modulos.map(m => '<tr><td><b>' + esc(m.titulo) + '</b><div class="small muted">' + esc(nombreCel(m.celula)) + '</div></td><td>' + ({ aprobado: '<span class="pill pill-ok">Aprobado</span>', disponible: '<span class="pill pill-brand">En curso</span>', bloqueado: '<span class="pill">Bloqueado</span>', agotado: '<span class="pill pill-bad">Sin intentos</span>' }[m.estado]) + '</td>' +
           '<td class="num">' + m.examen.intentos + ' / ' + A.reglas.intentosMax + '</td><td class="num">' + (m.examen.mejor != null ? m.examen.mejor + '%' : '—') + '</td>' +
@@ -314,66 +340,156 @@
     });
   }
 
-  /* ============ Test de perfil ============ */
+  /* ============ Formulario de postulación ============
+     Secciones (una página cada una para el aspirante) con sus preguntas.
+     Cada opción puede: sumar puntos a células, ser la correcta (cuenta en la nota de casos)
+     o tener un filtro (marcar alerta / descartar automáticamente). */
+  const FILTRO_NOMBRE = { '': 'Sin filtro', alerta: 'Marcar alerta', descarta: 'Descartar automáticamente' };
   async function tabTest() {
-    let preguntas;
-    try { preguntas = (await call('preguntas')).preguntas; } catch (e) { return manejar(e); }
+    let r;
+    try { r = await call('preguntas'); } catch (e) { return manejar(e); }
     if (A.tab !== 'test') return;   // el usuario ya cambió de sección
-    A.preguntas = preguntas;
-    const r = A.reglas;
-    main.innerHTML = encabezado('Test de perfil', preguntas.filter(p => p.activa !== false).length + ' preguntas activas', '<button class="btn btn-secondary" id="sim">Probar el test</button><button class="btn btn-primary" id="nueva">' + icon('plus') + 'Nueva pregunta</button>') +
-      '<div class="notice info">Cada opción suma puntos a una o más células. Gana la célula con más puntos si llega a <b>' + r.minPuntos + '</b> y le saca al menos <b>' + r.margenEmpate + '</b> a la segunda. Si no, el aspirante queda <b>en revisión</b> y lo asignas a mano. Puedes cambiar estos valores en Ajustes.</div>' +
-      '<div class="stack" id="lista"></div>';
-    const lista = main.querySelector('#lista');
-    if (!preguntas.length) lista.innerHTML = '<div class="card empty">' + icon('list') + '<p>Todavía no hay preguntas. Crea la primera.</p></div>';
-    preguntas.forEach((p, i) => lista.appendChild(bloquePregunta(p, i, preguntas.length)));
-    main.querySelector('#nueva').addEventListener('click', () => {
-      const p = { texto: '', activa: true, opciones: [{ texto: '', puntos: {} }, { texto: '', puntos: {} }] };
-      const b = bloquePregunta(p, preguntas.length, preguntas.length + 1, true);
-      const vacio = lista.querySelector('.empty'); if (vacio) vacio.parentElement.remove();
-      lista.appendChild(b); b.querySelector('textarea').focus();
-    });
-    main.querySelector('#sim').addEventListener('click', () => simulador(preguntas.filter(p => p.activa !== false)));
+    A.preguntas = r.preguntas; A.secciones = r.secciones;
+    const activas = r.preguntas.filter(p => p.activa !== false).length;
+    main.innerHTML = encabezado('Formulario de postulación', activas + ' preguntas activas en ' + r.secciones.length + ' secciones. Cada sección es una página para el aspirante.',
+      '<button class="btn btn-secondary" id="sim">Probar célula</button><button class="btn btn-primary" id="nsec">' + icon('plus') + 'Nueva sección</button>') +
+      '<div class="info-grid small">' +
+      '<div class="card card-tight stack-sm"><span class="pill pill-brand">Célula</span><span class="muted">Las opciones con puntos suman a una célula. Gana la que llegue a <b>' + A.reglas.minPuntos + '</b> y le saque <b>' + A.reglas.margenEmpate + '</b> a la segunda (Ajustes).</span></div>' +
+      '<div class="card card-tight stack-sm"><span class="pill pill-ok">Nota de casos</span><span class="muted">Las preguntas con una respuesta <b>correcta</b> marcada cuentan para la nota que ves en cada postulación.</span></div>' +
+      '<div class="card card-tight stack-sm"><span class="pill pill-bad">Filtros</span><span class="muted">Una opción puede <b>marcar alerta</b> o <b>descartar automáticamente</b>. El aspirante nunca lo ve.</span></div></div>' +
+      '<div class="stack" id="secs"></div>';
+    const cont = main.querySelector('#secs');
+    r.secciones.forEach((sec, si) => cont.appendChild(bloqueSeccion(sec, si)));
+    if (!r.secciones.length) cont.innerHTML = '<div class="card empty">' + icon('list') + '<p>Crea la primera sección del formulario.</p></div>';
+    main.querySelector('#nsec').addEventListener('click', () => modalSeccion(null));
+    main.querySelector('#sim').addEventListener('click', () => simulador(A.preguntas.filter(p => p.activa !== false && (p.opciones || []).some(o => Object.keys(o.puntos || {}).length))));
   }
-  function bloquePregunta(p, i, total, abierto) {
+  function bloqueSeccion(sec, si) {
+    const card = document.createElement('div'); card.className = 'card stack';
+    const preguntas = A.preguntas.filter(p => p.seccion === sec.id);
+    card.innerHTML = '<div class="row-between"><div class="stack-sm" style="gap:2px"><span class="eyebrow">Página ' + (si + 2) + '</span><h2>' + esc(sec.titulo) + '</h2>' + (sec.descripcion ? '<span class="small muted">' + esc(sec.descripcion) + '</span>' : '') + '</div>' +
+      '<div class="row"><button class="icon-btn" data-smv="-1" aria-label="Subir sección"' + (si === 0 ? ' disabled' : '') + '>' + icon('up') + '</button><button class="icon-btn" data-smv="1" aria-label="Bajar sección"' + (si === A.secciones.length - 1 ? ' disabled' : '') + '>' + icon('down') + '</button>' +
+      '<button class="btn btn-secondary btn-sm" data-sed>' + icon('edit') + 'Editar</button></div></div><div class="stack-sm" data-lista></div>' +
+      '<div><button class="btn btn-ghost btn-sm" data-nq>' + icon('plus') + 'Nueva pregunta en esta sección</button></div>';
+    const lista = card.querySelector('[data-lista]');
+    if (!preguntas.length) lista.innerHTML = '<p class="small muted">Sin preguntas. Esta sección no se le muestra al aspirante hasta que tenga al menos una activa.</p>';
+    preguntas.forEach((p, i) => lista.appendChild(bloquePregunta(p, i, preguntas)));
+    card.querySelector('[data-sed]').addEventListener('click', () => modalSeccion(sec));
+    card.querySelectorAll('[data-smv]').forEach(b => b.addEventListener('click', async () => {
+      const lst = A.secciones.slice(), j = si + Number(b.dataset.smv); [lst[si], lst[j]] = [lst[j], lst[si]];
+      try { await call('guardarSecciones', { secciones: lst }); tabTest(); } catch (e) { manejar(e); }
+    }));
+    card.querySelector('[data-nq]').addEventListener('click', () => {
+      const p = { seccion: sec.id, tipo: 'unica', texto: '', ayuda: '', activa: true, obligatoria: true, opciones: [{ texto: '', puntos: {} }, { texto: '', puntos: {} }] };
+      const vacio = lista.querySelector('p.muted'); if (vacio) vacio.remove();
+      const blk = bloquePregunta(p, preguntas.length, preguntas.concat(p), true);
+      lista.appendChild(blk); blk.querySelector('textarea').focus();
+    });
+    return card;
+  }
+  function modalSeccion(sec) {
+    const nueva = !sec; sec = sec || { id: '', titulo: '', descripcion: '' };
+    const w = document.createElement('div'); w.className = 'modal-wrap';
+    w.innerHTML = '<form class="modal" role="dialog" aria-modal="true" novalidate><h2>' + (nueva ? 'Nueva sección' : 'Editar sección') + '</h2><div class="form-error" role="alert" hidden></div>' +
+      '<div class="field"><label for="sc-t">Título</label><input class="input" id="sc-t" value="' + esc(sec.titulo) + '" placeholder="Ej. Conocimientos de pagos"></div>' +
+      '<div class="field"><label for="sc-d">Descripción para el aspirante</label><textarea class="textarea" id="sc-d" style="min-height:80px">' + esc(sec.descripcion) + '</textarea></div>' +
+      '<div class="modal-actions" style="justify-content:space-between">' + (nueva ? '<span></span>' : '<button type="button" class="btn btn-danger btn-sm" id="sc-del">' + icon('trash') + 'Eliminar sección</button>') +
+      '<div class="row"><button type="button" class="btn btn-secondary" data-x>Cancelar</button><button class="btn btn-primary" type="submit">Guardar</button></div></div></form>';
+    w.addEventListener('click', e => { if (e.target === w || e.target.closest('[data-x]')) w.remove(); });
+    document.body.appendChild(w);
+    const f = w.querySelector('form'), er = f.querySelector('.form-error');
+    f.querySelector('#sc-t').focus();
+    const guardar = async lista => {
+      try { await call('guardarSecciones', { secciones: lista }); w.remove(); toast('Sección guardada'); tabTest(); }
+      catch (x) { er.hidden = false; er.textContent = x.message; }
+    };
+    f.addEventListener('submit', e => {
+      e.preventDefault();
+      const datos = { titulo: f.querySelector('#sc-t').value, descripcion: f.querySelector('#sc-d').value };
+      const id = nueva ? datos.titulo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) + '-' + Date.now().toString(36).slice(-3) : sec.id;
+      guardar(nueva ? A.secciones.concat(Object.assign({ id }, datos)) : A.secciones.map(x => x.id === sec.id ? Object.assign({}, x, datos) : x));
+    });
+    const del = f.querySelector('#sc-del');
+    if (del) del.addEventListener('click', async () => {
+      if (!await confirmar({ titulo: '¿Eliminar «' + sec.titulo + '»?', texto: 'Solo se puede si ya no tiene preguntas.', ok: 'Eliminar', peligro: true })) return;
+      guardar(A.secciones.filter(x => x.id !== sec.id));
+    });
+  }
+  function bloquePregunta(p, i, hermanas, abierto) {
     const d = document.createElement('details'); d.className = 'editor-block'; if (abierto) d.open = true;
     const estado = JSON.parse(JSON.stringify(p));
-    const resumen = () => '<summary><span class="status-dot"><span class="small num" style="font-weight:700">' + (i + 1) + '</span></span><span class="grow">' + esc(estado.texto || 'Pregunta nueva') + '</span>' +
-      (estado.activa === false ? '<span class="pill">Inactiva</span>' : '') +
+    estado.tipo = estado.tipo || 'unica'; estado.opciones = estado.opciones || [];
+    const total = hermanas.length;
+    const conOpciones = () => estado.tipo === 'unica' || estado.tipo === 'multiple';
+    const etiquetas = () => {
+      const ops = estado.opciones || [], out = ['<span class="pill">' + esc(H.TIPOS[estado.tipo]) + '</span>'];
+      if (ops.some(o => o.correcta)) out.push('<span class="pill pill-ok">Evaluada</span>');
+      if (ops.some(o => Object.keys(o.puntos || {}).length)) out.push('<span class="pill pill-brand">Célula</span>');
+      if (ops.some(o => o.filtro)) out.push('<span class="pill pill-bad">Filtro</span>');
+      if (estado.activa === false) out.push('<span class="pill">Inactiva</span>');
+      return out.join('');
+    };
+    const resumen = () => '<summary><span class="status-dot"><span class="small num" style="font-weight:700">' + (i + 1) + '</span></span><span class="grow">' + esc(estado.texto || 'Pregunta nueva') + '</span>' + etiquetas() +
       (p._id ? '<button class="icon-btn" data-mv="-1" aria-label="Subir"' + (i === 0 ? ' disabled' : '') + '>' + icon('up') + '</button><button class="icon-btn" data-mv="1" aria-label="Bajar"' + (i >= total - 1 ? ' disabled' : '') + '>' + icon('down') + '</button>' : '') + '</summary>';
+    const filaOpcion = (o, j) => {
+      const unica = estado.tipo === 'unica', multi = estado.tipo === 'multiple';
+      return '<div class="opt-row" data-o="' + j + '"><span class="key">' + String.fromCharCode(65 + j) + '</span><div class="stack-sm"><input class="input" data-ot value="' + esc(o.texto) + '" placeholder="Texto de la opción">' +
+        '<div class="row" style="gap:14px">' +
+        (unica ? '<label class="switch small"><input type="radio" name="ok-' + esc(estado._id || 'nueva') + '-' + i + '" data-ok' + (o.correcta ? ' checked' : '') + '>Respuesta correcta</label>' : '') +
+        (multi ? '<label class="switch small"><input type="checkbox" data-ex' + (o.exclusiva ? ' checked' : '') + '>Desmarca las demás</label>' : '') +
+        '<label class="small row" style="gap:6px">Filtro <select class="select" data-fi style="width:auto;min-height:34px;padding:4px 8px">' + Object.entries(FILTRO_NOMBRE).map(([k, n]) => '<option value="' + k + '"' + ((o.filtro || '') === k ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></label></div>' +
+        '<div class="chips">' + Object.entries(o.puntos || {}).map(([c, v]) => '<span class="chip">' + esc(nombreCel(c)) + ' +' + v + '<button data-rm="' + esc(c) + '" aria-label="Quitar">' + icon('x') + '</button></span>').join('') + '</div>' +
+        '<div class="add-points"><select class="select" data-pc>' + opcionesCel('') + '</select><input class="input num" type="number" min="1" max="10" value="2" data-pv aria-label="Puntos"><button class="btn btn-secondary btn-sm" data-add>' + icon('plus') + 'Sumar puntos a célula</button></div></div>' +
+        '<button class="icon-btn" data-del-o aria-label="Quitar opción"' + (estado.opciones.length <= 2 ? ' disabled' : '') + '>' + icon('trash') + '</button></div>';
+    };
     const pintar = () => {
       d.innerHTML = resumen() + '<div class="editor-body">' +
+        '<div class="two"><div class="field"><label>Tipo</label><select class="select" data-f="tipo">' + Object.entries(H.TIPOS).map(([k, n]) => '<option value="' + k + '"' + (estado.tipo === k ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></div>' +
+        '<div class="field"><label>Sección</label><select class="select" data-f="seccion">' + A.secciones.map(x => '<option value="' + esc(x.id) + '"' + (estado.seccion === x.id ? ' selected' : '') + '>' + esc(x.titulo) + '</option>').join('') + '</select></div></div>' +
         '<div class="field"><label>Pregunta</label><textarea class="textarea" style="min-height:70px" data-f="texto">' + esc(estado.texto) + '</textarea></div>' +
-        '<div class="stack-sm"><span class="label">Opciones y puntos</span>' + estado.opciones.map((o, j) =>
-          '<div class="opt-row" data-o="' + j + '"><span class="key">' + String.fromCharCode(65 + j) + '</span><div class="stack-sm"><input class="input" data-ot value="' + esc(o.texto) + '" placeholder="Texto de la opción">' +
-          '<div class="chips">' + Object.entries(o.puntos || {}).map(([c, v]) => '<span class="chip">' + esc(nombreCel(c)) + ' +' + v + '<button data-rm="' + esc(c) + '" aria-label="Quitar">' + icon('x') + '</button></span>').join('') +
-          (Object.keys(o.puntos || {}).length ? '' : '<span class="small muted">Esta opción no suma puntos a ninguna célula.</span>') + '</div>' +
-          '<div class="add-points"><select class="select" data-pc>' + opcionesCel('') + '</select><input class="input num" type="number" min="1" max="10" value="2" data-pv aria-label="Puntos"><button class="btn btn-secondary btn-sm" data-add>' + icon('plus') + 'Sumar puntos</button></div></div>' +
-          '<button class="icon-btn" data-del-o aria-label="Quitar opción"' + (estado.opciones.length <= 2 ? ' disabled' : '') + '>' + icon('trash') + '</button></div>').join('') +
-        '<div><button class="btn btn-ghost btn-sm" data-add-o>' + icon('plus') + 'Agregar opción</button></div></div>' +
-        '<div class="row-between"><label class="switch"><input type="checkbox" data-f="activa"' + (estado.activa !== false ? ' checked' : '') + '>Pregunta activa</label>' +
-        '<div class="row">' + (p._id ? '<button class="btn btn-danger btn-sm" data-borrar>' + icon('trash') + 'Eliminar</button>' : '') + '<button class="btn btn-primary btn-sm" data-guardar>Guardar pregunta</button></div></div></div>';
-      d.querySelector('[data-f="texto"]').addEventListener('input', e => { estado.texto = e.target.value; });
-      d.querySelector('[data-f="activa"]').addEventListener('change', e => { estado.activa = e.target.checked; });
+        '<div class="field"><label>Texto de ayuda (opcional)</label><input class="input" data-f="ayuda" value="' + esc(estado.ayuda || '') + '" placeholder="Ej. Marca todas las que apliquen."></div>' +
+        (conOpciones() ? '<div class="stack-sm"><span class="label">Opciones</span>' + estado.opciones.map(filaOpcion).join('') +
+          '<div class="row"><button class="btn btn-ghost btn-sm" data-add-o>' + icon('plus') + 'Agregar opción</button>' +
+          (estado.tipo === 'unica' && estado.opciones.some(o => o.correcta) ? '<button class="btn btn-ghost btn-sm" data-sin-ok>Quitar respuesta correcta</button>' : '') + '</div></div>' : '') +
+        '<div class="row" style="gap:18px">' +
+        '<label class="switch"><input type="checkbox" data-f="obligatoria"' + (estado.obligatoria !== false ? ' checked' : '') + '>Obligatoria</label>' +
+        (estado.tipo === 'multiple' ? '<label class="switch"><input type="checkbox" data-f="permiteOtro"' + (estado.permiteOtro ? ' checked' : '') + '>Permitir «Otra» con texto</label>' : '') +
+        (estado.tipo === 'larga' ? '<label class="switch"><input type="checkbox" data-f="sinPegar"' + (estado.sinPegar ? ' checked' : '') + '>No permitir pegar texto</label>' : '') +
+        '<label class="switch"><input type="checkbox" data-f="activa"' + (estado.activa !== false ? ' checked' : '') + '>Activa</label></div>' +
+        '<div class="row" style="justify-content:flex-end">' + (p._id ? '<button class="btn btn-danger btn-sm" data-borrar>' + icon('trash') + 'Eliminar</button>' : '') + '<button class="btn btn-primary btn-sm" data-guardar>Guardar pregunta</button></div></div>';
+      const $ = sel => d.querySelector(sel);
+      $('[data-f="texto"]').addEventListener('input', e => { estado.texto = e.target.value; });
+      $('[data-f="ayuda"]').addEventListener('input', e => { estado.ayuda = e.target.value; });
+      $('[data-f="seccion"]').addEventListener('change', e => { estado.seccion = e.target.value; });
+      $('[data-f="tipo"]').addEventListener('change', e => {
+        estado.tipo = e.target.value;
+        if (conOpciones() && estado.opciones.length < 2) estado.opciones = [{ texto: '', puntos: {} }, { texto: '', puntos: {} }];
+        pintar();
+      });
+      ['obligatoria', 'activa', 'permiteOtro', 'sinPegar'].forEach(k => { const el = $('[data-f="' + k + '"]'); if (el) el.addEventListener('change', () => { estado[k] = el.checked; }); });
       d.querySelectorAll('.opt-row').forEach(row => {
         const o = estado.opciones[Number(row.dataset.o)];
         row.querySelector('[data-ot]').addEventListener('input', e => { o.texto = e.target.value; });
+        const okR = row.querySelector('[data-ok]'); if (okR) okR.addEventListener('change', () => { estado.opciones.forEach(x => { delete x.correcta; }); o.correcta = true; pintar(); });
+        const ex = row.querySelector('[data-ex]'); if (ex) ex.addEventListener('change', () => { o.exclusiva = ex.checked; });
+        row.querySelector('[data-fi]').addEventListener('change', e => { if (e.target.value) o.filtro = e.target.value; else delete o.filtro; pintar(); });
         row.querySelector('[data-add]').addEventListener('click', () => { const c = row.querySelector('[data-pc]').value, v = Number(row.querySelector('[data-pv]').value) || 0; if (!v) return; o.puntos = o.puntos || {}; o.puntos[c] = v; pintar(); });
         row.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { delete o.puntos[b.dataset.rm]; pintar(); }));
         row.querySelector('[data-del-o]').addEventListener('click', () => { estado.opciones.splice(Number(row.dataset.o), 1); pintar(); });
       });
-      d.querySelector('[data-add-o]').addEventListener('click', () => { estado.opciones.push({ texto: '', puntos: {} }); pintar(); });
-      d.querySelector('[data-guardar]').addEventListener('click', async () => {
+      const addO = $('[data-add-o]'); if (addO) addO.addEventListener('click', () => { estado.opciones.push({ texto: '', puntos: {} }); pintar(); });
+      const sinOk = $('[data-sin-ok]'); if (sinOk) sinOk.addEventListener('click', () => { estado.opciones.forEach(x => { delete x.correcta; }); pintar(); });
+      $('[data-guardar]').addEventListener('click', async () => {
         try { await call('guardarPregunta', { pregunta: estado }); toast('Pregunta guardada'); tabTest(); } catch (e) { manejar(e); }
       });
-      const bo = d.querySelector('[data-borrar]');
+      const bo = $('[data-borrar]');
       if (bo) bo.addEventListener('click', async () => {
-        if (!await confirmar({ titulo: '¿Eliminar esta pregunta?', texto: 'Los aspirantes que ya hicieron el test conservan sus resultados.', ok: 'Eliminar', peligro: true })) return;
+        if (!await confirmar({ titulo: '¿Eliminar esta pregunta?', texto: 'Las postulaciones ya enviadas conservan sus respuestas.', ok: 'Eliminar', peligro: true })) return;
         try { await call('eliminarPregunta', { id: p._id }); toast('Pregunta eliminada'); tabTest(); } catch (e) { manejar(e); }
       });
       d.querySelectorAll('[data-mv]').forEach(b => b.addEventListener('click', async e => {
         e.preventDefault(); e.stopPropagation();
-        const ids = A.preguntas.map(x => x._id), j = i + Number(b.dataset.mv);
+        const ids = hermanas.filter(x => x._id).map(x => x._id), j = i + Number(b.dataset.mv);
         [ids[i], ids[j]] = [ids[j], ids[i]];
         try { await call('ordenarPreguntas', { ids }); tabTest(); } catch (er) { manejar(er); }
       }));
@@ -381,20 +497,24 @@
     pintar();
     return d;
   }
+  // Simula solo la parte que sugiere la célula (preguntas con puntos)
   function simulador(preguntas) {
     const resp = {};
     const w = document.createElement('div'); w.className = 'modal-wrap';
     const pintar = () => {
       const r = H.calcularCelula(preguntas, resp, A.reglas);
-      const completas = preguntas.every(p => resp[p._id] != null);
       const max = Math.max(1, ...r.ranking.map(x => x[1]));
-      w.innerHTML = '<div class="modal wide" role="dialog" aria-modal="true"><div class="row-between"><h2>Probar el test</h2><button class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
-        '<p class="small muted">Responde como lo haría un aspirante y mira qué célula le tocaría. No se guarda nada.</p>' +
-        preguntas.map((p, i) => '<div class="stack-sm"><b>' + (i + 1) + '. ' + esc(p.texto) + '</b><select class="select" data-q="' + esc(p._id) + '"><option value="">Elige una opción</option>' +
-          p.opciones.map((o, j) => '<option value="' + j + '"' + (resp[p._id] === j ? ' selected' : '') + '>' + String.fromCharCode(65 + j) + '. ' + esc(o.texto) + '</option>').join('') + '</select></div>').join('') +
+      w.innerHTML = '<div class="modal wide" role="dialog" aria-modal="true"><div class="row-between"><h2>Probar célula</h2><button class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
+        '<p class="small muted">Responde las preguntas que suman puntos y mira qué célula le tocaría a un aspirante. No se guarda nada.</p>' +
+        (preguntas.length ? '' : '<div class="notice">Ninguna pregunta activa suma puntos a una célula todavía.</div>') +
+        preguntas.map((p, i) => '<div class="stack-sm"><b>' + (i + 1) + '. ' + esc(p.texto) + '</b>' + (p.tipo === 'multiple'
+          ? '<div class="row">' + p.opciones.map((o, j) => '<label class="switch small"><input type="checkbox" data-m="' + esc(p._id) + '" value="' + j + '"' + ((resp[p._id] || []).includes(j) ? ' checked' : '') + '>' + esc(o.texto) + '</label>').join('') + '</div>'
+          : '<select class="select" data-q="' + esc(p._id) + '"><option value="">Elige una opción</option>' + p.opciones.map((o, j) => '<option value="' + j + '"' + (resp[p._id] === j ? ' selected' : '') + '>' + String.fromCharCode(65 + j) + '. ' + esc(o.texto) + '</option>').join('') + '</select>') + '</div>').join('') +
         '<hr class="divider"><div class="stack-sm"><h3>Resultado</h3>' + (r.ranking.length ? r.ranking.map(([c, v]) => '<div class="hbar"><span>' + esc(nombreCel(c)) + '</span><div class="bar"><span style="width:' + Math.round(v * 100 / max) + '%"></span></div><span class="num small">' + v + '</span></div>').join('') : '<p class="small muted">Elige opciones para ver los puntos.</p>') +
-        (completas ? (r.celula ? '<div class="feedback ok">' + icon('check') + '<span class="body">Se asignaría a <b>' + esc(nombreCel(r.celula)) + '</b>.</span></div>' : '<div class="notice">Quedaría en revisión: ' + esc(r.motivo) + '.</div>') : '') + '</div></div>';
-      w.querySelectorAll('[data-q]').forEach(s => s.addEventListener('change', () => { if (s.value === '') delete resp[s.dataset.q]; else resp[s.dataset.q] = Number(s.value); const y = w.querySelector('.modal').scrollTop; pintar(); w.querySelector('.modal').scrollTop = y; }));
+        (r.ranking.length ? (r.celula ? '<div class="feedback ok">' + icon('check') + '<span class="body">Se sugeriría <b>' + esc(nombreCel(r.celula)) + '</b>.</span></div>' : '<div class="notice">Quedaría en revisión: ' + esc(r.motivo) + '.</div>') : '') + '</div></div>';
+      const y = () => w.querySelector('.modal').scrollTop;
+      w.querySelectorAll('[data-q]').forEach(s => s.addEventListener('change', () => { const t = y(); if (s.value === '') delete resp[s.dataset.q]; else resp[s.dataset.q] = Number(s.value); pintar(); w.querySelector('.modal').scrollTop = t; }));
+      w.querySelectorAll('[data-m]').forEach(c => c.addEventListener('change', () => { const t = y(); resp[c.dataset.m] = [...w.querySelectorAll('[data-m="' + CSS.escape(c.dataset.m) + '"]:checked')].map(x => Number(x.value)); pintar(); w.querySelector('.modal').scrollTop = t; }));
     };
     w.addEventListener('click', e => { if (e.target === w || e.target.closest('[data-x]')) w.remove(); });
     pintar(); document.body.appendChild(w);

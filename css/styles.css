@@ -480,3 +480,18 @@ td .bar { width: 90px; }
   .inbox:not(.viendo) .inbox-main { display: none; }
   .inbox-side { border-right: 0; }
 }
+
+/* ---------- Postúlate: preguntas por sección ---------- */
+.q-card { gap: 14px; scroll-margin-top: 90px; }
+.q-card.invalid { border-color: var(--bad); box-shadow: 0 0 0 3px var(--bad-soft); }
+.q-error { color: var(--bad); font-size: .85rem; font-weight: 600; }
+.q-head { display: flex; gap: 12px; align-items: flex-start; }
+.q-head h3 { font-size: 1.02rem; line-height: 1.4; }
+.q-num { width: 26px; height: 26px; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; font-size: .8rem; font-weight: 700; flex: none; color: var(--muted); }
+.option.multi .key { border-radius: 6px; }
+.option.multi .key .i { width: 16px; height: 16px; opacity: 0; }
+.option.multi.selected .key .i { opacity: 1; }
+.row-between .i { width: 14px; height: 14px; vertical-align: -2px; }
+.texto-libre { white-space: pre-wrap; background: var(--surface-2); border-radius: var(--r-sm); padding: 10px 12px; line-height: 1.5; }
+.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.info-grid .pill { align-self: flex-start; }
