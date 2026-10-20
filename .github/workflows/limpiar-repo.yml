@@ -1,0 +1,30 @@
+name: Limpiar repo (una sola vez)
+
+on: workflow_dispatch
+
+permissions:
+  contents: write
+
+jobs:
+  limpiar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Borrar copias viejas y crear .vercelignore
+        run: |
+          git rm -r --ignore-unmatch -q \
+            "admin (1).js" admin.js app.js apple-touch-icon.png aspirante.js \
+            "auth (2).js" auth.js common.js demo.js favicon-64.png favicon.ico \
+            handlers.js logo-192.png logo-512.png ridery-academy.zip store.js \
+            styles.css ridery-academy
+          printf 'docs/\nREADME.md\n*.zip\n' > .vercelignore
+          git add .vercelignore
+          git rm -q .github/workflows/limpiar-repo.yml
+
+      - name: Guardar cambios
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Borrar copias viejas y agregar .vercelignore"
+          git push
