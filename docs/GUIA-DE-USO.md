@@ -13,6 +13,8 @@ La página abre con dos opciones.
 3. **Revisión:** ve todas sus respuestas y puede cambiar cualquier sección antes de enviar.
 4. **Gracias:** solo ve que su postulación fue recibida. **No ve su nota ni su célula.**
 
+**Ruta (embudo).** No todos ven las mismas secciones. Primero todos responden la evaluación general y «¿Dónde te ves?»; según esos puntos aparece la sección de su **área** (conductores y viajes, pagos y seguridad, o clientes y experiencia); y según el área aparecen los **casos de las 2 células** con más puntos. Al final, todos hacen la prueba escrita. En el panel, cada sección dice «Todos la ven» o «Ruta · solo si…», y **Probar ruta** te deja simular el recorrido. Solo mueven la ruta las preguntas de perfil (con puntos y sin respuesta correcta); los casos evaluados suman a la célula final pero no cambian el recorrido.
+
 Las secciones y preguntas viven en la base de datos (no en el código) y se editan en el panel, en **Formulario**. Con **Importar** cargas un archivo `.json` de preguntas (modo *Agregar* suma y actualiza; *Reemplazar todo* deja solo las del archivo) y con **Exportar** descargas el formulario completo para respaldarlo o reutilizarlo.
 
 **Ojo:** el archivo exportado incluye las respuestas correctas. Guárdalo en un lugar privado y **nunca lo subas al repositorio**, porque todo lo que está en el repo se publica en la web. Hay cuatro tipos de pregunta: una opción, varias opciones, respuesta corta y respuesta larga. Cada opción puede:

@@ -160,7 +160,13 @@
      Las respuestas se guardan en este dispositivo mientras la persona avanza. */
   const POST_KEY = 'elx_postulacion';
   const guardarPost = () => Elx.Store.set(POST_KEY, JSON.stringify({ datos: S.post.datos, resp: S.post.resp }));
-  const totalPasos = () => 2 + ((S.post && S.post.secciones) ? S.post.secciones.length : 1);
+  // Secciones que le tocan a esta persona (el servidor las decide según sus respuestas: generales → área → célula)
+  const miRuta = () => (S.post && S.post.secciones) ? S.post.secciones.filter(x => (S.post.visibles || []).includes(x.id)) : [];
+  const totalPasos = () => 2 + Math.max(1, miRuta().length);
+  async function actualizarRuta() {
+    const r = await API.llamar('asp', 'auth', 'ruta', { respuestas: S.post.resp });
+    S.post.visibles = r.visibles;
+  }
   function cabeceraPaso(n, etiqueta) {
     const total = totalPasos();
     return '<div class="stepper-head"><div class="row-between"><span class="eyebrow">Postulación · Paso ' + n + ' de ' + total + '</span><span class="small muted">' + esc(etiqueta) + '</span></div>' +
@@ -214,8 +220,10 @@
       try {
         await API.llamar('asp', 'auth', 'verificarCedula', { cedula: v.cedula });
         await cargarFormulario();
+        await actualizarRuta();
         // retoma en la primera sección con algo pendiente
-        const t = S.post, i = t.secciones.findIndex(sec => t.preguntas.some(p => p.seccion === sec.id && p.obligatoria && !respondida(p, t.resp[p._id])));
+        const t = S.post, lista = miRuta(), i = lista.findIndex(sec => t.preguntas.some(p => p.seccion === sec.id && p.obligatoria && !respondida(p, t.resp[p._id])));
+        if (!lista.length) throw new Error('El formulario todavía no tiene preguntas. Intenta más tarde.');
         if (i === -1) verRevisionTest(); else { t.sec = i; verSeccion(); }
       } catch (er) { errBox.hidden = false; errBox.textContent = er.message; btn.disabled = false; window.scrollTo(0, 0); }
     });
@@ -245,11 +253,12 @@
 
   function verSeccion() {
     limpiar();
-    const t = S.post, sec = t.secciones[t.sec];
+    const t = S.post, lista = miRuta(), sec = lista[t.sec];
     const preguntas = t.preguntas.filter(p => p.seccion === sec.id);
-    const ultima = t.sec === t.secciones.length - 1;
+    // si alguna sección siguiente depende de las respuestas, todavía no sabemos si esta es la última
+    const ultima = t.sec === lista.length - 1 && !t.secciones.slice(t.secciones.findIndex(x => x.id === sec.id) + 1).some(x => x.condicional);
     app.innerHTML = topbar({}) + '<main class="center-wrap"><div class="panel">' + cabeceraPaso(t.sec + 2, sec.titulo) +
-      '<div class="stack-sm"><h1>' + esc(sec.titulo) + '</h1>' + (sec.descripcion ? '<p class="muted">' + esc(sec.descripcion) + '</p>' : '') + '</div>' +
+      '<div class="stack-sm">' + (sec.condicional ? '<span class="pill pill-brand" style="align-self:flex-start">' + icon('right') + 'Elegida según tus respuestas</span>' : '') + '<h1>' + esc(sec.titulo) + '</h1>' + (sec.descripcion ? '<p class="muted">' + esc(sec.descripcion) + '</p>' : '') + '</div>' +
       preguntas.map((p, i) => htmlPregunta(p, i + 1)).join('') +
       '<div class="nav-row"><button class="btn btn-secondary" id="s-prev">' + icon('left') + 'Atrás</button>' +
       '<button class="btn btn-primary" id="s-next">' + (ultima ? 'Revisar respuestas' : 'Siguiente') + icon('right') + '</button></div></div></main>';
@@ -280,14 +289,17 @@
       }
     });
     app.querySelector('#s-prev').addEventListener('click', () => { if (t.sec === 0) verPostulacion(); else { t.sec--; verSeccion(); } });
-    app.querySelector('#s-next').addEventListener('click', () => {
+    app.querySelector('#s-next').addEventListener('click', async () => {
       const pendientes = preguntas.filter(p => p.obligatoria && !respondida(p, t.resp[p._id]));
       if (pendientes.length) {
         pendientes.forEach(p => { const c = app.querySelector('.q-card[data-q="' + CSS.escape(p._id) + '"]'); c.classList.add('invalid'); c.querySelector('.q-error').hidden = false; });
         app.querySelector('.q-card.invalid').scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
-      if (ultima) verRevisionTest(); else { t.sec++; verSeccion(); }
+      const b = app.querySelector('#s-next'); b.disabled = true;
+      try { await actualizarRuta(); } catch (e) { b.disabled = false; return manejar(e); }
+      const nueva = miRuta(), aqui = nueva.findIndex(x => x.id === sec.id);
+      if (aqui === -1 || aqui >= nueva.length - 1) verRevisionTest(); else { t.sec = aqui + 1; verSeccion(); }
     });
   }
 
@@ -305,7 +317,7 @@
       '<div class="stack-sm"><h1>Revisa y envía</h1><p class="muted">Puedes cambiar lo que quieras. Después de enviar ya no se puede modificar.</p></div>' +
       '<div class="card card-tight review"><div class="review-item"><span class="n">' + icon('users') + '</span><div class="grow stack-sm"><span class="small muted">Tus datos</span><b>' + esc(d.nombre) + ' · C.I. ' + esc(d.cedula) + ' · ' + esc(d.edad) + ' años</b>' +
       '<span class="small">' + esc(d.email) + ' · ' + esc(d.telefono) + ' · ' + esc(d.ciudad) + '</span></div><button class="btn btn-ghost btn-sm" id="r-datos">Cambiar</button></div></div>' +
-      t.secciones.map((sec, si) => '<div class="card card-tight stack-sm"><div class="row-between"><h3>' + esc(sec.titulo) + '</h3><button class="btn btn-ghost btn-sm" data-ir="' + si + '">Cambiar</button></div><div class="review">' +
+      miRuta().map((sec, si) => '<div class="card card-tight stack-sm"><div class="row-between"><h3>' + esc(sec.titulo) + '</h3><button class="btn btn-ghost btn-sm" data-ir="' + si + '">Cambiar</button></div><div class="review">' +
         t.preguntas.filter(p => p.seccion === sec.id).map((p, i) => '<div class="review-item"><span class="n num">' + (i + 1) + '</span><div class="grow stack-sm"><span class="small muted">' + esc(p.texto) + '</span><b>' + textoRespuesta(p, t.resp[p._id]) + '</b></div></div>').join('') +
         '</div></div>').join('') +
       '<div class="nav-row"><button class="btn btn-secondary" id="r-back">' + icon('left') + 'Atrás</button><button class="btn btn-primary" id="r-send">Enviar postulación</button></div></div></main>';
@@ -313,13 +325,15 @@
     window.scrollTo(0, 0);
     app.querySelector('#r-datos').addEventListener('click', verPostulacion);
     app.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => { t.sec = Number(b.dataset.ir); verSeccion(); }));
-    app.querySelector('#r-back').addEventListener('click', () => { t.sec = t.secciones.length - 1; verSeccion(); });
+    app.querySelector('#r-back').addEventListener('click', () => { t.sec = miRuta().length - 1; verSeccion(); });
     app.querySelector('#r-send').addEventListener('click', async () => {
       const ok = await confirmar({ titulo: '¿Enviar tu postulación?', texto: 'Después de enviarla no podrás cambiar tus respuestas.', ok: 'Enviar' });
       if (!ok) return;
       const btn = app.querySelector('#r-send'); btn.disabled = true; btn.textContent = 'Enviando…';
       try {
-        const r = await API.llamar('asp', 'auth', 'postular', { datos: t.datos, respuestas: t.resp });
+        // solo se envían las respuestas de las secciones que le tocaron
+        const enviar = {}; t.preguntas.filter(p => (t.visibles || []).includes(p.seccion)).forEach(p => { if (t.resp[p._id] != null) enviar[p._id] = t.resp[p._id]; });
+        const r = await API.llamar('asp', 'auth', 'postular', { datos: t.datos, respuestas: enviar });
         Elx.Store.del(POST_KEY); S.post = null;
         verFinPostulacion(r);
       } catch (e) { btn.disabled = false; btn.textContent = 'Enviar postulación'; manejar(e); }

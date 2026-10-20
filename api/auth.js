@@ -3,7 +3,7 @@
    ------------------------------------------------------------
    No pide token. Atiende:
    - login: "Inicia sesión" único (equipo del panel o aspirante)
-   - test, verificarCedula, postular: el flujo "Postúlate"
+   - test, ruta, verificarCedula, postular: el flujo "Postúlate"
    Todo pasa por los frenos de lib/seguridad.js.
    ============================================================ */
 const H = require('../js/handlers.js');
@@ -11,7 +11,7 @@ const store = require('../lib/store');
 const { firmar, iguales, versionPrincipal, responder, manejarError, cripto } = require('../lib/auth');
 const seg = require('../lib/seguridad');
 
-const PUBLICAS = ['test', 'verificarCedula', 'postular'];
+const PUBLICAS = ['test', 'ruta', 'verificarCedula', 'postular'];
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return responder(res, 405, { error: 'Método no permitido' });

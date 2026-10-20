@@ -258,6 +258,7 @@
       '<div><span class="muted">Célula sugerida</span><b>' + esc(t.celulaSugerida ? nombreCel(t.celulaSugerida) : 'Ninguna') + '</b></div>' +
       '<div><span class="muted">Alertas</span><b>' + ((t.alertas || []).length ? t.alertas.map(x => '<span class="pill pill-bad">' + esc(x) + '</span>').join(' ') : 'Ninguna') + '</b></div></div>' +
       (t.motivo ? '<p class="small muted">Célula: ' + esc(t.motivo) + '</p>' : '') +
+      ((t.recorrido || []).length ? '<p class="small"><span class="muted">Recorrido:</span> ' + t.recorrido.map(id => esc(tituloSec(id))).join(' → ') + '</p>' : '') +
       ((t.ranking || []).length ? '<div class="stack-sm">' + t.ranking.map(([c, v]) => '<div class="hbar"><span>' + esc(nombreCel(c)) + '</span><div class="bar"><span style="width:' + Math.round(v * 100 / max) + '%"></span></div><span class="num small">' + v + '</span></div>').join('') + '</div>' : '') +
       orden.map(k => '<details' + (grupos[k].some(x => x.tipo === 'larga') ? ' open' : '') + '><summary class="small" style="cursor:pointer;font-weight:700">' + esc(tituloSec(k)) + ' (' + grupos[k].length + ')' +
         (grupos[k].some(x => x.acierto != null) ? ' · ' + grupos[k].filter(x => x.acierto).length + '/' + grupos[k].filter(x => x.acierto != null).length + ' correctas' : '') + '</summary><div class="review">' + grupos[k].map(item).join('') + '</div></details>').join('') +
@@ -353,10 +354,11 @@
     const activas = r.preguntas.filter(p => p.activa !== false).length;
     main.innerHTML = encabezado('Formulario de postulación', activas + ' preguntas activas en ' + r.secciones.length + ' secciones. Cada sección es una página para el aspirante.',
       '<button class="btn btn-secondary" id="imp">Importar</button><button class="btn btn-secondary" id="exp">' + icon('download') + 'Exportar</button>' +
-      '<button class="btn btn-secondary" id="sim">Probar célula</button><button class="btn btn-primary" id="nsec">' + icon('plus') + 'Nueva sección</button>') +
+      '<button class="btn btn-secondary" id="sim">Probar ruta</button><button class="btn btn-primary" id="nsec">' + icon('plus') + 'Nueva sección</button>') +
       '<div class="info-grid small">' +
       '<div class="card card-tight stack-sm"><span class="pill pill-brand">Célula</span><span class="muted">Las opciones con puntos suman a una célula. Gana la que llegue a <b>' + A.reglas.minPuntos + '</b> y le saque <b>' + A.reglas.margenEmpate + '</b> a la segunda (Ajustes).</span></div>' +
       '<div class="card card-tight stack-sm"><span class="pill pill-ok">Nota de casos</span><span class="muted">Las preguntas con una respuesta <b>correcta</b> marcada cuentan para la nota que ves en cada postulación.</span></div>' +
+      '<div class="card card-tight stack-sm"><span class="pill pill-brand">Ruta</span><span class="muted">Una sección puede mostrarse <b>solo si</b> ciertas células van entre las de más puntos. Así pasas de preguntas generales a las de un área y luego a las de la célula.</span></div>' +
       '<div class="card card-tight stack-sm"><span class="pill pill-bad">Filtros</span><span class="muted">Una opción puede <b>marcar alerta</b> o <b>descartar automáticamente</b>. El aspirante nunca lo ve.</span></div></div>' +
       '<div class="stack" id="secs"></div>';
     const cont = main.querySelector('#secs');
@@ -373,12 +375,13 @@
       } catch (e) { manejar(e); }
     });
     main.querySelector('#nsec').addEventListener('click', () => modalSeccion(null));
-    main.querySelector('#sim').addEventListener('click', () => simulador(A.preguntas.filter(p => p.activa !== false && (p.opciones || []).some(o => Object.keys(o.puntos || {}).length))));
+    main.querySelector('#sim').addEventListener('click', () => simulador());
   }
   function bloqueSeccion(sec, si) {
     const card = document.createElement('div'); card.className = 'card stack';
     const preguntas = A.preguntas.filter(p => p.seccion === sec.id);
-    card.innerHTML = '<div class="row-between"><div class="stack-sm" style="gap:2px"><span class="eyebrow">Página ' + (si + 2) + '</span><h2>' + esc(sec.titulo) + '</h2>' + (sec.descripcion ? '<span class="small muted">' + esc(sec.descripcion) + '</span>' : '') + '</div>' +
+    const cond = sec.condicion ? '<span class="pill pill-brand" style="align-self:flex-start">Ruta · solo si ' + sec.condicion.celulas.map(nombreCel).map(esc).join(', ') + ' está' + (sec.condicion.celulas.length > 1 ? 'n' : '') + ' en el top ' + sec.condicion.top + '</span>' : '<span class="pill" style="align-self:flex-start">Todos la ven</span>';
+    card.innerHTML = '<div class="row-between"><div class="stack-sm" style="gap:4px"><span class="eyebrow">Sección ' + (si + 1) + '</span><h2>' + esc(sec.titulo) + '</h2>' + (sec.descripcion ? '<span class="small muted">' + esc(sec.descripcion) + '</span>' : '') + cond + '</div>' +
       '<div class="row"><button class="icon-btn" data-smv="-1" aria-label="Subir sección"' + (si === 0 ? ' disabled' : '') + '>' + icon('up') + '</button><button class="icon-btn" data-smv="1" aria-label="Bajar sección"' + (si === A.secciones.length - 1 ? ' disabled' : '') + '>' + icon('down') + '</button>' +
       '<button class="btn btn-secondary btn-sm" data-sed>' + icon('edit') + 'Editar</button></div></div><div class="stack-sm" data-lista></div>' +
       '<div><button class="btn btn-ghost btn-sm" data-nq>' + icon('plus') + 'Nueva pregunta en esta sección</button></div>';
@@ -447,19 +450,31 @@
     w.innerHTML = '<form class="modal" role="dialog" aria-modal="true" novalidate><h2>' + (nueva ? 'Nueva sección' : 'Editar sección') + '</h2><div class="form-error" role="alert" hidden></div>' +
       '<div class="field"><label for="sc-t">Título</label><input class="input" id="sc-t" value="' + esc(sec.titulo) + '" placeholder="Ej. Conocimientos de pagos"></div>' +
       '<div class="field"><label for="sc-d">Descripción para el aspirante</label><textarea class="textarea" id="sc-d" style="min-height:80px">' + esc(sec.descripcion) + '</textarea></div>' +
+      '<div class="field"><span class="label">¿Quién ve esta sección?</span>' +
+      '<label class="switch"><input type="radio" name="sc-v" value="todos"' + (sec.condicion ? '' : ' checked') + '>Todos los aspirantes</label>' +
+      '<label class="switch"><input type="radio" name="sc-v" value="ruta"' + (sec.condicion ? ' checked' : '') + '>Solo si alguna de estas células va entre las que tienen más puntos</label>' +
+      '<div class="stack-sm" id="sc-ruta" style="padding-left:28px"' + (sec.condicion ? '' : ' hidden') + '><div class="row">' + A.celulas.map(c => '<label class="switch small"><input type="checkbox" data-sc-cel value="' + esc(c.id) + '"' + (sec.condicion && sec.condicion.celulas.includes(c.id) ? ' checked' : '') + '>' + esc(c.nombre) + '</label>').join('') + '</div>' +
+      '<label class="small row" style="gap:8px">Entre las <select class="select" id="sc-top" style="width:auto;min-height:34px;padding:4px 8px">' + [1, 2, 3, 4, 5].map(n => '<option' + ((sec.condicion ? sec.condicion.top : 2) === n ? ' selected' : '') + '>' + n + '</option>').join('') + '</select> células con más puntos hasta esta sección</label>' +
+      '<span class="hint">Cuentan los puntos de las preguntas de perfil (sin respuesta correcta) de las secciones anteriores. Las secciones con ruta que van seguidas y con el mismo número se deciden juntas.</span></div></div>' +
       '<div class="modal-actions" style="justify-content:space-between">' + (nueva ? '<span></span>' : '<button type="button" class="btn btn-danger btn-sm" id="sc-del">' + icon('trash') + 'Eliminar sección</button>') +
       '<div class="row"><button type="button" class="btn btn-secondary" data-x>Cancelar</button><button class="btn btn-primary" type="submit">Guardar</button></div></div></form>';
     w.addEventListener('click', e => { if (e.target === w || e.target.closest('[data-x]')) w.remove(); });
     document.body.appendChild(w);
     const f = w.querySelector('form'), er = f.querySelector('.form-error');
     f.querySelector('#sc-t').focus();
+    f.querySelectorAll('[name="sc-v"]').forEach(r => r.addEventListener('change', () => { f.querySelector('#sc-ruta').hidden = f.querySelector('[name="sc-v"]:checked').value !== 'ruta'; }));
     const guardar = async lista => {
       try { await call('guardarSecciones', { secciones: lista }); w.remove(); toast('Sección guardada'); tabTest(); }
       catch (x) { er.hidden = false; er.textContent = x.message; }
     };
     f.addEventListener('submit', e => {
       e.preventDefault();
-      const datos = { titulo: f.querySelector('#sc-t').value, descripcion: f.querySelector('#sc-d').value };
+      const datos = { titulo: f.querySelector('#sc-t').value, descripcion: f.querySelector('#sc-d').value, condicion: null };
+      if (f.querySelector('[name="sc-v"]:checked').value === 'ruta') {
+        const celulas = [...f.querySelectorAll('[data-sc-cel]:checked')].map(x => x.value);
+        if (!celulas.length) { er.hidden = false; er.textContent = 'Marca al menos una célula o elige «Todos los aspirantes».'; return; }
+        datos.condicion = { celulas, top: Number(f.querySelector('#sc-top').value) };
+      }
       const id = nueva ? datos.titulo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) + '-' + Date.now().toString(36).slice(-3) : sec.id;
       guardar(nueva ? A.secciones.concat(Object.assign({ id }, datos)) : A.secciones.map(x => x.id === sec.id ? Object.assign({}, x, datos) : x));
     });
@@ -551,23 +566,33 @@
     pintar();
     return d;
   }
-  // Simula solo la parte que sugiere la célula (preguntas con puntos)
-  function simulador(preguntas) {
+  // Simula la ruta: responde las preguntas que suman puntos y mira qué secciones le tocarían y qué célula sale
+  function simulador() {
     const resp = {};
+    const todas = A.preguntas.filter(p => p.activa !== false);
+    const conPuntos = p => (p.opciones || []).some(o => Object.keys(o.puntos || {}).length);
     const w = document.createElement('div'); w.className = 'modal-wrap';
     const pintar = () => {
-      const r = H.calcularCelula(preguntas, resp, A.reglas);
+      const visibles = H.seccionesVisibles(A.secciones, todas, resp);
+      const enRuta = todas.filter(p => visibles.includes(p.seccion) && conPuntos(p));
+      const r = H.calcularCelula(enRuta, resp, A.reglas);
       const max = Math.max(1, ...r.ranking.map(x => x[1]));
-      w.innerHTML = '<div class="modal wide" role="dialog" aria-modal="true"><div class="row-between"><h2>Probar célula</h2><button class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
-        '<p class="small muted">Responde las preguntas que suman puntos y mira qué célula le tocaría a un aspirante. No se guarda nada.</p>' +
-        (preguntas.length ? '' : '<div class="notice">Ninguna pregunta activa suma puntos a una célula todavía.</div>') +
-        preguntas.map((p, i) => '<div class="stack-sm"><b>' + (i + 1) + '. ' + esc(p.texto) + '</b>' + (p.tipo === 'multiple'
-          ? '<div class="row">' + p.opciones.map((o, j) => '<label class="switch small"><input type="checkbox" data-m="' + esc(p._id) + '" value="' + j + '"' + ((resp[p._id] || []).includes(j) ? ' checked' : '') + '>' + esc(o.texto) + '</label>').join('') + '</div>'
-          : '<select class="select" data-q="' + esc(p._id) + '"><option value="">Elige una opción</option>' + p.opciones.map((o, j) => '<option value="' + j + '"' + (resp[p._id] === j ? ' selected' : '') + '>' + String.fromCharCode(65 + j) + '. ' + esc(o.texto) + '</option>').join('') + '</select>') + '</div>').join('') +
+      const secTitulo = id => (A.secciones.find(x => x.id === id) || {}).titulo || id;
+      w.innerHTML = '<div class="modal wide" role="dialog" aria-modal="true"><div class="row-between"><h2>Probar ruta</h2><button class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
+        '<p class="small muted">Responde como lo haría un aspirante. Solo aparecen las preguntas que suman puntos, y van apareciendo las secciones que le tocarían. No se guarda nada.</p>' +
+        '<div class="card card-tight stack-sm"><b class="small">Recorrido</b><div class="chips">' + A.secciones.filter(x => todas.some(p => p.seccion === x.id)).map(x => '<span class="chip"' + (visibles.includes(x.id) ? '' : ' style="opacity:.4;text-decoration:line-through"') + '>' + esc(x.titulo) + '</span>').join('') + '</div></div>' +
+        (enRuta.length ? '' : '<div class="notice">Ninguna pregunta activa suma puntos todavía.</div>') +
+        visibles.map(id => {
+          const ps = enRuta.filter(p => p.seccion === id);
+          if (!ps.length) return '';
+          return '<div class="stack-sm"><span class="eyebrow">' + esc(secTitulo(id)) + '</span>' + ps.map(p => '<div class="stack-sm"><b>' + esc(p.texto) + '</b>' + (p.tipo === 'multiple'
+            ? '<div class="row">' + p.opciones.map((o, j) => '<label class="switch small"><input type="checkbox" data-m="' + esc(p._id) + '" value="' + j + '"' + ((resp[p._id] || []).includes(j) ? ' checked' : '') + '>' + esc(o.texto) + '</label>').join('') + '</div>'
+            : '<select class="select" data-q="' + esc(p._id) + '"><option value="">Elige una opción</option>' + p.opciones.map((o, j) => '<option value="' + j + '"' + (resp[p._id] === j ? ' selected' : '') + '>' + String.fromCharCode(65 + j) + '. ' + esc(o.texto) + (o.correcta ? ' ✓' : '') + '</option>').join('') + '</select>') + '</div>').join('') + '</div>';
+        }).join('') +
         '<hr class="divider"><div class="stack-sm"><h3>Resultado</h3>' + (r.ranking.length ? r.ranking.map(([c, v]) => '<div class="hbar"><span>' + esc(nombreCel(c)) + '</span><div class="bar"><span style="width:' + Math.round(v * 100 / max) + '%"></span></div><span class="num small">' + v + '</span></div>').join('') : '<p class="small muted">Elige opciones para ver los puntos.</p>') +
         (r.ranking.length ? (r.celula ? '<div class="feedback ok">' + icon('check') + '<span class="body">Se sugeriría <b>' + esc(nombreCel(r.celula)) + '</b>.</span></div>' : '<div class="notice">Quedaría en revisión: ' + esc(r.motivo) + '.</div>') : '') + '</div></div>';
       const y = () => w.querySelector('.modal').scrollTop;
-      w.querySelectorAll('[data-q]').forEach(s => s.addEventListener('change', () => { const t = y(); if (s.value === '') delete resp[s.dataset.q]; else resp[s.dataset.q] = Number(s.value); pintar(); w.querySelector('.modal').scrollTop = t; }));
+      w.querySelectorAll('[data-q]').forEach(sl => sl.addEventListener('change', () => { const t = y(); if (sl.value === '') delete resp[sl.dataset.q]; else resp[sl.dataset.q] = Number(sl.value); pintar(); w.querySelector('.modal').scrollTop = t; }));
       w.querySelectorAll('[data-m]').forEach(c => c.addEventListener('change', () => { const t = y(); resp[c.dataset.m] = [...w.querySelectorAll('[data-m="' + CSS.escape(c.dataset.m) + '"]:checked')].map(x => Number(x.value)); pintar(); w.querySelector('.modal').scrollTop = t; }));
     };
     w.addEventListener('click', e => { if (e.target === w || e.target.closest('[data-x]')) w.remove(); });

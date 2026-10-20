@@ -169,6 +169,57 @@
       return doc;
   }
 
+  /* ---------- Rutas: secciones que se muestran según los puntos ----------
+     Una sección puede tener condicion = { celulas: ['SUPPLY', ...], top: 3 }:
+     solo se muestra si alguna de esas células está entre las "top" con más puntos,
+     contando SOLO las preguntas de perfil (con puntos, sin respuesta correcta) de las secciones visibles que vienen antes.
+     Así se arma el embudo: preguntas generales → área → casos de la célula. */
+  function normalizarCondicion(c) {
+    if (!c || !Array.isArray(c.celulas)) return null;
+    const celulas = [...new Set(c.celulas.map(x => limpiar(x, 40)).filter(Boolean))].slice(0, 12);
+    if (!celulas.length) return null;
+    return { celulas, top: Math.max(1, Math.min(10, Math.round(Number(c.top) || 2))) };
+  }
+  function cumpleCondicion(cond, puntajes) {
+    if (!cond) return true;
+    const ranking = Object.entries(puntajes).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    if (!ranking.length) return false;
+    const corte = (ranking[Math.min(cond.top, ranking.length) - 1] || [])[1];   // empates con el último puesto también entran
+    return ranking.some(([c, v]) => v >= corte && cond.celulas.includes(c));
+  }
+  function sumarPuntos(puntajes, p, respuesta) {
+    for (const idx of elegidas(respuesta)) {
+      const o = p.opciones && p.opciones[idx];
+      if (o) for (const [cel, v] of Object.entries(o.puntos || {})) puntajes[cel] = (puntajes[cel] || 0) + Number(v || 0);
+    }
+  }
+  const esDeRuta = p => (p.tipo === 'unica' || p.tipo === 'multiple' || !p.tipo) && (p.opciones || []).some(o => Object.keys(o.puntos || {}).length) && !(p.opciones || []).some(o => o.correcta);
+  // Devuelve los ids de las secciones que le tocan a esta persona según lo que ha respondido
+  function seccionesVisibles(secciones, preguntas, respuestas) {
+    const puntajes = {}, visibles = [];
+    let pendiente = false;   // si falta responder algo antes, las secciones con ruta todavía no se deciden
+    // Secciones con ruta seguidas y con el mismo "top" forman un bloque (ej. las 3 áreas, o los casos de cada célula):
+    // se deciden juntas con los puntos que había ANTES del bloque, para que una no le quite el lugar a la otra.
+    let bloque = null;
+    for (const sec of secciones) {
+      const suyas = preguntas.filter(p => p.seccion === sec.id);
+      if (!suyas.length) continue;
+      if (sec.condicion) {
+        if (!bloque || bloque.top !== sec.condicion.top) bloque = { top: sec.condicion.top, puntajes: Object.assign({}, puntajes), pendiente };
+        if (bloque.pendiente || !cumpleCondicion(sec.condicion, bloque.puntajes)) continue;
+      } else bloque = null;
+      visibles.push(sec.id);
+      // Solo mueven la ruta las preguntas de perfil (con puntos y sin respuesta correcta).
+      // Los casos evaluados suman a la célula final, pero no cambian qué secciones aparecen.
+      suyas.filter(esDeRuta).forEach(p => {
+        const v = respuestas[p._id];
+        if (p.obligatoria !== false && (v == null || v === '' || (typeof v === 'object' && !elegidas(v).length && !v.otro))) pendiente = true;
+        sumarPuntos(puntajes, p, v);
+      });
+    }
+    return visibles;
+  }
+
   /* ---------- Test de perfil ---------- */
   // Índices elegidos: una respuesta "unica" es un número; una "multiple" es { sel: [..], otro: '' }
   const elegidas = v => v == null || v === '' ? [] : Array.isArray(v) ? v : (typeof v === 'object' ? (v.sel || []) : [v]);
@@ -349,11 +400,17 @@
       const usadas = new Set(preguntas.map(p => p.seccion));
       // Nunca se envían puntos, respuestas correctas ni filtros: solo lo que la persona necesita para responder
       return {
-        secciones: cfg.secciones.filter(s => usadas.has(s.id)).map(s => ({ id: s.id, titulo: s.titulo, descripcion: s.descripcion || '' })),
+        secciones: cfg.secciones.filter(s => usadas.has(s.id)).map(s => ({ id: s.id, titulo: s.titulo, descripcion: s.descripcion || '', condicional: !!s.condicion })),
         preguntas: preguntas.filter(p => cfg.secciones.some(s => s.id === p.seccion)).map(p => ({ _id: p._id, seccion: p.seccion, tipo: p.tipo || 'unica', texto: p.texto, ayuda: p.ayuda || '',
           obligatoria: p.obligatoria !== false, permiteOtro: !!p.permiteOtro, sinPegar: !!p.sinPegar,
           opciones: (p.opciones || []).map(o => o.texto), exclusivas: (p.opciones || []).map((o, i) => o.exclusiva ? i : -1).filter(i => i >= 0) }))
       };
+    },
+    // Qué secciones le tocan según lo respondido hasta ahora (los puntos nunca salen del servidor)
+    async ruta({ store, body }) {
+      const cfg = await cargarConfig(store);
+      const preguntas = (await store.find('preguntas', {})).filter(p => p.activa !== false);
+      return { visibles: seccionesVisibles(cfg.secciones, preguntas, (body.respuestas && typeof body.respuestas === 'object') ? body.respuestas : {}) };
     },
     async verificarCedula({ store, body }) {
       const cedula = limpiarCedula(body.cedula);
@@ -373,11 +430,14 @@
       const id = 'asp-' + cedula;
       if (await store.get('aspirantes', id)) throw err(409, 'Ya existe una postulación con esta cédula.');
       const preguntas = ordenarPreguntas((await store.find('preguntas', {})).filter(p => p.activa !== false && cfg.secciones.some(s => s.id === p.seccion)), cfg.secciones);
-      const r = evaluarPostulacion(preguntas, cfg.secciones, (body.respuestas && typeof body.respuestas === 'object') ? body.respuestas : {}, cfg.reglas);
+      const entrada = (body.respuestas && typeof body.respuestas === 'object') ? body.respuestas : {};
+      const visibles = seccionesVisibles(cfg.secciones, preguntas, entrada);   // las secciones que no le tocaron no se exigen ni se cuentan
+      const r = evaluarPostulacion(preguntas.filter(p => visibles.includes(p.seccion)), cfg.secciones, entrada, cfg.reglas);
+      r.recorrido = visibles;
       const asp = { _id: id, cedula, nombre, edad, email: limpiar(d.email, 120), telefono: limpiar(d.telefono, 30), ciudad: limpiar(d.ciudad, 60),
         estado: r.descartes.length ? 'descartado' : 'postulado', creado: ahora(), ultimoAcceso: ahora(), cohorte: null, celula: r.celula, progreso: {}, examenes: {},
         test: { version: 2, fecha: ahora(), respuestas: r.respuestas, puntajes: r.puntajes, ranking: r.ranking, estado: r.estado, motivo: r.motivo, celulaSugerida: r.celula,
-          evaluacion: r.evaluacion, alertas: r.alertas, descartes: r.descartes } };
+          evaluacion: r.evaluacion, alertas: r.alertas, descartes: r.descartes, recorrido: r.recorrido } };
       if (r.descartes.length) asp.motivoDescarte = 'Descarte automático: ' + r.descartes.join(' · ');
       await store.put('aspirantes', asp);
       return { ok: true, nombre };     // la persona no ve su nota ni su célula: eso lo revisa el equipo
@@ -624,7 +684,8 @@
         if (!titulo) throw err(400, 'Cada sección necesita un título.');
         if (vistas.has(id)) throw err(400, 'Hay dos secciones con el mismo código.');
         vistas.add(id);
-        return { id, titulo, descripcion: limpiar(x.descripcion, 400) };
+        const condicion = normalizarCondicion(x.condicion);
+        return Object.assign({ id, titulo, descripcion: limpiar(x.descripcion, 400) }, condicion ? { condicion } : {});
       });
       const preguntas = await store.find('preguntas', {});
       const quitada = cfg.secciones.find(s => !vistas.has(s.id) && preguntas.some(p => p.seccion === s.id));
@@ -656,7 +717,7 @@
       if (a.formato !== FORMATO_ARCHIVO) throw err(400, 'Este archivo no es un formulario de Ridery Academy.');
       const modo = body.modo === 'reemplazar' ? 'reemplazar' : 'agregar';
       const secsArchivo = (Array.isArray(a.secciones) ? a.secciones : []).slice(0, 40)
-        .map(x => ({ id: limpiar(x.id, 40).toLowerCase().replace(/[^a-z0-9-]/g, '-'), titulo: limpiar(x.titulo, 80), descripcion: limpiar(x.descripcion, 400) }))
+        .map(x => { const condicion = normalizarCondicion(x.condicion); return Object.assign({ id: limpiar(x.id, 40).toLowerCase().replace(/[^a-z0-9-]/g, '-'), titulo: limpiar(x.titulo, 80), descripcion: limpiar(x.descripcion, 400) }, condicion ? { condicion } : {}); })
         .filter(x => x.id && x.titulo);
       const enArchivo = new Set(secsArchivo.map(x => x.id));
       const secciones = modo === 'reemplazar' ? secsArchivo : secsArchivo.concat(cfg.secciones.filter(x => !enArchivo.has(x.id)));
@@ -914,6 +975,6 @@
     return tabla[accion](ctx);
   }
 
-  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, TIPOS, FORMATO_ARCHIVO, elegidas, ordenarPreguntas, evaluarPostulacion, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, iniciarSesion, vistaAspirante, estadoDe, PERFILES, ejecutar };
+  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, TIPOS, FORMATO_ARCHIVO, elegidas, seccionesVisibles, cumpleCondicion, ordenarPreguntas, evaluarPostulacion, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, iniciarSesion, vistaAspirante, estadoDe, PERFILES, ejecutar };
   if (typeof module !== 'undefined' && module.exports) module.exports = H; else root.ElxHandlers = H;
 })(typeof window !== 'undefined' ? window : globalThis);
