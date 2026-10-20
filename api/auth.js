@@ -1,36 +1,57 @@
-// POST /api/auth  { accion: 'login' | 'aspirante' | 'admin' | acciones públicas de Postúlate (test, verificarCedula, postular) }
+/* ============================================================
+   api/auth.js · Puerta pública  →  POST /api/auth  { accion, ... }
+   ------------------------------------------------------------
+   No pide token. Atiende:
+   - login: "Inicia sesión" único (equipo del panel o aspirante)
+   - test, verificarCedula, postular: el flujo "Postúlate"
+   Todo pasa por los frenos de lib/seguridad.js.
+   ============================================================ */
 const H = require('../js/handlers.js');
 const store = require('../lib/store');
-const { firmar, iguales, responder, manejarError, cripto } = require('../lib/auth');
+const { firmar, iguales, versionPrincipal, responder, manejarError, cripto } = require('../lib/auth');
+const seg = require('../lib/seguridad');
+
+const PUBLICAS = ['test', 'verificarCedula', 'postular'];
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return responder(res, 405, { error: 'Método no permitido' });
   try {
-    const body = req.body || {};
-    if (body.accion === 'login') {
-      // Un solo "Inicia sesión": devuelve tipo 'admin' (va al panel) o 'aspirante' (va a la formación)
-      const principal = (u, c) => !!(process.env.ADMIN_USER && process.env.ADMIN_PASS && iguales(u, process.env.ADMIN_USER) && iguales(c, process.env.ADMIN_PASS));
-      const r = await H.iniciarSesion(store, body, cripto, principal);
-      return responder(res, 200, r.tipo === 'admin'
-        ? { tipo: 'admin', token: firmar(r.sesion, 1), usuario: r.sesion.usuario }
-        : { tipo: 'aspirante', token: firmar(r.sesion, 30), aspirante: H.vistaAspirante(r.aspirante) });
-    }
-    if (body.accion === 'aspirante') {
-      const asp = await H.loginAspirante(store, body, cripto);
-      return responder(res, 200, { token: firmar({ rol: 'aspirante', id: asp._id }, 30), aspirante: H.vistaAspirante(asp) });
-    }
-    if (body.accion === 'admin') {
-      // 1) Cuenta principal (variables de Vercel)
-      const okUser = iguales(body.usuario || '', process.env.ADMIN_USER || '');
-      const okPass = iguales(body.clave || '', process.env.ADMIN_PASS || '');
-      if (process.env.ADMIN_USER && process.env.ADMIN_PASS && okUser && okPass) {
-        return responder(res, 200, { token: firmar({ rol: 'admin', usuario: body.usuario }, 1), usuario: body.usuario });
-      }
-      // 2) Cuentas creadas en el panel (sección Usuarios)
-      const u = await H.loginAdmin(store, body, cripto);
-      return responder(res, 200, { token: firmar(u, 1), usuario: u.usuario });
-    }
+    const body = (req.body && typeof req.body === 'object') ? req.body : {};
+    const ip = seg.ipDe(req);
+
+    if (body.accion === 'login') return await login(req, res, body, ip);
+
+    if (!PUBLICAS.includes(body.accion)) return responder(res, 400, { error: 'Acción desconocida.' });
+    await seg.frenar(body.accion, ip);
     const data = await H.ejecutar('publico', body.accion, { store, body });
     responder(res, 200, data);
   } catch (e) { manejarError(res, e); }
 };
+
+async function login(req, res, body, ip) {
+  const usuario = String(body.usuario || '').trim().toLowerCase().slice(0, 40);
+  await seg.revisar('loginIp', ip);
+  if (usuario) await seg.revisar('loginUsuario', usuario);
+
+  const esPrincipal = (u, c) => !!(process.env.ADMIN_USER && process.env.ADMIN_PASS && iguales(u, process.env.ADMIN_USER) && iguales(c, process.env.ADMIN_PASS));
+  let r;
+  try {
+    r = await H.iniciarSesion(store, body, cripto, esPrincipal);
+  } catch (e) {
+    if (e.status === 401) {                               // clave o usuario equivocados: cuenta el intento
+      await seg.sumar('loginIp', ip);
+      const c = usuario ? await seg.sumar('loginUsuario', usuario) : null;
+      await seg.anotar({ tipo: 'login-fallido', usuario, ip });
+      if (c && c.n === seg.REGLAS.loginUsuario.max) await seg.anotar({ tipo: 'bloqueo', usuario, ip, detalle: 'Usuario bloqueado ' + seg.REGLAS.loginUsuario.min + ' min por claves erradas' });
+    }
+    throw e;
+  }
+  if (usuario) await seg.limpiar('loginUsuario', usuario);
+
+  if (r.tipo === 'admin') {
+    const sesion = r.sesion.cuenta ? r.sesion : Object.assign({}, r.sesion, { v: versionPrincipal() });
+    await seg.anotar({ tipo: 'login', usuario: sesion.usuario, perfil: sesion.perfil || 'admin', ip });
+    return responder(res, 200, { tipo: 'admin', token: firmar(sesion), usuario: sesion.usuario });
+  }
+  return responder(res, 200, { tipo: 'aspirante', token: firmar(r.sesion), aspirante: H.vistaAspirante(r.aspirante) });
+}

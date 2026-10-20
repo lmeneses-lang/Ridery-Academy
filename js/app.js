@@ -1,5 +1,5 @@
 /* ============================================================
-   Formación CX · aplicación del aspirante
+   Ridery Academy · aplicación del aspirante
    Inicio: Postúlate (datos + test → célula sugerida, fin) o
    Inicia sesión (aspirante aprobado o equipo del panel) → ruta (tronco común + célula)
    → lecciones (video, texto, imágenes) → examen → certificado

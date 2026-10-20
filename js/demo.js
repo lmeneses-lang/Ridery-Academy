@@ -1,5 +1,5 @@
 /* ============================================================
-   Formación CX · MODO DEMO
+   Ridery Academy · MODO DEMO
    Simula el backend dentro del navegador (sin MongoDB ni Vercel).
    Se activa con ?demo=1 en la URL o si window.ELX_DEMO = true.
    En producción no hace nada.
@@ -79,24 +79,13 @@
           return r.tipo === 'admin' ? { tipo: 'admin', token: firmar(r.sesion), usuario: r.sesion.usuario }
             : { tipo: 'aspirante', token: firmar(r.sesion), aspirante: H.vistaAspirante(r.aspirante) };
         }
-        if (body.accion === 'aspirante') {
-          const asp = await H.loginAspirante(store, body, cripto);
-          return { token: firmar({ rol: 'aspirante', id: asp._id }), aspirante: H.vistaAspirante(asp) };
-        }
-        if (body.accion === 'admin') {
-          if (!body.usuario || !body.clave) throw H.err(401, 'Usuario o clave incorrectos.');
-          // Si el usuario existe en "Usuarios", se valida su clave y rol; si no, entra como cuenta principal (solo en la demo)
-          if (await store.get('usuarios', String(body.usuario).trim().toLowerCase())) {
-            const u = await H.loginAdmin(store, body, cripto);
-            return { token: firmar(u), usuario: u.usuario };
-          }
-          return { token: firmar({ rol: 'admin', usuario: body.usuario }), usuario: body.usuario };
-        }
         return copia(await H.ejecutar('publico', body.accion, { store, body }));
       }
       const user = sesion(token);
       if (!user || user.rol !== fn) throw H.err(401, 'Tu sesión expiró. Vuelve a entrar.');
-      return copia(await H.ejecutar(fn, body.accion, { store, user, body, cripto }));
+      const data = copia(await H.ejecutar(fn, body.accion, { store, user, body, cripto }));
+      if (body.accion === 'cambiarMiClave' && data.v) { data.token = firmar(Object.assign({}, user, { v: data.v })); delete data.v; }
+      return data;
     } catch (e) {
       if (e.status === 401 && fn !== 'auth') window.Elx.API.salir(fn === 'admin' ? 'admin' : 'asp');
       throw e;

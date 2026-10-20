@@ -1,5 +1,5 @@
 /* ============================================================
-   Formación CX · panel de administración
+   Ridery Academy · panel de administración
    ============================================================ */
 (function () {
   'use strict';
@@ -160,7 +160,7 @@
   // Campos de acceso del aspirante (usuario + contraseña con botón Generar)
   function camposAcceso(pref, usuario, nueva) {
     return '<div class="two"><div class="field"><label for="' + pref + '-usr">Usuario</label><input class="input" id="' + pref + '-usr" value="' + esc(usuario || '') + '" autocomplete="off" autocapitalize="none" spellcheck="false"><span class="hint">Sin espacios. Por defecto, su cédula.</span></div>' +
-      '<div class="field"><label for="' + pref + '-pass">' + (nueva ? 'Contraseña' : 'Nueva contraseña (opcional)') + '</label><div class="row" style="flex-wrap:nowrap"><input class="input" id="' + pref + '-pass" autocomplete="new-password" placeholder="' + (nueva ? 'Mínimo 6 caracteres' : 'Déjala vacía para no cambiarla') + '">' +
+      '<div class="field"><label for="' + pref + '-pass">' + (nueva ? 'Contraseña' : 'Nueva contraseña (opcional)') + '</label><div class="row" style="flex-wrap:nowrap"><input class="input" id="' + pref + '-pass" autocomplete="new-password" placeholder="' + (nueva ? 'Mínimo 8 caracteres' : 'Déjala vacía para no cambiarla') + '">' +
       '<button type="button" class="btn btn-secondary" data-gen="' + pref + '">Generar</button></div></div></div>';
   }
   function enlazarGenerar(raiz) {
@@ -218,7 +218,7 @@
     const f = w.querySelector('form'); f.querySelector('#mc-a').focus();
     f.addEventListener('submit', async e => {
       e.preventDefault();
-      try { await call('cambiarMiClave', { actual: f.querySelector('#mc-a').value, nueva: f.querySelector('#mc-n').value }); w.remove(); toast('Clave actualizada'); }
+      try { const r = await call('cambiarMiClave', { actual: f.querySelector('#mc-a').value, nueva: f.querySelector('#mc-n').value }); if (r.token) API.guardarToken('admin', r.token); w.remove(); toast('Clave actualizada. Se cerró tu sesión en otros dispositivos.'); }
       catch (x) { const er = f.querySelector('.form-error'); er.hidden = false; er.textContent = x.message; }
     });
   }
@@ -734,6 +734,35 @@
         : '<div class="card empty">' + icon('users') + '<p>Todavía no hay usuarios. Crea uno para cada persona que vaya a usar el panel.</p></div>');
     main.querySelector('#nu').addEventListener('click', () => modalUsuario(null));
     main.querySelectorAll('[data-ed]').forEach(b => b.addEventListener('click', () => modalUsuario(us.find(u => u.usuario === b.dataset.ed))));
+    pintarActividad();
+  }
+
+  /* ---------- Actividad reciente (bitácora de seguridad) ---------- */
+  const ACCION_NOMBRE = {
+    aprobar: 'Aprobó postulación', cambiarEstado: 'Cambió estado', crearAspirante: 'Agregó aspirante', guardarAcceso: 'Cambió acceso de aspirante',
+    reiniciarIntentos: 'Reinició intentos', eliminarAspirante: 'Eliminó aspirante', guardarPregunta: 'Editó pregunta del test', ordenarPreguntas: 'Reordenó el test',
+    eliminarPregunta: 'Eliminó pregunta del test', guardarModulo: 'Editó módulo', ordenarModulos: 'Reordenó módulos', eliminarModulo: 'Eliminó módulo',
+    guardarCohorte: 'Editó cohorte', guardarConfig: 'Cambió ajustes', guardarUsuario: 'Creó o editó usuario', eliminarUsuario: 'Eliminó usuario',
+    guardarBoost: 'Cambió Boost', chatEliminar: 'Eliminó chat', cambiarMiClave: 'Cambió su clave'
+  };
+  function textoEvento(e) {
+    if (e.tipo === 'login') return '<span class="pill pill-ok">Entró al panel</span>';
+    if (e.tipo === 'login-fallido') return '<span class="pill">Clave errada</span>';
+    if (e.tipo === 'bloqueo') return '<span class="pill pill-bad">Bloqueado 15 min</span>';
+    return esc(ACCION_NOMBRE[e.accion] || e.accion);
+  }
+  async function pintarActividad() {
+    const zona = document.createElement('div'); zona.className = 'card stack'; zona.id = 'actividad';
+    zona.innerHTML = '<div class="row-between"><h2>Actividad reciente</h2><span class="small muted">Quién entró y qué cambió en el panel. Se guarda 180 días.</span></div><div class="loading"><div class="spinner"></div></div>';
+    main.appendChild(zona);
+    let ev;
+    try { ev = (await call('auditoria')).eventos; } catch (e) { zona.querySelector('.loading').outerHTML = '<p class="small muted">' + esc(e.message) + '</p>'; return; }
+    if (A.tab !== 'usuarios') return;
+    zona.querySelector('.loading').outerHTML = ev.length
+      ? '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Quién</th><th>Qué</th><th>Sobre</th><th>IP</th></tr></thead><tbody>' +
+        ev.map(e => '<tr><td class="small muted">' + fechaHora(e.fecha) + '</td><td class="num">' + (e.usuario ? '@' + esc(e.usuario) : '—') + '</td><td>' + textoEvento(e) + '</td>' +
+          '<td class="small">' + esc(e.objetivo || e.detalle) + '</td><td class="small muted num">' + esc(e.ip) + '</td></tr>').join('') + '</tbody></table></div>'
+      : '<p class="small muted">Todavía no hay actividad registrada.</p>';
   }
   function claveAleatoria() {
     const c = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const a = new Uint32Array(12); crypto.getRandomValues(a);

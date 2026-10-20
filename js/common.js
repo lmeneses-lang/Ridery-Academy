@@ -1,5 +1,5 @@
 /* ============================================================
-   Formación CX · utilidades compartidas del navegador
+   Ridery Academy · utilidades compartidas del navegador
    ============================================================ */
 (function () {
   'use strict';

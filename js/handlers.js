@@ -1,5 +1,5 @@
 /* ============================================================
-   Formación CX · Lógica compartida
+   Ridery Academy · Lógica compartida
    La usan las funciones de /api (Node, MongoDB) y el modo demo
    del navegador. No contiene secretos.
    "store" es un adaptador con: get(col,id) · find(col,filtro)
@@ -261,7 +261,7 @@
     if (await store.get('usuarios', usuario)) throw err(409, 'El usuario «' + usuario + '» ya es una cuenta del panel. Elige otro.');
     asp.usuario = usuario;
     if (clave) {
-      if (String(clave).length < 6) throw err(400, 'La contraseña debe tener al menos 6 caracteres.');
+      if (String(clave).length < 8) throw err(400, 'La contraseña debe tener al menos 8 caracteres.');
       asp.hash = await cripto.hash(String(clave));
       asp.claveFecha = ahora();
     } else if (!asp.hash) throw err(400, 'Escribe o genera una contraseña para el aspirante.');
@@ -275,6 +275,7 @@
   async function requerirAspirante(store, user) {
     const asp = user && await store.get('aspirantes', user.id);
     if (!asp || estadoDe(asp) !== 'aprobado') throw err(401, 'Tu sesión expiró. Vuelve a entrar.');
+    if ((asp.claveFecha || null) !== (user.v || null)) throw err(401, 'Tu contraseña cambió. Vuelve a entrar con la nueva.');
     return asp;
   }
 
@@ -663,6 +664,7 @@
       if (u.clave) {
         if (String(u.clave).length < 8) throw err(400, 'La clave debe tener al menos 8 caracteres.');
         doc.hash = await cripto.hash(String(u.clave));
+        doc.claveFecha = ahora();                 // cierra las sesiones abiertas con la clave anterior
       } else if (!previo) throw err(400, 'Escribe una clave para el usuario nuevo.');
       await store.put('usuarios', doc);
       return { usuario: vistaUsuario(doc) };
@@ -725,9 +727,16 @@
       const u = await store.get('usuarios', user.cuenta);
       if (!u || !(await cripto.verificar(String(body.actual || ''), u.hash))) throw err(400, 'Tu clave actual no es correcta.');
       if (String(body.nueva || '').length < 8) throw err(400, 'La clave nueva debe tener al menos 8 caracteres.');
-      u.hash = await cripto.hash(String(body.nueva)); u.actualizado = ahora();
+      u.hash = await cripto.hash(String(body.nueva)); u.actualizado = ahora(); u.claveFecha = ahora();
       await store.put('usuarios', u);
-      return { ok: true };
+      return { ok: true, v: u.claveFecha };      // el servidor entrega un token nuevo con esta versión
+    },
+
+    /* ----- Bitácora de seguridad (solo Admin) ----- */
+    async auditoria({ store }) {
+      const ev = await store.find('auditoria', {});
+      return { eventos: ev.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).slice(0, 300)
+        .map(e => ({ fecha: e.fecha, tipo: e.tipo, accion: e.accion || '', usuario: e.usuario || '', perfil: e.perfil || '', objetivo: e.objetivo || '', detalle: e.detalle || '', ip: e.ip || '' })) };
     }
   };
 
@@ -748,7 +757,7 @@
     if (esPrincipal(String(body.usuario || '').trim(), clave)) return { tipo: 'admin', sesion: { rol: 'admin', usuario: String(body.usuario).trim() } };
     if (await store.get('usuarios', usuario)) return { tipo: 'admin', sesion: await loginAdmin(store, body, cripto) };
     const asp = await loginAspirante(store, body, cripto);
-    return { tipo: 'aspirante', sesion: { rol: 'aspirante', id: asp._id }, aspirante: asp };
+    return { tipo: 'aspirante', sesion: { rol: 'aspirante', id: asp._id, v: asp.claveFecha || null }, aspirante: asp };
   }
 
   // Login de cuentas creadas en el panel (la cuenta principal se valida aparte, con ADMIN_USER / ADMIN_PASS)
@@ -758,7 +767,7 @@
     if (!u || u.activo === false || !(await cripto.verificar(String(body.clave || ''), u.hash))) throw err(401, 'Usuario o contraseña incorrectos.');
     u.ultimoAcceso = ahora();
     await store.put('usuarios', u);
-    return { rol: 'admin', usuario: u._id, nombre: u.nombre, perfil: u.perfil, cuenta: u._id };
+    return { rol: 'admin', usuario: u._id, nombre: u.nombre, perfil: u.perfil, cuenta: u._id, v: u.claveFecha || null };
   }
 
   /* ---------- Despachador ---------- */
@@ -770,6 +779,7 @@
       if (user.cuenta) {                       // cuenta del panel: se revalida en cada llamada (rol actual, activa)
         const u = await ctx.store.get('usuarios', user.cuenta);
         if (!u || u.activo === false) throw err(401, 'Tu acceso al panel fue desactivado.');
+        if ((u.claveFecha || null) !== (user.v || null)) throw err(401, 'Tu clave cambió. Vuelve a entrar con la nueva.');
         ctx.user = Object.assign({}, user, { perfil: u.perfil, nombre: u.nombre });
       } else {
         ctx.user = Object.assign({}, user, { perfil: 'admin', principal: true });
