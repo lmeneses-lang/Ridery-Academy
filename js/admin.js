@@ -9,13 +9,13 @@
   const call = (accion, data) => API.llamar('admin', 'admin', accion, data);
   const A = { usuario: null, celulas: [], reglas: {}, cohortes: [], tab: 'aspirantes', filtros: { q: '', cohorte: '', celula: '', estado: 'postulado' }, celContenido: H.COMUN, aspirantes: [] };
   const TABS = [
-    ['aspirantes', 'Postulaciones', 'users'], ['assessment', 'Assessment', 'chat'], ['test', 'Formulario', 'list'], ['contenido', 'Contenido', 'book'],
+    ['aspirantes', 'Postulaciones', 'users'], ['assessment', 'Assessment', 'chat'], ['simulador', 'Simulador', 'play'], ['test', 'Formulario', 'list'], ['contenido', 'Contenido', 'book'],
     ['boost', 'Boost', 'bolt'], ['metricas', 'Métricas', 'chart'], ['usuarios', 'Usuarios', 'lock'], ['ajustes', 'Ajustes', 'gear']
   ];
   // Qué ve cada rol en el menú (el servidor también valida cada acción)
-  const TABS_ROL = { admin: TABS.map(t => t[0]), reclutador: ['aspirantes', 'assessment', 'metricas'], calidad: ['aspirantes', 'assessment', 'metricas'] };
+  const TABS_ROL = { admin: TABS.map(t => t[0]), reclutador: ['aspirantes', 'assessment', 'simulador', 'metricas'], calidad: ['aspirantes', 'assessment', 'simulador', 'metricas'] };
   const ROL_NOMBRE = { admin: 'Admin', reclutador: 'Reclutador', calidad: 'Calidad' };
-  const ROL_TEXTO = { admin: 'Todo el panel: contenido, test, ajustes y usuarios.', reclutador: 'Postulaciones: aprobar, descartar, agregar aspirantes y darles acceso. Chat de Assessment y métricas.', calidad: 'Ver postulaciones, aspirantes y métricas, y responder en Assessment. No puede editar.' };
+  const ROL_TEXTO = { admin: 'Todo el panel: contenido, test, ajustes y usuarios.', reclutador: 'Postulaciones: aprobar, descartar, agregar aspirantes y darles acceso. Chat de Assessment, Simulador y métricas.', calidad: 'Ver postulaciones, aspirantes y métricas, responder en Assessment y calificar el Simulador. No puede editar.' };
   const puede = (...roles) => roles.includes(A.yo && A.yo.perfil);
   const nombreCel = id => id === H.COMUN ? 'Tronco común' : ((A.celulas.find(c => c.id === id) || {}).nombre || id || '—');
   const opcionesCel = (sel, extra) => (extra || '') + A.celulas.map(c => '<option value="' + esc(c.id) + '"' + (c.id === sel ? ' selected' : '') + '>' + esc(c.nombre) + '</option>').join('');
@@ -91,7 +91,7 @@
     A.tab = tab;
     app.querySelectorAll('[data-tab]').forEach(b => { b.classList.toggle('active', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
     main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-    ({ aspirantes: tabAspirantes, assessment: tabAssessment, test: tabTest, contenido: tabContenido, boost: tabBoost, metricas: tabMetricas, usuarios: tabUsuarios, ajustes: tabAjustes })[tab](extra);
+    ({ aspirantes: tabAspirantes, assessment: tabAssessment, simulador: tabSimulador, test: tabTest, contenido: tabContenido, boost: tabBoost, metricas: tabMetricas, usuarios: tabUsuarios, ajustes: tabAjustes })[tab](extra);
   }
   function pintarBadge(n) {
     A.noLeidos = n;
@@ -915,6 +915,114 @@
           duraciones: [...main.querySelectorAll('[data-dur]:checked')].map(x => Number(x.dataset.dur)), textos: textos() } });
         toast('Boost guardado');
       } catch (e) { manejar(e); }
+    });
+  }
+
+  /* ============ Simulador de tickets ============ */
+  const V_PILL = { buena: '<span class="pill pill-ok">Buena</span>', regular: '<span class="pill pill-warn">Regular</span>', mala: '<span class="pill pill-bad">Mala</span>', pendiente: '<span class="pill pill-brand">Por revisar</span>' };
+  const mmss = s => s == null ? '—' : Math.floor(s / 60) + ':' + String(Math.round(s) % 60).padStart(2, '0');
+  async function tabSimulador() {
+    let r;
+    try { r = await call('simResultados'); } catch (e) { return manejar(e); }
+    if (A.tab !== 'simulador') return;
+    const c = r.config;
+    const porRevisar = r.filas.reduce((t, f) => t + f.pendientes, 0);
+    main.innerHTML = encabezado('Simulador de tickets', 'Bandeja tipo Zendesk + Panel de órdenes. Revisa cómo atendió cada aspirante y califica las respuestas escritas con «Otro».',
+      puede('admin') ? '<button class="btn btn-secondary" id="sm-conf">' + icon('gear') + 'Configurar</button>' : '') +
+      '<div class="stats sim-stats"><div class="stat"><span class="small muted">Simulaciones</span><b>' + r.filas.length + '</b></div><div class="stat"><span class="small muted">Respuestas por revisar</span><b>' + porRevisar + '</b></div>' +
+      '<div class="stat"><span class="small muted">Tickets · órdenes</span><b>' + c.tickets + ' · ' + c.ordenes + '</b></div><div class="stat"><span class="small muted">Duración · intentos</span><b>' + c.minutos + ' min · ' + c.intentos + '</b></div></div>' +
+      (c.activo ? '' : '<div class="notice">El simulador está desactivado: los aspirantes no lo ven.</div>') +
+      (r.filas.length ? '<div class="table-wrap"><table><thead><tr><th>Aspirante</th><th>Fecha</th><th>Estado</th><th>Nota</th><th>Tickets</th><th>1.ª respuesta</th><th>Panel</th><th>«Otro»</th></tr></thead><tbody>' +
+        r.filas.map(f => '<tr class="clickable" data-id="' + esc(f.id) + '" data-s="' + esc(f.sesion) + '" tabindex="0"><td><b>' + esc(f.nombre) + '</b><div class="small muted">' + esc(nombreCel(f.celula)) + '</div></td><td class="small">' + fechaHora(f.inicio) + '</td>' +
+          '<td>' + (f.estado === 'terminada' ? '<span class="pill">Terminada</span>' : '<span class="pill pill-brand">En curso</span>') + '</td><td class="num"><b>' + f.nota + '%</b>' + (f.pendientes ? '<div class="small muted">provisional</div>' : '') + '</td>' +
+          '<td class="num">' + f.resueltos + '/' + f.total + '</td><td class="num">' + mmss(f.primeraPromedio) + '</td>' +
+          '<td class="small">' + (f.malas ? '<span class="pill pill-bad">' + f.malas + ' malas</span> ' : '') + (f.sinGestion ? '<span class="pill pill-warn">' + f.sinGestion + ' sin gestión</span>' : (f.malas ? '' : '<span class="pill pill-ok">Bien</span>')) + '</td>' +
+          '<td>' + (f.pendientes ? '<span class="pill pill-brand">' + f.pendientes + ' por revisar</span>' : '<span class="small muted">—</span>') + '</td></tr>').join('') + '</tbody></table></div>'
+        : '<div class="card empty">' + icon('chat') + '<p>Todavía nadie ha hecho la simulación. Los aspirantes la encuentran en su sección Assessment.</p></div>') +
+      '<div class="notice info">Cómo se califica: cada respuesta sugerida vale 2 (buena), 1 (regular) o 0 (mala); el motivo de contacto correcto suma 2 por ticket; en el panel, cada acción esperada vale 2. Las respuestas «Otro» no cuentan hasta que las revises.</div>';
+    main.querySelectorAll('tr[data-id]').forEach(tr => {
+      const ver = () => detalleSim(tr.dataset.id, tr.dataset.s);
+      tr.addEventListener('click', ver); tr.addEventListener('keydown', e => { if (e.key === 'Enter') ver(); });
+    });
+    const cf = main.querySelector('#sm-conf'); if (cf) cf.addEventListener('click', configSim);
+  }
+
+  async function detalleSim(id, sesion) {
+    let d;
+    try { d = await call('simDetalle', { id, sesion }); } catch (e) { return manejar(e); }
+    const s = d.sesion, rs = s.resumen;
+    const w = document.createElement('div'); w.className = 'modal-wrap';
+    const turno = (t, r) => '<div class="sim-turno"><div class="row-between"><span class="small muted">Turno ' + (r.paso + 1) + ' · ' + mmss(r.seg) + ' desde que llegó</span>' + (V_PILL[r.v] || '') + '</div>' +
+      '<p class="sim-resp' + (r.otro ? ' otro' : '') + '">' + (r.otro ? '<b>Escribió:</b> ' : '') + esc(r.t) + '</p>' +
+      (r.otro ? '<div class="row sim-cal"><span class="small muted">Califica:</span>' + ['buena', 'regular', 'mala'].map(v => '<button class="btn btn-sm ' + (r.v === v ? 'btn-primary' : 'btn-secondary') + '" data-cal="' + v + '" data-t="' + esc(t.id) + '" data-k="' + r.k + '">' + v[0].toUpperCase() + v.slice(1) + '</button>').join('') + '</div>' : '') +
+      '<details><summary class="small">Ver las opciones de este turno</summary><ul class="sim-ops">' + r.opciones.map(o => '<li>' + (V_PILL[o.v] || '') + ' ' + esc(o.t) + '</li>').join('') + '</ul></details></div>';
+    w.innerHTML = '<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="sm-t"><div class="row-between"><div><h2 id="sm-t">' + esc(d.aspirante.nombre) + '</h2><span class="small muted">' + esc(nombreCel(d.aspirante.celula)) + ' · ' + fechaHora(s.inicio) + (s.estado === 'terminada' ? '' : ' · en curso') + '</span></div><button class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
+      '<div class="cert-grid small"><div><span class="muted">Nota' + (rs.pendientes ? ' (provisional)' : '') + '</span><b class="num">' + rs.nota + '%</b></div><div><span class="muted">Tickets</span><b class="num">' + rs.tickets.pts + '/' + rs.tickets.max + ' pts · ' + rs.tickets.resueltos + '/' + rs.tickets.total + ' resueltos</b></div>' +
+      '<div><span class="muted">Panel de órdenes</span><b class="num">' + rs.ordenes.pts + '/' + rs.ordenes.max + ' pts</b></div><div><span class="muted">1.ª respuesta promedio</span><b class="num">' + mmss(rs.primeraPromedio) + '</b></div></div>' +
+      '<h3>Tickets</h3>' + d.tickets.map(t => '<details class="sim-ticket"' + (t.respuestas.some(r => r.v === 'pendiente') ? ' open' : '') + '><summary><span><b>#' + t.numero + ' · ' + esc(t.asunto) + '</b><span class="small muted"> — ' + esc(t.cliente) + '</span></span>' +
+        '<span class="row" style="gap:6px">' + (t.cerrado ? (t.motivoOk ? '<span class="pill pill-ok">Motivo correcto</span>' : '<span class="pill pill-bad">Motivo errado</span>') : '<span class="pill pill-warn">Sin resolver</span>') + '</span></summary>' +
+        '<div class="stack-sm" style="padding:10px 0"><p class="small">Motivo elegido: <b>' + esc(t.motivo || '—') + '</b> · correcto: <b>' + esc(t.motivoCorrecto) + '</b> · 1.ª respuesta: <b>' + mmss(t.primera) + '</b> · humor final del cliente: <b>' + esc(t.humor) + '</b></p>' +
+        (t.respuestas.length ? t.respuestas.map(r => turno(t, r)).join('') : '<p class="small muted">No respondió este ticket.</p>') +
+        '<details><summary class="small">Ver la conversación completa</summary><div class="sim-chat">' + t.chat.map(m => '<div class="' + (m.de === 'cliente' ? 'c' : 'a') + '"><b>' + (m.de === 'cliente' ? esc(t.cliente.split(' ')[0]) : 'Aspirante') + ':</b> ' + esc(m.t) + '</div>').join('') + '</div></details></div></details>').join('') +
+      '<h3>Panel de órdenes</h3>' + (d.ordenes.length ? '<div class="table-wrap"><table><thead><tr><th>Orden</th><th>Lo que hizo</th><th>Lo esperado</th></tr></thead><tbody>' + d.ordenes.map(o => '<tr><td><b class="num">' + esc(o.id) + '</b><div class="small muted">' + esc(o.comercio) + '</div></td>' +
+        '<td class="small">' + (o.acciones.length ? o.acciones.map(a => '<div>' + (a.v ? V_PILL[a.v] : '<span class="pill">Sin puntaje</span>') + ' ' + esc(a.accion) + ' <span class="muted">· min ' + Math.round(a.min) + '</span><div class="muted">' + esc(a.nota || '') + '</div></div>').join('') : '<span class="muted">Nada</span>') + '</td>' +
+        '<td class="small">' + (o.esperadas.length ? o.esperadas.map(x => '<div>' + (x.hecha ? '✅' : '❌') + ' ' + esc(x.accion) + '<div class="muted">' + esc(x.nota) + '</div></div>').join('') : '<span class="muted">Ninguna (orden de ticket o en tiempo)</span>') + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="small muted">Sin órdenes con reglas.</p>') +
+      '<p class="small muted">El minuto es del reloj acelerado del panel (×' + s.velocidad + ').</p>' +
+      '<div class="modal-actions" style="justify-content:space-between">' + (puede('admin', 'reclutador') ? '<button class="btn btn-secondary btn-sm" id="sm-otro">' + icon('refresh') + 'Darle otro intento</button>' : '<span></span>') + '<button class="btn btn-secondary" data-x>Cerrar</button></div></div>';
+    const cerrar = () => { w.remove(); document.removeEventListener('keydown', k); };
+    const k = e => { if (e.key === 'Escape' && !document.querySelector('.modal-wrap + .modal-wrap')) cerrar(); };
+    document.addEventListener('keydown', k);
+    w.addEventListener('click', e => { if (e.target === w || e.target.closest('[data-x]')) cerrar(); });
+    document.body.appendChild(w);
+    w.querySelectorAll('[data-cal]').forEach(b => b.addEventListener('click', async () => {
+      try {
+        await call('simCalificar', { id, sesion, ticket: b.dataset.t, k: Number(b.dataset.k), v: b.dataset.cal });
+        toast('Respuesta calificada'); cerrar(); if (A.tab === 'simulador') await tabSimulador(); detalleSim(id, sesion);
+      } catch (e) { manejar(e); }
+    }));
+    const otro = w.querySelector('#sm-otro');
+    if (otro) otro.addEventListener('click', async () => {
+      if (!await confirmar({ titulo: '¿Darle otro intento a ' + d.aspirante.nombre + '?', texto: 'Podrá hacer la simulación una vez más. Sus intentos anteriores se conservan.', ok: 'Dar otro intento' })) return;
+      try { await call('simReiniciar', { id }); toast('Listo: ya puede intentarlo de nuevo'); cerrar(); tabSimulador(); } catch (e) { manejar(e); }
+    });
+  }
+
+  async function configSim() {
+    let r;
+    try { r = await call('simConfig'); } catch (e) { return manejar(e); }
+    const c = r.simulador;
+    const w = document.createElement('div'); w.className = 'modal-wrap';
+    w.innerHTML = '<form class="modal" role="dialog" aria-modal="true" novalidate><div class="row-between"><h2>Configurar simulador</h2><button type="button" class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
+      '<div class="form-error" role="alert" hidden></div>' +
+      '<label class="switch"><input type="checkbox" id="sc-act"' + (c.activo ? ' checked' : '') + '>Visible para los aspirantes</label>' +
+      '<div class="two"><div class="field"><label for="sc-min">Duración (minutos)</label><input class="input num" type="number" id="sc-min" value="' + c.minutos + '"></div>' +
+      '<div class="field"><label for="sc-int">Intentos por aspirante</label><input class="input num" type="number" id="sc-int" value="' + c.intentos + '"></div></div>' +
+      '<div class="field"><label for="sc-vel">Velocidad del reloj del panel</label><input class="input num" type="number" id="sc-vel" value="' + c.velocidad + '"><span class="hint">Minutos del panel por cada minuto real. Con 10, los «10 minutos sin iniciar» pasan en 1 minuto real.</span></div>' +
+      '<div class="field"><span class="label">Casos y órdenes</span><p class="small muted">' + c.casos.length + ' tickets · ' + c.ordenes.length + ' órdenes · ' + c.motivos.length + ' motivos de contacto. Para editarlos, exporta el archivo, cámbialo y vuelve a importarlo.</p>' +
+      '<div class="row"><button type="button" class="btn btn-secondary btn-sm" id="sc-exp">' + icon('download') + 'Exportar casos (.json)</button><label class="btn btn-secondary btn-sm">' + icon('plus') + 'Importar archivo<input type="file" id="sc-file" accept=".json,application/json" hidden></label></div><span class="hint" id="sc-nom"></span></div>' +
+      '<div class="modal-actions"><button type="button" class="btn btn-secondary" data-x>Cancelar</button><button class="btn btn-primary" type="submit">Guardar</button></div></form>';
+    const cerrar = () => w.remove();
+    w.addEventListener('click', e => { if (e.target === w || e.target.closest('[data-x]')) cerrar(); });
+    document.body.appendChild(w);
+    let archivo = null;
+    w.querySelector('#sc-exp').addEventListener('click', () => {
+      const out = { formato: c.formato, motivos: c.motivos, casos: c.casos, ordenes: c.ordenes, acciones: r.acciones, estados: r.estados };
+      const blob = new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' });
+      const el = document.createElement('a'); el.href = URL.createObjectURL(blob); el.download = 'simulador-ridery-academy-' + new Date().toISOString().slice(0, 10) + '.json';
+      document.body.appendChild(el); el.click(); el.remove();
+    });
+    w.querySelector('#sc-file').addEventListener('change', async e => {
+      const f = e.target.files[0]; if (!f) return;
+      try { archivo = JSON.parse(await f.text()); w.querySelector('#sc-nom').textContent = f.name + ': ' + (archivo.casos || []).length + ' tickets y ' + (archivo.ordenes || []).length + ' órdenes. Se aplica al guardar.'; }
+      catch (x) { archivo = null; toast('El archivo no es un .json válido.', 'bad'); }
+    });
+    w.querySelector('form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const er = w.querySelector('.form-error');
+      try {
+        const x = await call('simGuardarConfig', { activo: w.querySelector('#sc-act').checked, minutos: w.querySelector('#sc-min').value, intentos: w.querySelector('#sc-int').value, velocidad: w.querySelector('#sc-vel').value, archivo });
+        toast('Simulador guardado: ' + x.tickets + ' tickets y ' + x.ordenes + ' órdenes'); cerrar(); tabSimulador();
+      } catch (x) { er.hidden = false; er.textContent = x.message; }
     });
   }
 

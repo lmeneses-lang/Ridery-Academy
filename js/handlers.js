@@ -118,6 +118,212 @@
   };
 
   /* ---------- Utilidades ---------- */
+  /* ---------- Simulador de tickets (Assessment) ----------
+     Simula la bandeja de Zendesk con casos reales de la célula. Los tickets llegan
+     en ráfaga; en cada turno la persona elige una respuesta sugerida o escribe la
+     suya («Otro», que queda pendiente de revisión por Calidad).
+     Cada opción: t (texto) · v ('buena' | 'regular' | 'mala') · r (respuesta del
+     cliente) · h (cambio de humor del cliente). Lo que es correcto NUNCA sale del
+     servidor: el aspirante solo ve los textos.
+     Los casos de ejemplo salen del material de apoyo de ORDERS en AdminCX
+     (Zupper by Ridery). Se reemplazan desde el panel: Simulador → Casos (archivo .json). */
+  const SIM_FORMATO = 'ridery-academy-simulador';
+  const SIM_PUNTOS = { buena: 2, regular: 1, mala: 0 };
+  const SIM_HUMOR = ['Crítico', 'Muy negativo', 'Negativo', 'Neutral', 'Positivo'];
+  const SIM_MOTIVOS_DEFAULT = [
+    'Orders : Retraso en la entrega', 'Orders : Pedido incompleto', 'Orders : Pedido incorrecto', 'Orders : Pedido en mal estado',
+    'Orders : Pedido no llegó', 'Orders : Cambio de dirección', 'Orders : Pago no reflejado', 'Orders : Cancelación de orden', 'Orders : Producto agotado'
+  ];
+  const op = (v, t, r, h) => ({ v, t, r: [].concat(r || []), h: h || 0 });
+  const SIM_CASOS_DEFAULT = [
+    { id: 'ord-retraso', celula: 'ORDERS', activo: true, llegada: 0, humor: 2, asunto: 'Pedido con más de 1 hora de retraso',
+      cliente: { nombre: 'Andreína Pérez', telefono: '+584142215870', notas: 'Usuario: 208114 Andreína Pérez' },
+      orden: { id: 'ZP-48213', comercio: 'Sushi Express (Las Mercedes)', estado: 'Preparación iniciada', minutos: 72, repartidor: 'Sin asignar', items: ['Combo Tokio x1', 'Té frío x1'], total: '$18,40', pago: 'Pago Móvil' },
+      motivo: 'Orders : Retraso en la entrega',
+      pasos: [
+        { cliente: ['Buenas, mi pedido tiene más de una hora y nada', 'Ya pagué y en la app sigue igual'],
+          opciones: [
+            op('buena', '¡Hola, Andreína! Gracias por escribirnos. Lamento la espera con tu pedido #ZP-48213; ya lo estoy revisando en este momento.', 'Ok, gracias. Es que tengo hambre y ya pagué 😩', 1),
+            op('regular', 'Buenas tardes. Indíqueme su número de orden, por favor.', 'Es el ZP-48213, sale ahí mismo en la app. Llevo más de una hora esperando', -1),
+            op('mala', 'hola q paso', ['¿En serio? Llevo una hora esperando y me escriben así.', 'Quiero hablar con un supervisor.'], -2)
+          ], otro: ['Ok… ¿y entonces qué pasa con mi pedido?'] },
+        { cliente: [],
+          opciones: [
+            op('buena', 'Ya verifiqué: tu pedido sigue en preparación en Sushi Express. Me comuniqué con el local para darle prioridad. ¿Prefieres esperar a que salga o que cancelemos la orden con reembolso total?', 'Si me dicen cuánto falta espero, si no cancélenla', 1),
+            op('regular', 'Voy a cancelar la orden y le hago el reembolso.', '¿Y por qué la cancelas sin preguntarme? Yo lo que quería era mi comida', -1),
+            op('mala', 'Es que hay mucho tráfico y no tenemos suficientes repartidores, debe tener paciencia.', 'Ni siquiera ha salido del local, ¿cuál tráfico? 😡', -2),
+            op('mala', 'Su pedido ya está en camino, ya casi le llega.', 'En la app dice que está en preparación… ¿me están mintiendo?', -2)
+          ], otro: ['Ajá, ¿y cuánto falta?'] },
+        { cliente: [],
+          opciones: [
+            op('buena', 'El local me confirma que sale en 10 minutos y ya tiene repartidor asignado. Además te dejamos un cupón de compensación por la espera. Te aviso apenas el repartidor lo retire.', 'Perfecto, gracias por la ayuda 🙏', 2),
+            op('regular', 'Ok, le aviso cuando salga.', 'Bueno…', 0),
+            op('mala', 'Ya no podemos hacer nada más, el responsable es el comercio.', 'Pésimo servicio. No vuelvo a pedir.', -2)
+          ], otro: ['Ok, quedo atenta.'] }
+      ] },
+    { id: 'ord-incompleto', celula: 'ORDERS', activo: true, llegada: 15, humor: 3, asunto: 'Falta un producto en mi pedido',
+      cliente: { nombre: 'Carlos Rivas', telefono: '+584241187733', notas: 'Usuario: 195530 Carlos Rivas' },
+      orden: { id: 'ZP-48197', comercio: 'Forum SuperMayorista (La Urbina)', estado: 'Completada', minutos: 48, repartidor: 'Jhonny M. (ID 84)', items: ['Harina PAN 1 kg x2', 'Arroz 1 kg x1', 'Refresco 2 L x1 · $2,50'], total: '$9,80', pago: 'Tarjeta (Stripe)' },
+      motivo: 'Orders : Pedido incompleto',
+      pasos: [
+        { cliente: ['Hola, me llegó el pedido pero falta el refresco de 2 litros'],
+          opciones: [
+            op('buena', 'Hola, Carlos. Lamento que falte un producto en tu orden. Regálame 2 minutos mientras me comunico con el comercio para verificar la comanda de tu pedido.', 'Dale, espero', 1),
+            op('regular', 'Hola. Envíeme una foto de la bolsa para validar.', '¿Una foto de qué? Si lo que falta no está en la bolsa 🙄', -1),
+            op('mala', 'Seguro el repartidor se lo tomó jaja', '¿Es en serio? Quiero mi refresco o mi dinero.', -2)
+          ], otro: ['Ok'] },
+        { cliente: [],
+          opciones: [
+            op('buena', 'El comercio confirmó que el refresco no se incluyó. Ya te reintegré $2,50 (el valor exacto del producto) como ZupperCredits en tu cuenta para tu próxima compra.', 'Ah ok, ¿y eso dónde lo veo?', 1),
+            op('mala', 'Le vamos a reenviar el refresco ahora mismo con otro repartidor.', 'Ok, ¿en cuánto llega?', 1),
+            op('mala', 'Le reembolso el total de la orden por las molestias.', '¡Epa, gracias!', 2)
+          ], otro: ['¿Y entonces cómo queda eso?'] },
+        { cliente: [],
+          opciones: [
+            op('buena', 'Lo ves en la app, en tu perfil › ZupperCredits, y se aplica solo en tu próximo pedido. ¿Te puedo ayudar con algo más?', 'No, eso es todo. Gracias', 1),
+            op('regular', 'En la app.', 'Ok', 0),
+            op('mala', 'No sé, revise usted en la app.', 'Qué mala atención, de verdad.', -2)
+          ], otro: ['Listo, gracias.'] }
+      ] },
+    { id: 'ord-pago', celula: 'ORDERS', activo: true, llegada: 40, humor: 3, asunto: 'Pagué y la orden sigue sin pagar',
+      cliente: { nombre: 'Mariana Gómez', telefono: '+584129904412', notas: 'Usuario: 211907 Mariana Gómez' },
+      orden: { id: 'ZP-48240', comercio: 'Arepera La Quinta (Chacao)', estado: 'Creada - No pagada', minutos: 21, repartidor: 'Sin asignar', items: ['Arepa reina pepiada x2', 'Jugo de parchita x1'], total: '$11,00', pago: 'Pago Móvil (sin asociar)' },
+      motivo: 'Orders : Pago no reflejado',
+      pasos: [
+        { cliente: ['Buenas tardes', 'Hice el pago móvil hace 20 minutos y la orden sigue diciendo que no está pagada'],
+          opciones: [
+            op('buena', 'Hola, Mariana. Con gusto lo reviso. ¿Me compartes los últimos 6 dígitos de la referencia del pago móvil?', 'Sí, 482913', 1),
+            op('regular', 'Hola. Espere a que se refleje, a veces tarda.', 'Ya van 20 minutos, y el local cierra pronto…', -1),
+            op('mala', 'Mándeme una foto de su cédula y el capture del banco.', '¿Mi cédula para qué? Solo quiero que se pague mi pedido.', -1)
+          ], otro: ['La referencia es 482913'] },
+        { cliente: [],
+          opciones: [
+            op('buena', 'Gracias. Ubiqué tu pago con la referencia 482913 y ya lo apliqué a tu orden: ahora aparece como pagada y el comercio la va a empezar a preparar.', '¡Listo, ya me salió! Gracias 🙌', 2),
+            op('regular', 'Le paso el caso al equipo de pagos, le responden en 24 a 48 horas.', '¿48 horas? Era mi almuerzo de hoy', -1),
+            op('mala', 'Le recomiendo crear una orden nueva y volver a pagar.', '¿Pagar dos veces? No, gracias.', -2)
+          ], otro: ['Ok, ¿ya quedó?'] }
+      ] },
+    { id: 'ord-mal-estado', celula: 'ORDERS', activo: true, llegada: 70, humor: 2, asunto: 'Mi pedido llegó regado',
+      cliente: { nombre: 'José Hernández', telefono: '+584160032291', notas: 'Usuario: 187644 José Hernández' },
+      orden: { id: 'ZP-48255', comercio: 'Sopas Doña Carmen (El Rosal)', estado: 'Completada', minutos: 39, repartidor: 'Luis A. (ID 112)', items: ['Sopa de res grande x1 · $8,00', 'Casabe x1'], total: '$10,50', pago: 'Binance' },
+      motivo: 'Orders : Pedido en mal estado',
+      pasos: [
+        { cliente: ['Me llegó la sopa toda regada en la bolsa', 'No se puede ni comer'],
+          opciones: [
+            op('buena', 'Hola, José. Lamento mucho lo ocurrido con tu pedido. Para darte una solución inmediata, ¿me compartes una foto de cómo recibiste el producto?', ['📷 Foto', 'Mira, el envase venía volteado dentro del bolso, la tapa estaba bien cerrada'], 1),
+            op('regular', 'Hola, ¿qué pasó exactamente?', 'Ya te dije, llegó regada. ¿No leíste?', -1),
+            op('mala', 'Eso pasa a veces con las sopas, la próxima vez pida otra cosa.', 'Increíble. Quiero mi reembolso ya.', -2)
+          ], otro: ['📷 Foto'] },
+        { cliente: [],
+          opciones: [
+            op('buena', 'Gracias por la foto. Se ve que el envase venía bien sellado pero se volteó en el traslado. Te procesé el reembolso total de la sopa ($8,00) y te dejo un cupón de 10% OFF para tu próxima compra.', 'Bueno, al menos me lo devuelven. Gracias', 2),
+            op('regular', 'Voy a reclamarle al restaurante para que le devuelva el dinero.', 'Ok… pero el restaurante no tiene la culpa, fue el motorizado', 0),
+            op('mala', 'Por la foto no se puede validar nada, no aplica reembolso.', '¿¡Cómo que no!? Se ve clarito.', -2)
+          ], otro: ['Ok, ¿y entonces?'] }
+      ] },
+    { id: 'ord-direccion', celula: 'ORDERS', activo: true, llegada: 95, humor: 3, asunto: 'Necesito cambiar la dirección',
+      cliente: { nombre: 'Daniela Suárez', telefono: '+584143378120', notas: 'Usuario: 214522 Daniela Suárez' },
+      orden: { id: 'ZP-48266', comercio: 'Burger Lab (Altamira)', estado: 'En camino', minutos: 26, repartidor: 'Pedro C. (ID 97)', items: ['Doble smash x1', 'Papas medianas x1'], total: '$12,30', pago: 'PayPal' },
+      motivo: 'Orders : Cambio de dirección',
+      pasos: [
+        { cliente: ['Hola!! Me equivoqué de dirección', 'Es en Los Palos Grandes, no en Altamira'],
+          opciones: [
+            op('buena', 'Hola, Daniela. Claro, te ayudo. ¿Me confirmas la dirección exacta con un punto de referencia?', 'Av. Andrés Bello, edificio Miramar, al lado de la panadería', 1),
+            op('regular', 'Ok, ya la cambio.', '¿No necesitas la dirección completa?', 0),
+            op('mala', 'No se puede cambiar la dirección una vez hecha la orden.', '¿Y entonces qué hago? ¿Pierdo mi comida?', -2)
+          ], otro: ['Es en la Av. Andrés Bello, edificio Miramar'] },
+        { cliente: [],
+          opciones: [
+            op('buena', 'Listo. Como el repartidor ya va en camino, el cambio suma 1,8 km más y eso tiene un recargo de $1,20. ¿Estás de acuerdo para actualizar la dirección?', 'Sí, dale, no hay problema', 1),
+            op('regular', 'Ya le dije al repartidor que vaya a la nueva dirección.', '¡Gracias!', 1),
+            op('mala', 'Le cancelo la orden y la vuelve a pedir con la dirección correcta.', '¿Cancelar? Pero si ya pagué y ya viene en camino.', -2)
+          ], otro: ['Ok'] },
+        { cliente: [],
+          opciones: [
+            op('buena', 'Perfecto, ya actualicé la dirección y el repartidor va hacia Los Palos Grandes. Llegada estimada: 12 minutos.', 'Excelente 👍', 1),
+            op('regular', 'Listo.', 'ok', 0),
+            op('regular', 'Ya, cualquier cosa me escribe otra vez.', 'Ok…', -1)
+          ], otro: ['Gracias'] }
+      ] },
+    { id: 'ord-no-llego', celula: 'ORDERS', activo: true, llegada: 125, humor: 1, asunto: 'Dice entregado y no me llegó',
+      cliente: { nombre: 'Luisa Fernández', telefono: '+584125561047', notas: 'Usuario: 176201 Luisa Fernández' },
+      orden: { id: 'ZP-48377', comercio: 'Pollos El Gran Chef (Chacaíto)', estado: 'Completada', minutos: 55, repartidor: 'Ramón T. (ID 61) · no contesta', items: ['Pollo entero x1', 'Yuca frita x1'], total: '$14,50', pago: 'Tarjeta (Stripe)' },
+      motivo: 'Orders : Pedido no llegó',
+      pasos: [
+        { cliente: ['La app dice que mi pedido fue ENTREGADO y yo no he recibido NADA', 'Esto es una estafa'],
+          opciones: [
+            op('buena', 'Hola, Luisa. Entiendo tu molestia. Ya mismo reviso qué pasó con tu pedido #ZP-48377 y me comunico con el repartidor.', 'Por favor, porque ya pagué y nada', 1),
+            op('regular', 'Verifique bien, a veces lo dejan en recepción.', 'Ya bajé a recepción, no hay nada.', -1),
+            op('mala', 'En el sistema sale entregado, así que sí le llegó.', '¿Me estás llamando mentirosa?', -2)
+          ], otro: ['Ajá, ¿y qué van a hacer?'] },
+        { cliente: [],
+          opciones: [
+            op('buena', 'Intenté comunicarme dos veces con el repartidor y no responde. Para no hacerte esperar más, ya procesé el reembolso total de tu orden ($14,50) a tu método de pago original. Nosotros nos encargamos internamente con el repartidor.', 'Ok, gracias por resolver rápido', 2),
+            op('regular', 'Le doy ZupperCredits por el monto para su próxima compra.', 'Yo no quiero créditos, quiero mi dinero.', -1),
+            op('mala', 'Espere un rato más, el repartidor debe estar por llegar.', '¡Dice ENTREGADO! ¿Cómo que por llegar?', -2)
+          ], otro: ['¿Y mi dinero?'] }
+      ] }
+  ];
+
+  /* Panel de órdenes (Back-Office). El reloj del panel va acelerado (velocidad: minutos
+     simulados por minuto real). Cada orden tiene:
+       eventos  [{ min, estado, repartidor }]  → cómo avanza sola (min = minuto simulado)
+       respuestas { accion: { texto, estado, repartidor } } → qué pasa cuando el aspirante actúa
+       reglas  [{ accion, desde, hasta, v, nota, esperada }] → cómo se califica cada acción
+               (la primera regla que coincide con la acción y el minuto manda; si ninguna
+               coincide, la acción cuenta como 'mala'). esperada: true → suma al puntaje máximo
+               y si no la hace queda como «sin gestión». */
+  const SIM_ACCIONES = {
+    'contactar-comercio': 'Contactar al comercio', 'contactar-repartidor': 'Contactar al repartidor', 'publicar-shoppers': 'Publicar en grupo de Shoppers',
+    'reasignar': 'Asignar / reasignar repartidor', 'devolver-comercio': 'Devolver al comercio', 'cancelar': 'Cancelar orden'
+  };
+  const SIM_ESTADOS = ['Creada - No pagada', 'Pagada - No iniciada', 'Preparación iniciada', 'Preparada', 'Asignada', 'En comercio', 'Despachada', 'En camino', 'En destino', 'Completada', 'Cancelada'];
+  const ev = (min, estado, repartidor) => Object.assign({ min, estado }, repartidor ? { repartidor } : {});
+  const rg = (accion, desde, hasta, v, nota, esperada) => ({ accion, desde, hasta: hasta == null ? 9999 : hasta, v, nota, esperada: !!esperada });
+  const SIM_ORDENES_DEFAULT = [
+    { id: 'ZP-48301', comercio: 'Rincón del Paladar', cliente: 'Gabriel Ortiz', zona: 'Los Ruices', total: '$15,20', items: ['Pabellón x1', 'Tequeños x6'],
+      eventos: [ev(-1, 'Pagada - No iniciada')],
+      respuestas: { 'contactar-comercio': { texto: '📞 Llamada sin respuesta. Mensaje enviado al comercio: sin leer.' }, 'cancelar': { texto: 'Orden cancelada. Reembolso total al cliente.', estado: 'Cancelada' } },
+      reglas: [rg('contactar-comercio', 0, 9, 'buena', 'Contactó al comercio por la orden no iniciada.', true), rg('contactar-comercio', 9, null, 'regular', 'Contactó tarde: pasaron más de 10 min sin iniciar.'),
+        rg('cancelar', 9, null, 'buena', 'Canceló a los 10 min de pagada, sin respuesta del comercio.', true), rg('cancelar', 0, 9, 'mala', 'Canceló sin esperar los 10 min de respuesta del comercio.')] },
+    { id: 'ZP-48322', comercio: 'Monte Bakery', cliente: 'Valentina Rojas', zona: 'Chacao', total: '$9,60', items: ['Croissant de jamón x2', 'Café latte x1'],
+      eventos: [ev(0, 'Pagada - No iniciada'), ev(2, 'Pagada - No iniciada', 'Jesús P. (ID 74)'), ev(6, 'En comercio', 'Jesús P. (ID 74)')],
+      noIniciadaConRepartidor: true,
+      respuestas: { 'contactar-comercio': { texto: 'Monte Bakery: «¡Sí, ya estaba lista! Se nos olvidó marcarla 🙈». La orden pasa a Despachada.', estado: 'Despachada' }, 'cancelar': { texto: 'Orden cancelada. El repartidor queda liberado.', estado: 'Cancelada' } },
+      reglas: [rg('contactar-comercio', 5, null, 'buena', 'El repartidor estaba en el comercio con la orden sin iniciar: contactó al comercio.', true), rg('contactar-comercio', 0, 5, 'regular', 'Contactó antes de tiempo (todavía estaba dentro de lo normal).'),
+        rg('cancelar', 0, null, 'mala', 'Canceló una orden que estaba lista: había que contactar al comercio.'), rg('contactar-repartidor', 0, null, 'regular', 'El repartidor ya estaba en el local: el pendiente era del comercio.')] },
+    { id: 'ZP-48335', comercio: 'Forum SuperMayorista', cliente: 'Héctor Blanco', zona: 'La Urbina', total: '$42,75', items: ['Mercado: 18 productos'],
+      eventos: [ev(3, 'Pagada - No iniciada')],
+      respuestas: { 'publicar-shoppers': { texto: 'Grupo de Shoppers: «La tomo yo» — Yorman (Shopper). La orden pasa a Preparación iniciada.', estado: 'Preparación iniciada' }, 'contactar-comercio': { texto: 'Forum: «Las órdenes las toman los Shoppers, publíquenla en el grupo».' } },
+      reglas: [rg('publicar-shoppers', 3, 15, 'buena', 'Publicó la orden nueva de Forum en el grupo de Shoppers.', true), rg('publicar-shoppers', 15, null, 'regular', 'Publicó tarde en el grupo de Shoppers.'),
+        rg('contactar-comercio', 0, null, 'regular', 'En Forum las órdenes las toman los Shoppers.'), rg('cancelar', 0, null, 'mala', 'Canceló una orden de Forum que solo faltaba publicar.')] },
+    { id: 'ZP-48340', comercio: 'Pizzería Da Marco', cliente: 'Sofía Méndez', zona: 'El Cafetal', total: '$13,90', items: ['Pizza margarita mediana x1'],
+      eventos: [ev(-6, 'Pagada - No iniciada'), ev(-4, 'Preparación iniciada'), ev(4, 'Preparada')],
+      respuestas: { 'reasignar': { texto: 'Asignada a Kevin R. (ID 133). Llega al local en 4 min.', estado: 'Asignada', repartidor: 'Kevin R. (ID 133)' }, 'contactar-comercio': { texto: 'Pizzería Da Marco: «Ya está lista, solo falta el motorizado».' } },
+      reglas: [rg('reasignar', 11, null, 'buena', 'Asignó repartidor a mano tras más de 8 min preparada sin repartidor.', true), rg('reasignar', 0, 11, 'regular', 'Asignó a mano antes de los 8 min (la asignación automática aún podía funcionar).'),
+        rg('contactar-comercio', 0, null, 'regular', 'El comercio no era el problema: faltaba repartidor.'), rg('cancelar', 0, null, 'mala', 'Canceló una orden lista: había que asignar repartidor.')] },
+    { id: 'ZP-48351', comercio: 'La Casa del Pan', cliente: 'Ricardo Lugo', zona: 'Altamira', total: '$7,30', items: ['Pan campesino x1', 'Golfeados x4'],
+      eventos: [ev(0, 'Pagada - No iniciada'), ev(2, 'Preparación iniciada'), ev(5, 'Asignada', 'María V. (ID 58)'), ev(9, 'Despachada', 'María V. (ID 58)'), ev(10, 'En camino', 'María V. (ID 58)'), ev(22, 'Completada', 'María V. (ID 58)')],
+      respuestas: {},
+      reglas: [rg('cancelar', 0, null, 'mala', 'Canceló una orden que iba en tiempo.')] },
+    { id: 'ZP-48362', comercio: 'Sushi Express (Las Mercedes)', cliente: 'Paola Castillo', zona: 'Las Mercedes', total: '$21,00', items: ['Roll acevichado x2'],
+      eventos: [ev(-25, 'Pagada - No iniciada'), ev(-23, 'Preparación iniciada'), ev(-12, 'Asignada', 'Ramón T. (ID 61)'), ev(-5, 'En camino', 'Ramón T. (ID 61)'), ev(6, 'En destino', 'Ramón T. (ID 61)')],
+      respuestas: { 'contactar-repartidor': { texto: 'Repartidor: «Estoy en la dirección, el cliente no contesta. Ya lo llamé 3 veces».' }, 'devolver-comercio': { texto: 'Se le indicó al repartidor devolver el pedido al comercio. Comercio notificado.', estado: 'Cancelada' } },
+      reglas: [rg('contactar-repartidor', 6, null, 'buena', 'Confirmó con el repartidor en destino.'), rg('devolver-comercio', 21, null, 'buena', 'Indicó devolver al comercio tras 15 min en destino sin respuesta del cliente.', true),
+        rg('devolver-comercio', 0, 21, 'mala', 'Mandó a devolver antes de los 15 min de espera en destino.'), rg('cancelar', 0, null, 'mala', 'No se cancela: el pedido se devuelve al comercio.')] },
+    /* Órdenes de los tickets: aparecen en el panel para que el aspirante las busque (no se califican) */
+    { id: 'ZP-48213', comercio: 'Sushi Express (Las Mercedes)', cliente: 'Andreína Pérez', zona: 'Bello Monte', total: '$18,40', items: ['Combo Tokio x1', 'Té frío x1'], eventos: [ev(-72, 'Pagada - No iniciada'), ev(-60, 'Preparación iniciada')],
+      respuestas: { 'contactar-comercio': { texto: 'Sushi Express: «Disculpen, estamos full. Sale en 10 minutos».' } }, reglas: [] },
+    { id: 'ZP-48197', comercio: 'Forum SuperMayorista', cliente: 'Carlos Rivas', zona: 'La Urbina', total: '$9,80', items: ['Harina PAN 1 kg x2', 'Arroz 1 kg x1', 'Refresco 2 L x1 · $2,50'], eventos: [ev(-48, 'Completada', 'Jhonny M. (ID 84)')],
+      respuestas: { 'contactar-comercio': { texto: 'Forum: «Revisamos la comanda: el refresco no se incluyó».' } }, reglas: [] },
+    { id: 'ZP-48240', comercio: 'Arepera La Quinta', cliente: 'Mariana Gómez', zona: 'Chacao', total: '$11,00', items: ['Arepa reina pepiada x2', 'Jugo de parchita x1'], eventos: [ev(-21, 'Creada - No pagada')], respuestas: {}, reglas: [] },
+    { id: 'ZP-48255', comercio: 'Sopas Doña Carmen', cliente: 'José Hernández', zona: 'El Rosal', total: '$10,50', items: ['Sopa de res grande x1 · $8,00', 'Casabe x1'], eventos: [ev(-39, 'Completada', 'Luis A. (ID 112)')], respuestas: {}, reglas: [] },
+    { id: 'ZP-48266', comercio: 'Burger Lab', cliente: 'Daniela Suárez', zona: 'Altamira → Los Palos Grandes', total: '$12,30', items: ['Doble smash x1', 'Papas medianas x1'], eventos: [ev(-26, 'En camino', 'Pedro C. (ID 97)')], respuestas: {}, reglas: [] },
+    { id: 'ZP-48377', comercio: 'Pollos El Gran Chef', cliente: 'Luisa Fernández', zona: 'Chacaíto', total: '$14,50', items: ['Pollo entero x1', 'Yuca frita x1'], eventos: [ev(-55, 'Completada', 'Ramón T. (ID 61)')],
+      respuestas: { 'contactar-repartidor': { texto: '📞 Dos llamadas al repartidor sin respuesta.' } }, reglas: [] }
+  ];
+  const SIMULADOR_DEFAULT = { activo: true, intentos: 1, minutos: 20, velocidad: 10, motivos: SIM_MOTIVOS_DEFAULT, casos: SIM_CASOS_DEFAULT, ordenes: SIM_ORDENES_DEFAULT };
+
   function err(status, mensaje) { const e = new Error(mensaje); e.status = status; return e; }
   function nuevoId(prefijo) { return (prefijo || 'id') + '-' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4); }
   function limpiar(s, max) { return String(s == null ? '' : s).trim().slice(0, max || 500); }
@@ -473,6 +679,332 @@
   }
   const vistaMsg = m => ({ _id: m._id, de: m.de, autor: m.autor, texto: m.texto, fecha: m.fecha, leido: !!m.leido });
 
+  /* ---------- Simulador: motor ----------
+     Todo se guarda dentro del aspirante (asp.simulador), igual que Boost:
+       { extra, sesiones: [{ id, inicio, fin, estado: 'en-curso'|'terminada', velocidad, minutos,
+           casos: [{ id, llegada, humor, paso, pasos, chat, respuestas, motivo, motivoOk, cerrado, primera }],
+           acciones: [{ orden, accion, min, f, v, nota, texto, estado, repartidor }], resumen }] } */
+  function configSim(cfg) {
+    const s = Object.assign({}, SIMULADOR_DEFAULT, cfg.simulador || {});
+    s.motivos = (s.motivos && s.motivos.length) ? s.motivos : SIM_MOTIVOS_DEFAULT;
+    s.casos = s.casos || []; s.ordenes = s.ordenes || [];
+    return s;
+  }
+  const humorTxt = h => SIM_HUMOR[Math.max(0, Math.min(4, h))];
+  const segDesde = iso => (Date.now() - Date.parse(iso)) / 1000;
+  const minutoSim = ses => Math.round(segDesde(ses.inicio) / 60 * (ses.velocidad || 10) * 10) / 10;
+  const vencida = ses => ses.estado === 'en-curso' && segDesde(ses.inicio) > (ses.minutos || 20) * 60 + 5;
+
+  // Estado de una orden en el minuto simulado `min`, con lo que cambiaron las acciones del aspirante
+  function estadoOrden(o, min, acciones) {
+    let estado = 'Pagada - No iniciada', repartidor = '', desde = -999;
+    const pasos = (o.eventos || []).map(e => ({ min: e.min, estado: e.estado, repartidor: e.repartidor }))
+      .concat((acciones || []).filter(a => a.orden === o.id && (a.estado || a.repartidor)).map(a => ({ min: a.min, estado: a.estado, repartidor: a.repartidor, forzado: true })))
+      .sort((a, b) => a.min - b.min);
+    let fijo = false;   // tras una acción que cierra la orden, los eventos automáticos ya no la mueven
+    for (const p of pasos) {
+      if (p.min > min) break;
+      if (fijo && !p.forzado) continue;
+      if (p.estado && p.estado !== estado) { estado = p.estado; desde = p.min; }
+      if (p.repartidor) repartidor = p.repartidor;
+      if (p.forzado && ['Cancelada', 'Despachada', 'Completada'].includes(p.estado)) fijo = true;
+    }
+    return { estado, repartidor, desde };
+  }
+
+  function puntosSim(ses, s) {
+    let tp = 0, tmax = 0, pendientes = 0, resueltos = 0, prim = [];
+    for (const c of ses.casos) {
+      tmax += (c.pasos || 0) * 2 + 2;
+      for (const r of c.respuestas) { if (r.v === 'pendiente') pendientes++; else tp += SIM_PUNTOS[r.v] || 0; }
+      if (c.motivoOk) tp += 2;
+      if (c.cerrado) resueltos++;
+      if (c.primera != null) prim.push(c.primera);
+    }
+    let op = 0, omax = 0; const sinGestion = [];
+    const vistos = new Set();
+    for (const o of s.ordenes) {
+      for (const r of (o.reglas || []).filter(x => x.esperada)) {
+        omax += 2;
+        if (!ses.acciones.some(a => a.orden === o.id && a.accion === r.accion && a.v === 'buena')) sinGestion.push(o.id + ' · ' + (SIM_ACCIONES[r.accion] || r.accion) + ': ' + r.nota);
+      }
+    }
+    for (const a of ses.acciones) {
+      const k = a.orden + '|' + a.accion;
+      if (vistos.has(k) || a.v == null) continue; vistos.add(k);
+      op += SIM_PUNTOS[a.v] || 0;
+    }
+    op = Math.min(op, omax);
+    const max = tmax + omax, pts = tp + op;
+    return { nota: max ? Math.round(pts / max * 100) : 0, pts, max, pendientes, tickets: { pts: tp, max: tmax, resueltos, total: ses.casos.length },
+      ordenes: { pts: op, max: omax, acciones: ses.acciones.length, malas: ses.acciones.filter(a => a.v === 'mala').length, sinGestion },
+      primeraPromedio: prim.length ? Math.round(prim.reduce((x, y) => x + y, 0) / prim.length) : null };
+  }
+
+  function terminarSim(ses, s) {
+    if (ses.estado !== 'terminada') { ses.estado = 'terminada'; ses.fin = ahora(); }
+    ses.resumen = puntosSim(ses, s);
+  }
+
+  // Lo que ve el aspirante: textos, estados y tiempos. Nunca qué es correcto ni las reglas.
+  function vistaSim(ses, s) {
+    const defCaso = id => s.casos.find(c => c.id === id);
+    return {
+      id: ses.id, inicio: ses.inicio, ahora: ahora(), estado: ses.estado, velocidad: ses.velocidad, minutos: ses.minutos, motivos: s.motivos, acciones: SIM_ACCIONES,
+      tickets: ses.casos.map(c => {
+        const d = defCaso(c.id) || { pasos: [], cliente: {} };
+        const paso = d.pasos[c.paso];
+        return { id: c.id, numero: c.numero, llegada: c.llegada, asunto: d.asunto || '', canal: 'WhatsApp', cliente: d.cliente || {}, humor: humorTxt(c.humor), nivel: c.humor,
+          chat: c.chat, cerrado: !!c.cerrado, motivo: c.motivo || '', listo: !paso,
+          opciones: (!c.cerrado && paso) ? barajar(paso.opciones.map((o, i) => ({ i, t: o.t }))) : [] };
+      }),
+      ordenes: s.ordenes.map(o => ({ id: o.id, comercio: o.comercio, cliente: o.cliente, zona: o.zona || '', total: o.total || '', items: o.items || [],
+        eventos: (o.eventos || []).map(e => ({ min: e.min, estado: e.estado, repartidor: e.repartidor || '' })) })),
+      hechas: ses.acciones.map(a => ({ orden: a.orden, accion: a.accion, min: a.min, texto: a.texto, estado: a.estado || '', repartidor: a.repartidor || '' }))
+    };
+  }
+
+  async function sesionSim(store, user, body) {
+    const cfg = await cargarConfig(store);
+    const s = configSim(cfg);
+    const asp = await requerirAspirante(store, user);
+    const sim = asp.simulador || { sesiones: [] };
+    const ses = sim.sesiones.find(x => x.id === body.sesion);
+    if (!ses) throw err(404, 'Simulación no encontrada.');
+    if (vencida(ses)) { terminarSim(ses, s); asp.simulador = sim; await store.put('aspirantes', asp); throw err(409, 'Se acabó el tiempo de la simulación.'); }
+    if (ses.estado !== 'en-curso') throw err(409, 'Esta simulación ya terminó.');
+    return { cfg, s, asp, sim, ses };
+  }
+
+  const aspiranteSim = {
+    async simEstado({ store, user }) {
+      const cfg = await cargarConfig(store);
+      const s = configSim(cfg);
+      const asp = await requerirAspirante(store, user);
+      const sim = asp.simulador || { sesiones: [] };
+      const curso = sim.sesiones.find(x => x.estado === 'en-curso' && !vencida(x));
+      const usadas = sim.sesiones.length - (curso ? 1 : 0);
+      const permitidos = (Number(s.intentos) || 1) + (sim.extra || 0);
+      const casos = s.casos.filter(c => c.activo !== false);
+      return { activo: s.activo !== false && casos.length > 0, enCurso: !!curso, usadas, permitidos, minutos: s.minutos, tickets: casos.length, ordenes: s.ordenes.length,
+        ultimas: sim.sesiones.filter(x => x.estado === 'terminada').slice(-3).reverse().map(x => ({ fecha: x.fin, resueltos: x.resumen ? x.resumen.tickets.resueltos : 0, total: x.casos.length,
+          primeraPromedio: x.resumen ? x.resumen.primeraPromedio : null })) };
+    },
+    async simIniciar({ store, user }) {
+      const cfg = await cargarConfig(store);
+      const s = configSim(cfg);
+      const asp = await requerirAspirante(store, user);
+      const sim = asp.simulador || { sesiones: [] };
+      for (const x of sim.sesiones) if (vencida(x)) terminarSim(x, s);
+      let ses = sim.sesiones.find(x => x.estado === 'en-curso');
+      if (!ses) {
+        if (s.activo === false) throw err(403, 'El simulador no está disponible por ahora.');
+        const permitidos = (Number(s.intentos) || 1) + (sim.extra || 0);
+        if (sim.sesiones.length >= permitidos) throw err(403, 'Ya usaste tus intentos del simulador. Si necesitas otro, escríbele al equipo.');
+        const activos = s.casos.filter(c => c.activo !== false);
+        const deCelula = activos.filter(c => !c.celula || c.celula === asp.celula);
+        const casos = (deCelula.length ? deCelula : activos).sort((a, b) => (a.llegada || 0) - (b.llegada || 0));
+        if (!casos.length) throw err(403, 'Todavía no hay casos cargados en el simulador.');
+        let numero = 2988100 + Math.floor(Math.random() * 800);
+        ses = { id: nuevoId('sim'), inicio: ahora(), fin: null, estado: 'en-curso', velocidad: Number(s.velocidad) || 10, minutos: Number(s.minutos) || 20,
+          casos: casos.map(c => ({ id: c.id, numero: numero += 1 + Math.floor(Math.random() * 9), llegada: Number(c.llegada) || 0, humor: c.humor == null ? 3 : c.humor, paso: 0, pasos: c.pasos.length,
+            chat: c.pasos[0].cliente.map(t => ({ de: 'cliente', t })), respuestas: [], motivo: '', motivoOk: false, cerrado: false, primera: null })),
+          acciones: [], resumen: null };
+        sim.sesiones.push(ses);
+        sim.sesiones = sim.sesiones.slice(-6);
+      }
+      asp.simulador = sim;
+      await store.put('aspirantes', asp);
+      return { sesion: vistaSim(ses, s) };
+    },
+    async simResponder({ store, user, body }) {
+      const { s, asp, sim, ses } = await sesionSim(store, user, body);
+      const c = ses.casos.find(x => x.id === body.ticket);
+      const d = s.casos.find(x => x.id === body.ticket);
+      if (!c || !d) throw err(404, 'Ticket no encontrado.');
+      if (c.cerrado) throw err(409, 'Este ticket ya está resuelto.');
+      const llegado = segDesde(ses.inicio) - c.llegada;
+      if (llegado < -2) throw err(409, 'Este ticket todavía no ha llegado.');
+      const paso = d.pasos[c.paso];
+      if (!paso) throw err(409, 'El cliente ya no está esperando respuesta. Elige el motivo de contacto y resuelve el ticket.');
+      let t, v, r, h = 0, i = null;
+      const otro = limpiar(body.otro, 1000);
+      if (otro) { t = otro; v = 'pendiente'; r = paso.otro && paso.otro.length ? paso.otro : ['Ok']; }
+      else {
+        i = Number(body.opcion);
+        const o = paso.opciones[i];
+        if (!o) throw err(400, 'Elige una respuesta.');
+        t = o.t; v = o.v; r = o.r; h = Number(o.h) || 0;
+      }
+      if (c.primera == null) c.primera = Math.max(0, Math.round(llegado));
+      c.respuestas.push({ paso: c.paso, i, t, v, otro: !!otro, f: ahora(), seg: Math.max(0, Math.round(llegado)) });
+      c.chat.push({ de: 'agente', t });
+      c.humor = Math.max(0, Math.min(4, c.humor + h));
+      c.paso += 1;
+      const sig = d.pasos[c.paso];
+      const nuevos = r.concat(sig ? sig.cliente : []).map(x => ({ de: 'cliente', t: x }));
+      c.chat.push(...nuevos);
+      asp.simulador = sim;
+      await store.put('aspirantes', asp);
+      return { mensajes: nuevos, humor: humorTxt(c.humor), nivel: c.humor, listo: !sig, opciones: sig ? barajar(sig.opciones.map((o, k) => ({ i: k, t: o.t }))) : [] };
+    },
+    async simResolver({ store, user, body }) {
+      const { s, asp, sim, ses } = await sesionSim(store, user, body);
+      const c = ses.casos.find(x => x.id === body.ticket);
+      const d = s.casos.find(x => x.id === body.ticket);
+      if (!c || !d) throw err(404, 'Ticket no encontrado.');
+      const motivo = limpiar(body.motivo, 120);
+      if (!motivo || !s.motivos.includes(motivo)) throw err(400, 'Elige el motivo de contacto antes de resolver el ticket.');
+      if (!c.respuestas.length) throw err(400, 'Responde al cliente antes de resolver el ticket.');
+      c.motivo = motivo; c.motivoOk = motivo === d.motivo; c.cerrado = true; c.cerradoF = ahora();
+      const pendientes = ses.casos.filter(x => !x.cerrado).length;
+      asp.simulador = sim;
+      await store.put('aspirantes', asp);
+      return { ok: true, pendientes };
+    },
+    async simAccion({ store, user, body }) {
+      const { s, asp, sim, ses } = await sesionSim(store, user, body);
+      const o = s.ordenes.find(x => x.id === body.orden);
+      if (!o) throw err(404, 'Orden no encontrada.');
+      const accion = String(body.que || '');   // «accion» ya lo usa el despachador
+      if (!SIM_ACCIONES[accion]) throw err(400, 'Acción desconocida.');
+      const min = minutoSim(ses);
+      const actual = estadoOrden(o, min, ses.acciones);
+      if (['Cancelada', 'Completada'].includes(actual.estado)) throw err(409, 'La orden ya está ' + actual.estado.toLowerCase() + '.');
+      const repetida = ses.acciones.some(a => a.orden === o.id && a.accion === accion);
+      const regla = (o.reglas || []).find(x => x.accion === accion && min >= x.desde && min < x.hasta);
+      const efecto = (o.respuestas || {})[accion] || {};
+      const texto = efecto.texto || ({ 'contactar-comercio': 'Mensaje enviado al comercio.', 'contactar-repartidor': 'Mensaje enviado al repartidor.', 'publicar-shoppers': 'Publicado en el grupo de Shoppers.',
+        'reasignar': 'Solicitud de reasignación enviada.', 'devolver-comercio': 'Se indicó devolver el pedido al comercio.', 'cancelar': 'Orden cancelada.' })[accion];
+      const a = { orden: o.id, accion, min, f: ahora(), texto, estado: efecto.estado || (accion === 'cancelar' ? 'Cancelada' : ''), repartidor: efecto.repartidor || '',
+        v: repetida ? null : (regla ? regla.v : ((o.reglas || []).length ? 'mala' : null)), nota: regla ? regla.nota : (repetida ? 'Acción repetida' : 'Acción sin sustento en el estatus de la orden') };
+      ses.acciones.push(a);
+      asp.simulador = sim;
+      await store.put('aspirantes', asp);
+      return { hecha: { orden: a.orden, accion, min, texto, estado: a.estado, repartidor: a.repartidor } };
+    },
+    async simTerminar({ store, user, body }) {
+      const cfg = await cargarConfig(store);
+      const s = configSim(cfg);
+      const asp = await requerirAspirante(store, user);
+      const sim = asp.simulador || { sesiones: [] };
+      const ses = sim.sesiones.find(x => x.id === body.sesion);
+      if (!ses) throw err(404, 'Simulación no encontrada.');
+      terminarSim(ses, s);
+      asp.simulador = sim;
+      await store.put('aspirantes', asp);
+      const r = ses.resumen;    // el aspirante no ve su nota: la revisa el equipo
+      return { resueltos: r.tickets.resueltos, total: r.tickets.total, primeraPromedio: r.primeraPromedio, acciones: r.ordenes.acciones };
+    }
+  };
+
+  const adminSim = {
+    async simResultados({ store }) {
+      const cfg = await cargarConfig(store);
+      const s = configSim(cfg);
+      const asps = (await store.find('aspirantes', {})).filter(a => a.simulador && a.simulador.sesiones && a.simulador.sesiones.length);
+      const filas = [];
+      for (const a of asps) {
+        for (const x of a.simulador.sesiones) {
+          if (vencida(x)) terminarSim(x, s);
+          const r = x.resumen || puntosSim(x, s);
+          filas.push({ id: a._id, nombre: a.nombre, celula: a.celula, sesion: x.id, inicio: x.inicio, fin: x.fin, estado: x.estado, nota: r.nota, pendientes: r.pendientes,
+            resueltos: r.tickets.resueltos, total: r.tickets.total, primeraPromedio: r.primeraPromedio, malas: r.ordenes.malas, sinGestion: r.ordenes.sinGestion.length,
+            intentos: a.simulador.sesiones.length, permitidos: (Number(s.intentos) || 1) + (a.simulador.extra || 0) });
+        }
+      }
+      filas.sort((x, y) => String(y.inicio).localeCompare(String(x.inicio)));
+      return { filas, config: { activo: s.activo !== false, intentos: s.intentos, minutos: s.minutos, velocidad: s.velocidad, tickets: s.casos.length, ordenes: s.ordenes.length } };
+    },
+    async simDetalle({ store, body }) {
+      const cfg = await cargarConfig(store);
+      const s = configSim(cfg);
+      const a = await store.get('aspirantes', body.id);
+      const x = a && a.simulador && a.simulador.sesiones.find(y => y.id === body.sesion);
+      if (!x) throw err(404, 'Simulación no encontrada.');
+      if (vencida(x)) terminarSim(x, s);
+      return { aspirante: { id: a._id, nombre: a.nombre, celula: a.celula }, sesion: { id: x.id, inicio: x.inicio, fin: x.fin, estado: x.estado, velocidad: x.velocidad, resumen: x.resumen || puntosSim(x, s) },
+        tickets: x.casos.map(c => {
+          const d = s.casos.find(y => y.id === c.id) || { pasos: [], cliente: {} };
+          return { id: c.id, numero: c.numero, asunto: d.asunto || c.id, cliente: (d.cliente || {}).nombre || '', motivoCorrecto: d.motivo || '', motivo: c.motivo, motivoOk: c.motivoOk, cerrado: c.cerrado,
+            primera: c.primera, humor: humorTxt(c.humor), chat: c.chat,
+            respuestas: c.respuestas.map((r, k) => ({ k, paso: r.paso, t: r.t, v: r.v, otro: r.otro, seg: r.seg,
+              opciones: ((d.pasos[r.paso] || {}).opciones || []).map(o => ({ t: o.t, v: o.v })) })) };
+        }),
+        ordenes: s.ordenes.filter(o => (o.reglas || []).length || x.acciones.some(y => y.orden === o.id)).map(o => ({ id: o.id, comercio: o.comercio,
+          acciones: x.acciones.filter(y => y.orden === o.id).map(y => ({ accion: SIM_ACCIONES[y.accion] || y.accion, min: y.min, v: y.v, nota: y.nota })),
+          esperadas: (o.reglas || []).filter(r => r.esperada).map(r => ({ accion: SIM_ACCIONES[r.accion] || r.accion, nota: r.nota, hecha: x.acciones.some(y => y.orden === o.id && y.accion === r.accion && y.v === 'buena') })) })) };
+    },
+    async simCalificar({ store, body }) {
+      const cfg = await cargarConfig(store);
+      const s = configSim(cfg);
+      if (!SIM_PUNTOS.hasOwnProperty(body.v)) throw err(400, 'Elige buena, regular o mala.');
+      const a = await store.get('aspirantes', body.id);
+      const x = a && a.simulador && a.simulador.sesiones.find(y => y.id === body.sesion);
+      const c = x && x.casos.find(y => y.id === body.ticket);
+      const r = c && c.respuestas[Number(body.k)];
+      if (!r || !r.otro) throw err(404, 'Respuesta no encontrada.');
+      r.v = body.v; r.revisada = ahora();
+      if (x.estado === 'terminada') x.resumen = puntosSim(x, s);
+      await store.put('aspirantes', a);
+      return { resumen: x.resumen || puntosSim(x, s) };
+    },
+    async simReiniciar({ store, body }) {
+      const a = await store.get('aspirantes', body.id);
+      if (!a) throw err(404, 'Aspirante no encontrado.');
+      const cfg = await cargarConfig(store);
+      const sim = a.simulador || { sesiones: [] };
+      sim.sesiones.forEach(x => { if (x.estado === 'en-curso') terminarSim(x, configSim(cfg)); });
+      sim.extra = (sim.extra || 0) + 1;
+      a.simulador = sim;
+      await store.put('aspirantes', a);
+      return { ok: true };
+    },
+    async simConfig({ store }) {
+      const cfg = await cargarConfig(store);
+      const s = configSim(cfg);
+      return { simulador: { formato: SIM_FORMATO, activo: s.activo !== false, intentos: s.intentos, minutos: s.minutos, velocidad: s.velocidad, motivos: s.motivos, casos: s.casos, ordenes: s.ordenes },
+        acciones: SIM_ACCIONES, estados: SIM_ESTADOS };
+    },
+    async simGuardarConfig({ store, body }) {
+      const cfg = await cargarConfig(store);
+      const s = configSim(cfg);
+      const n = (v, min, max, def) => { const x = Math.round(Number(v)); return x >= min && x <= max ? x : def; };
+      const nuevo = { activo: body.activo !== false, intentos: n(body.intentos, 1, 10, s.intentos), minutos: n(body.minutos, 5, 90, s.minutos), velocidad: n(body.velocidad, 1, 30, s.velocidad),
+        motivos: s.motivos, casos: s.casos, ordenes: s.ordenes };
+      if (body.archivo) {   // archivo .json exportado desde el panel y editado
+        const f = body.archivo;
+        if (f.formato !== SIM_FORMATO) throw err(400, 'El archivo no es del simulador de Ridery Academy.');
+        const motivos = (f.motivos || []).map(m => limpiar(m, 120)).filter(Boolean);
+        if (!motivos.length) throw err(400, 'El archivo no trae motivos de contacto.');
+        const casos = (f.casos || []).map((c, k) => {
+          const pasos = (c.pasos || []).map(p => ({ cliente: [].concat(p.cliente || []).map(t => limpiar(t, 1000)).filter(Boolean),
+            opciones: (p.opciones || []).map(o => ({ t: limpiar(o.t, 1000), v: SIM_PUNTOS.hasOwnProperty(o.v) ? o.v : 'mala', r: [].concat(o.r || []).map(t => limpiar(t, 1000)).filter(Boolean), h: n(o.h, -4, 4, 0) })).filter(o => o.t),
+            otro: [].concat(p.otro || []).map(t => limpiar(t, 1000)).filter(Boolean) }));
+          if (!c.id || !pasos.length || pasos.some(p => p.opciones.length < 2)) throw err(400, 'Caso ' + (k + 1) + ': necesita id y cada paso al menos 2 opciones.');
+          if (!pasos[0].cliente.length) throw err(400, 'Caso ' + c.id + ': el primer paso necesita el mensaje del cliente.');
+          if (!motivos.includes(c.motivo)) throw err(400, 'Caso ' + c.id + ': su motivo no está en la lista de motivos.');
+          return { id: limpiar(c.id, 60), celula: limpiar(c.celula, 40), activo: c.activo !== false, llegada: n(c.llegada, 0, 3600, 0), humor: n(c.humor, 0, 4, 3), asunto: limpiar(c.asunto, 140),
+            cliente: { nombre: limpiar((c.cliente || {}).nombre, 80), telefono: limpiar((c.cliente || {}).telefono, 30), notas: limpiar((c.cliente || {}).notas, 300) }, motivo: c.motivo, pasos };
+        });
+        const ordenes = (f.ordenes || []).map((o, k) => {
+          if (!o.id || !o.comercio) throw err(400, 'Orden ' + (k + 1) + ': necesita id y comercio.');
+          const reglas = (o.reglas || []).map(r => ({ accion: r.accion, desde: Number(r.desde) || 0, hasta: r.hasta == null ? 9999 : Number(r.hasta), v: SIM_PUNTOS.hasOwnProperty(r.v) ? r.v : 'mala', nota: limpiar(r.nota, 300), esperada: !!r.esperada }));
+          if (reglas.some(r => !SIM_ACCIONES[r.accion])) throw err(400, 'Orden ' + o.id + ': tiene una acción desconocida.');
+          const respuestas = {};
+          Object.entries(o.respuestas || {}).forEach(([k2, r]) => { if (SIM_ACCIONES[k2]) respuestas[k2] = { texto: limpiar(r.texto, 500), estado: SIM_ESTADOS.includes(r.estado) ? r.estado : '', repartidor: limpiar(r.repartidor, 80) }; });
+          return { id: limpiar(o.id, 30), comercio: limpiar(o.comercio, 80), cliente: limpiar(o.cliente, 80), zona: limpiar(o.zona, 80), total: limpiar(o.total, 20), items: (o.items || []).map(t => limpiar(t, 120)),
+            eventos: (o.eventos || []).filter(e => SIM_ESTADOS.includes(e.estado)).map(e => ({ min: Number(e.min) || 0, estado: e.estado, repartidor: limpiar(e.repartidor, 80) })), respuestas, reglas };
+        });
+        if (!casos.length) throw err(400, 'El archivo no trae casos.');
+        Object.assign(nuevo, { motivos, casos, ordenes });
+      }
+      cfg.simulador = nuevo;
+      await store.put('config', cfg);
+      return { ok: true, tickets: nuevo.casos.length, ordenes: nuevo.ordenes.length };
+    }
+  };
+
   const aspirante = {
     async boost({ store, user }) {
       const cfg = await cargarConfig(store);
@@ -585,6 +1117,8 @@
       return { nota: r.nota, correctas: r.correctas, total: r.total, aprobado, restantes, notaMinima: cfg.reglas.notaMinima, detalle, ruta: rutaNueva };
     }
   };
+
+  Object.assign(aspirante, aspiranteSim);
 
   /* ---------- Acciones del administrador ---------- */
   function fila(asp, modulos, cfg) {
@@ -925,11 +1459,13 @@
     }
   };
 
+  Object.assign(admin, adminSim);
+
   /* ---------- Roles del panel ---------- */
   const PERFILES = {
     admin: { nombre: 'Admin', acciones: '*' },
-    reclutador: { nombre: 'Reclutador', acciones: ['resumen', 'aspirantes', 'aspirante', 'preguntas', 'aprobar', 'cambiarEstado', 'guardarAcceso', 'reiniciarIntentos', 'crearAspirante', 'guardarCohorte', 'metricas', 'cambiarMiClave', 'chats', 'chatHilo', 'chatResponder', 'chatEliminar'] },
-    calidad: { nombre: 'Calidad', acciones: ['resumen', 'aspirantes', 'aspirante', 'preguntas', 'metricas', 'cambiarMiClave', 'chats', 'chatHilo', 'chatResponder'] }
+    reclutador: { nombre: 'Reclutador', acciones: ['resumen', 'aspirantes', 'aspirante', 'preguntas', 'aprobar', 'cambiarEstado', 'guardarAcceso', 'reiniciarIntentos', 'crearAspirante', 'guardarCohorte', 'metricas', 'cambiarMiClave', 'chats', 'chatHilo', 'chatResponder', 'chatEliminar', 'simResultados', 'simDetalle', 'simCalificar', 'simReiniciar'] },
+    calidad: { nombre: 'Calidad', acciones: ['resumen', 'aspirantes', 'aspirante', 'preguntas', 'metricas', 'cambiarMiClave', 'chats', 'chatHilo', 'chatResponder', 'simResultados', 'simDetalle', 'simCalificar'] }
   };
   const limpiarUsuario = u => limpiar(u, 30).toLowerCase();
   function vistaUsuario(u) { return { usuario: u._id, nombre: u.nombre, perfil: u.perfil, activo: u.activo !== false, creado: u.creado, ultimoAcceso: u.ultimoAcceso || null }; }
@@ -975,6 +1511,6 @@
     return tabla[accion](ctx);
   }
 
-  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, TIPOS, FORMATO_ARCHIVO, elegidas, seccionesVisibles, cumpleCondicion, ordenarPreguntas, evaluarPostulacion, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, iniciarSesion, vistaAspirante, estadoDe, PERFILES, ejecutar };
+  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, TIPOS, FORMATO_ARCHIVO, elegidas, seccionesVisibles, cumpleCondicion, ordenarPreguntas, evaluarPostulacion, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, iniciarSesion, vistaAspirante, estadoDe, PERFILES, ejecutar, SIM_ACCIONES, SIM_ESTADOS, SIM_FORMATO, estadoOrden };
   if (typeof module !== 'undefined' && module.exports) module.exports = H; else root.ElxHandlers = H;
 })(typeof window !== 'undefined' ? window : globalThis);

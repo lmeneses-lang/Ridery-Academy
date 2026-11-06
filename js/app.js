@@ -899,7 +899,9 @@
   }
   function verAssessment() {
     limpiar(); S.seccion = 'assessment'; S.noLeidos = 0;
-    const el = pagina('<div class="stack-sm"><span class="eyebrow">Assessment</span><h1>Habla con el equipo</h1><p class="muted" style="max-width:62ch">Escríbele al equipo de Ridery: dudas sobre la formación, seguimiento de tu proceso o tus evaluaciones. Te responden aquí mismo.</p></div>' +
+    const el = pagina('<div class="stack-sm"><span class="eyebrow">Assessment</span><h1>Assessment</h1><p class="muted" style="max-width:62ch">Practica con tickets y órdenes como en un turno real, y habla con el equipo de Ridery cuando lo necesites.</p></div>' +
+      '<section class="card sim-card" id="sim-card" aria-label="Simulador de tickets"><div class="loading" style="min-height:80px"><div class="spinner"></div></div></section>' +
+      '<div class="stack-sm"><h2>Habla con el equipo</h2><p class="muted small" style="max-width:62ch">Dudas sobre la formación, seguimiento de tu proceso o tus evaluaciones. Te responden aquí mismo.</p></div>' +
       '<section class="chat card" aria-label="Chat con el equipo"><div class="chat-list" id="c-list" aria-live="polite"></div>' +
       '<form class="chat-form" id="c-form"><textarea class="textarea" rows="1" placeholder="Escribe un mensaje…" aria-label="Mensaje" maxlength="2000"></textarea><button class="btn btn-primary" type="submit" aria-label="Enviar">' + icon('send') + '<span class="hide-sm">Enviar</span></button></form>' +
       '<p class="small muted chat-nota">Enter para enviar · Shift + Enter para nueva línea</p></section>');
@@ -907,7 +909,34 @@
     const parar = montarChat({ lista: el.querySelector('#c-list'), form: el.querySelector('#c-form'), vacio: 'Aún no hay mensajes. Escribe tu primera pregunta y el equipo te responderá aquí.',
       traer: desde => call('chat', { desde }), enviar: texto => call('chatEnviar', { texto }), propio: m => m.de === 'aspirante' });
     limpiezas.push(parar);
-    el.querySelector('#c-form textarea').focus();
+    pintarSimulador(el.querySelector('#sim-card'));
+  }
+
+  /* ---------- Simulador de tickets (js/simulador.js) ---------- */
+  async function pintarSimulador(card) {
+    if (!card || !window.ElxSimulador) { if (card) card.hidden = true; return; }
+    let r;
+    try { r = await call('simEstado'); } catch (e) { card.hidden = true; return; }
+    if (!card.isConnected) return;
+    const quedan = Math.max(0, r.permitidos - r.usadas);
+    const ult = r.ultimas[0];
+    card.innerHTML = '<div class="sim-card-in"><span class="boost-ic">' + icon('chat') + '</span><div class="stack-sm" style="gap:6px;flex:1;min-width:0"><h2>Simulador de tickets</h2>' +
+      '<p class="muted small">Una bandeja igual a la que usarás en el trabajo: llegan ' + r.tickets + ' tickets por WhatsApp, uno tras otro, y tienes un Panel de órdenes que debes vigilar al mismo tiempo. Tienes ' + r.minutos + ' minutos. Usa computadora y activa el sonido.</p>' +
+      '<ul class="sim-tips small"><li>Responde con las respuestas sugeridas o escribe la tuya con «Otro».</li><li>Si el caso es por una orden, búscala en el Panel de órdenes.</li><li>Elige el motivo de contacto y envía el ticket como <b>Resuelto</b>.</li></ul>' +
+      (ult ? '<p class="small muted">Último intento: ' + Elx.fechaHora(ult.fecha) + ' · ' + ult.resueltos + '/' + ult.total + ' tickets resueltos. Tu resultado lo revisa el equipo.</p>' : '') + '</div>' +
+      '<div class="sim-card-cta">' + (!r.activo ? '<span class="pill">No disponible por ahora</span>'
+        : r.enCurso ? '<button class="btn btn-primary" id="sim-go">' + icon('play') + 'Continuar simulación</button>'
+        : quedan ? '<button class="btn btn-primary" id="sim-go">' + icon('play') + 'Empezar simulación</button><span class="small muted">' + (quedan === 1 ? 'Tienes 1 intento' : 'Tienes ' + quedan + ' intentos') + '</span>'
+        : '<span class="pill pill-ok">' + icon('check') + 'Simulación enviada</span><span class="small muted">Si necesitas otro intento, escríbele al equipo.</span>') + '</div></div>';
+    const go = card.querySelector('#sim-go');
+    if (go) go.addEventListener('click', async () => {
+      if (!r.enCurso && !await confirmar({ titulo: '¿Empezar la simulación?', texto: 'El reloj de ' + r.minutos + ' minutos empieza al entrar y no se detiene aunque salgas. Ten a mano audífonos o el sonido activo.', ok: 'Empezar' })) return;
+      go.disabled = true;
+      try {
+        await window.ElxSimulador.abrir({ call, alSalir: e => { if (e && e.status === 401) return manejar(e); if (S.seccion === 'assessment') pintarSimulador(document.getElementById('sim-card')); } });
+      } catch (e) { manejar(e); }
+      go.disabled = false;
+    });
   }
 
   Elx.barraDemo('admin.html' + (window.ElxDemo && !window.ELX_DEMO ? '?demo=1' : ''), 'Abrir panel admin');

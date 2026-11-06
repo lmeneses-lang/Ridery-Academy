@@ -495,3 +495,21 @@ td .bar { width: 90px; }
 .texto-libre { white-space: pre-wrap; background: var(--surface-2); border-radius: var(--r-sm); padding: 10px 12px; line-height: 1.5; }
 .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .info-grid .pill { align-self: flex-start; }
+
+/* ---------- Simulador de tickets (tarjeta del aspirante y revisión en el panel) ---------- */
+.sim-card-in { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.sim-card-cta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-left: auto; }
+.sim-tips { margin: 4px 0 0; padding-left: 18px; color: var(--muted); display: grid; gap: 2px; }
+@media (max-width: 640px) { .sim-card-cta { align-items: stretch; width: 100%; } }
+.sim-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover { background: var(--surface-2); }
+.sim-ticket { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px 14px; }
+.sim-ticket > summary { display: flex; justify-content: space-between; gap: 10px; align-items: center; cursor: pointer; flex-wrap: wrap; }
+.sim-turno { border-left: 3px solid var(--line); padding: 6px 0 6px 12px; display: flex; flex-direction: column; gap: 6px; }
+.sim-resp { background: var(--surface-2); border-radius: var(--r-sm); padding: 8px 12px; }
+.sim-resp.otro { background: var(--brand-soft); }
+.sim-cal { gap: 6px; }
+.sim-ops { margin: 6px 0 0; padding-left: 0; list-style: none; display: grid; gap: 6px; font-size: .9rem; }
+.sim-chat { display: grid; gap: 4px; font-size: .9rem; padding: 8px 0; }
+.sim-chat .a { color: var(--brand-text); }
