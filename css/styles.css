@@ -513,3 +513,9 @@ tr.clickable:hover { background: var(--surface-2); }
 .sim-ops { margin: 6px 0 0; padding-left: 0; list-style: none; display: grid; gap: 6px; font-size: .9rem; }
 .sim-chat { display: grid; gap: 4px; font-size: .9rem; padding: 8px 0; }
 .sim-chat .a { color: var(--brand-text); }
+.sim-card { display: flex; flex-direction: column; gap: 16px; }
+.sim-niveles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.sim-nivel { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 14px; display: flex; flex-direction: column; gap: 6px; background: var(--surface); }
+.sim-nivel.bloqueado { opacity: .6; }
+.sim-nivel-pie { margin-top: auto; padding-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sim-orto { margin: 0; padding-left: 18px; color: var(--warn); font-size: .85rem; }

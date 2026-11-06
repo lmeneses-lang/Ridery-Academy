@@ -918,25 +918,31 @@
     let r;
     try { r = await call('simEstado'); } catch (e) { card.hidden = true; return; }
     if (!card.isConnected) return;
-    const quedan = Math.max(0, r.permitidos - r.usadas);
+    const curso = r.niveles.find(n => n.enCurso);
+    const nivelHTML = (n, k) => {
+      let pie;
+      if (n.enCurso) pie = '<button class="btn btn-primary btn-sm" data-nivel="' + esc(n.id) + '">' + icon('play') + 'Continuar</button>';
+      else if (n.bloqueado) pie = '<span class="pill">' + icon('lock') + 'Termina el nivel anterior</span>';
+      else if (curso) pie = '<span class="pill">Tienes otro nivel en curso</span>';
+      else if (n.quedan) pie = '<button class="btn ' + (n.terminado ? 'btn-secondary' : 'btn-primary') + ' btn-sm" data-nivel="' + esc(n.id) + '">' + icon('play') + (n.terminado ? 'Repetir' : 'Empezar') + '</button><span class="small muted">' + (n.quedan === 1 ? '1 intento' : n.quedan + ' intentos') + '</span>';
+      else pie = '<span class="pill pill-ok">' + icon('check') + 'Enviado</span>';
+      return '<article class="sim-nivel' + (n.bloqueado ? ' bloqueado' : '') + '"><div class="row-between"><span class="eyebrow">Nivel ' + (k + 1) + '</span>' + (n.terminado ? '<span class="pill pill-ok">' + icon('check') + 'Hecho</span>' : '') + '</div>' +
+        '<h3>' + esc(n.nombre) + '</h3><p class="small muted">' + esc(n.descripcion) + '</p><p class="small"><b>' + n.tickets + '</b> tickets · <b>' + n.minutos + '</b> min' + (n.panel ? ' · Panel de órdenes' : '') + '</p><div class="sim-nivel-pie">' + pie + '</div></article>';
+    };
     const ult = r.ultimas[0];
     card.innerHTML = '<div class="sim-card-in"><span class="boost-ic">' + icon('chat') + '</span><div class="stack-sm" style="gap:6px;flex:1;min-width:0"><h2>Simulador de tickets</h2>' +
-      '<p class="muted small">Una bandeja igual a la que usarás en el trabajo: llegan ' + r.tickets + ' tickets por WhatsApp, uno tras otro, y tienes un Panel de órdenes que debes vigilar al mismo tiempo. Tienes ' + r.minutos + ' minutos. Usa computadora y activa el sonido.</p>' +
-      '<ul class="sim-tips small"><li>Responde con las respuestas sugeridas o escribe la tuya con «Otro».</li><li>Si el caso es por una orden, búscala en el Panel de órdenes.</li><li>Elige el motivo de contacto y envía el ticket como <b>Resuelto</b>.</li></ul>' +
-      (ult ? '<p class="small muted">Último intento: ' + Elx.fechaHora(ult.fecha) + ' · ' + ult.resueltos + '/' + ult.total + ' tickets resueltos. Tu resultado lo revisa el equipo.</p>' : '') + '</div>' +
-      '<div class="sim-card-cta">' + (!r.activo ? '<span class="pill">No disponible por ahora</span>'
-        : r.enCurso ? '<button class="btn btn-primary" id="sim-go">' + icon('play') + 'Continuar simulación</button>'
-        : quedan ? '<button class="btn btn-primary" id="sim-go">' + icon('play') + 'Empezar simulación</button><span class="small muted">' + (quedan === 1 ? 'Tienes 1 intento' : 'Tienes ' + quedan + ' intentos') + '</span>'
-        : '<span class="pill pill-ok">' + icon('check') + 'Simulación enviada</span><span class="small muted">Si necesitas otro intento, escríbele al equipo.</span>') + '</div></div>';
-    const go = card.querySelector('#sim-go');
-    if (go) go.addEventListener('click', async () => {
-      if (!r.enCurso && !await confirmar({ titulo: '¿Empezar la simulación?', texto: 'El reloj de ' + r.minutos + ' minutos empieza al entrar y no se detiene aunque salgas. Ten a mano audífonos o el sonido activo.', ok: 'Empezar' })) return;
+      '<p class="muted small">Una bandeja igual a la que usarás en el trabajo: tickets por WhatsApp con sonido, motivo de contacto, estatus del ticket y el Panel Zupper. Avanza por niveles. Usa computadora y activa el sonido.</p></div></div>' +
+      (r.activo ? '<div class="sim-niveles">' + r.niveles.map(nivelHTML).join('') + '</div>' : '<span class="pill">No disponible por ahora</span>') +
+      (ult ? '<p class="small muted">Último intento (' + esc(ult.nivel) + '): ' + Elx.fechaHora(ult.fecha) + ' · ' + ult.resueltos + '/' + ult.total + ' tickets atendidos. Tu resultado lo revisa el equipo.</p>' : '');
+    card.querySelectorAll('[data-nivel]').forEach(go => go.addEventListener('click', async () => {
+      const n = r.niveles.find(x => x.id === go.dataset.nivel);
+      if (!n.enCurso && !await confirmar({ titulo: '¿Empezar el nivel ' + n.nombre + '?', texto: 'El reloj de ' + n.minutos + ' minutos empieza al entrar y no se detiene aunque salgas. Ten el sonido activo.', ok: 'Empezar' })) return;
       go.disabled = true;
       try {
-        await window.ElxSimulador.abrir({ call, alSalir: e => { if (e && e.status === 401) return manejar(e); if (S.seccion === 'assessment') pintarSimulador(document.getElementById('sim-card')); } });
+        await window.ElxSimulador.abrir({ call, nivel: n.id, alSalir: e => { if (e && e.status === 401) return manejar(e); if (S.seccion === 'assessment') pintarSimulador(document.getElementById('sim-card')); } });
       } catch (e) { manejar(e); }
       go.disabled = false;
-    });
+    }));
   }
 
   Elx.barraDemo('admin.html' + (window.ElxDemo && !window.ELX_DEMO ? '?demo=1' : ''), 'Abrir panel admin');
