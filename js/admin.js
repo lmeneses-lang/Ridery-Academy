@@ -22,7 +22,13 @@
   let main = null;
   let dirty = false;
 
+  // Abierto dentro de AdminCX (E-learning): sin barra propia y la sesión la da AdminCX.
+  const EMBEBIDO = /[?&]embebido=1\b/.test(location.search) && window.parent !== window;
+  if (EMBEBIDO) document.body.classList.add('embebido');
+  function avisarAdminCX(tipo) { try { window.parent.postMessage({ origen: 'ridery-academy', tipo }, '*'); } catch (e) { /* sin AdminCX */ } }
+
   function manejar(e) {
+    if (e.status === 401 && EMBEBIDO) { API.salir('admin'); avisarAdminCX('sesion-vencida'); app.innerHTML = '<main class="center-wrap"><p class="muted">Tu sesión venció. Renovando desde AdminCX…</p></main>'; return; }
     if (e.status === 401) { API.salir('admin'); return verLogin('Tu sesión expiró. Vuelve a entrar.'); }
     toast(e.message || 'Algo falló.', 'bad');
   }
@@ -1161,5 +1167,20 @@
 
   window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
   Elx.barraDemo('index.html' + (window.ElxDemo && !window.ELX_DEMO ? '?demo=1' : ''), 'Ver como aspirante');
-  iniciar();
+
+  // Entrada desde AdminCX: llega un pase de 60 s en el #. Se cambia por una
+  // sesión del panel, se borra de la barra de direcciones y se entra directo.
+  const pase = (location.hash.match(/[#&]puente=([^&]+)/) || [])[1];
+  if (pase) {
+    history.replaceState(null, '', location.pathname + location.search);
+    app.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    API.llamar('admin', 'auth', 'puente', { token: decodeURIComponent(pase) }).then(r => {
+      API.guardarToken('admin', r.token); Elx.Store.set('elx_admin_user', r.usuario);
+      avisarAdminCX('listo');
+      iniciar();
+    }).catch(e => {
+      if (EMBEBIDO) { avisarAdminCX('error'); app.innerHTML = '<main class="center-wrap"><div class="card stack" style="max-width:420px"><h2>No se pudo entrar</h2><p class="muted">' + esc(e.message) + '</p></div></main>'; }
+      else verLogin(e.message);
+    });
+  } else iniciar();
 })();

@@ -89,3 +89,13 @@ Nunca pongas estos valores en el código, en un issue ni en capturas de pantalla
 - **Token en cookie `HttpOnly`** en lugar de `localStorage`. Con la CSP actual el riesgo es bajo, pero la cookie lo elimina del todo.
 - **Doble factor** para cuentas Admin.
 - **Desactivar el modo demo en producción** (quitar `<script src="js/demo.js">` de los HTML). Hoy es inofensivo: solo usa datos del navegador.
+
+## Entrada desde AdminCX (puente)
+
+AdminCX muestra el panel dentro de su pantalla **E-learning** y lee aspirantes y evaluaciones en **Personal › Aspirantes**, sin pedir otra clave.
+
+- AdminCX firma un pase de **60 segundos** con `PUENTE_SECRET` (emisor `admincx`, destinatario `ridery-academy`). Solo lo firma para su rol Admin.
+- La Academia lo cambia **una sola vez** por una sesión del panel con perfil Admin (`POST /api/auth { accion: 'puente' }`). Un segundo uso del mismo pase se rechaza.
+- La sesión queda en la bitácora como `admincx:<correo>`, con el detalle "Desde AdminCX".
+- `frame-ancestors` en `vercel.json` permite mostrar el sitio solo dentro de `https://admincx.ridery.app`.
+- Para apagarlo: borra `PUENTE_SECRET` en Vercel y redeploy. Las sesiones abiertas desde AdminCX dejan de servir en la siguiente acción.

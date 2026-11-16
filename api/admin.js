@@ -10,9 +10,10 @@ const H = require('../js/handlers.js');
 const store = require('../lib/store');
 const { leerUsuario, versionPrincipal, firmar, responder, manejarError, cripto } = require('../lib/auth');
 const seg = require('../lib/seguridad');
+const puente = require('../lib/puente');
 
 // Acciones que solo leen: no se anotan en la bitácora
-const SOLO_LECTURA = new Set(['resumen', 'aspirantes', 'aspirante', 'preguntas', 'modulos', 'metricas', 'usuarios', 'boostConfig', 'chats', 'chatHilo', 'chatResponder', 'auditoria']);
+const SOLO_LECTURA = new Set(['capacitacionPreguntas', 'resumen', 'aspirantes', 'aspirante', 'preguntas', 'modulos', 'metricas', 'usuarios', 'boostConfig', 'chats', 'chatHilo', 'chatResponder', 'auditoria']);
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return responder(res, 405, { error: 'Método no permitido' });
@@ -20,6 +21,8 @@ module.exports = async (req, res) => {
   if (!user || user.rol !== 'admin') return responder(res, 401, { error: 'Tu sesión expiró. Vuelve a entrar.' });
   // Cuenta principal: si cambiaste ADMIN_USER / ADMIN_PASS en Vercel, las sesiones viejas dejan de servir
   if (!user.cuenta && user.v !== versionPrincipal()) return responder(res, 401, { error: 'Tu sesión expiró. Vuelve a entrar.' });
+  // Sesión abierta desde AdminCX: si se apaga el puente (se borra PUENTE_SECRET), se corta de inmediato
+  if (user.puente && !puente.activo()) return responder(res, 401, { error: 'La entrada desde AdminCX está desactivada.' });
   try {
     const body = (req.body && typeof req.body === 'object') ? req.body : {};
     const ctx = { store, user, body, cripto };

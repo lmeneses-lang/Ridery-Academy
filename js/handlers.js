@@ -99,6 +99,20 @@
       ] } }
   ];
 
+  /* ---------- Evaluación de la capacitación (la llena Admin desde AdminCX) ----------
+     Solo selección: nada de texto libre, para que sea rápida y comparable.
+     tipo 'unica' (una opción) o 'multiple' (varias). Se pueden reemplazar
+     desde AdminCX (guardarCapacitacionPreguntas) y quedan en config.capacitacion. */
+  const EVAL_CAP_DEFAULT = [
+    { id: 'atencion', texto: '¿Prestó atención?', tipo: 'unica', opciones: ['Sí', 'Más o menos', 'No'] },
+    { id: 'participacion', texto: '¿Participó en la sesión?', tipo: 'unica', opciones: ['Sí, bastante', 'Poco', 'No participó'] },
+    { id: 'comprension', texto: '¿Entendió los procesos que se vieron?', tipo: 'unica', opciones: ['Sí', 'En parte', 'No'] },
+    { id: 'dificultad', texto: '¿En qué se le dificultó?', tipo: 'multiple', opciones: ['Nada', 'Zendesk y herramientas', 'Redacción', 'Velocidad al escribir', 'Políticas y procesos', 'Conexión o equipo'], exclusiva: 0 },
+    { id: 'puntualidad', texto: '¿Llegó a tiempo?', tipo: 'unica', opciones: ['A tiempo', 'Tarde', 'No se conectó'] },
+    { id: 'camara', texto: '¿Estuvo con la cámara encendida?', tipo: 'unica', opciones: ['Sí', 'A ratos', 'No'] },
+    { id: 'recomendacion', texto: '¿Sigue en el proceso?', tipo: 'unica', opciones: ['Sí', 'Sí, con seguimiento', 'No'] }
+  ];
+
   /* ---------- Boost: actividades para mejorar cuellos de botella ---------- */
   const BOOST_DEFAULT = {
     mecanografia: {
@@ -425,6 +439,49 @@
     cfg.boost = cfg.boost || {};
     cfg.boost.mecanografia = Object.assign({}, BOOST_DEFAULT.mecanografia, cfg.boost.mecanografia || {});
     return cfg;
+  }
+
+  // Preguntas de la evaluación de capacitación: las guardadas o las de fábrica.
+  function preguntasCapacitacion(cfg) {
+    const g = cfg && cfg.capacitacion && Array.isArray(cfg.capacitacion.preguntas) && cfg.capacitacion.preguntas.length ? cfg.capacitacion.preguntas : EVAL_CAP_DEFAULT;
+    return g.map(p => Object.assign({}, p, { opciones: (p.opciones || []).slice() }));
+  }
+  function normalizarPreguntasCap(lista) {
+    if (!Array.isArray(lista) || !lista.length) throw err(400, 'Agrega al menos una pregunta.');
+    if (lista.length > 20) throw err(400, 'Máximo 20 preguntas.');
+    const ids = {};
+    return lista.map((p, i) => {
+      const texto = limpiar(p && p.texto, 160);
+      if (texto.length < 3) throw err(400, 'La pregunta ' + (i + 1) + ' no tiene texto.');
+      const opciones = (Array.isArray(p.opciones) ? p.opciones : []).map(o => limpiar(o, 60)).filter(Boolean);
+      if (opciones.length < 2 || opciones.length > 8) throw err(400, '«' + texto + '» necesita entre 2 y 8 opciones.');
+      let id = limpiar(p.id, 40).toLowerCase().replace(/[^a-z0-9-]/g, '') || ('p' + (i + 1));
+      while (ids[id]) id += 'x';
+      ids[id] = true;
+      const tipo = p.tipo === 'multiple' ? 'multiple' : 'unica';
+      const x = { id, texto, tipo, opciones };
+      if (tipo === 'multiple' && Number.isInteger(p.exclusiva) && opciones[p.exclusiva]) x.exclusiva = p.exclusiva;
+      return x;
+    });
+  }
+  // Valida las respuestas de una evaluación contra las preguntas. Todas obligatorias.
+  function respuestasCapacitacion(preguntas, entrada) {
+    const e = entrada && typeof entrada === 'object' ? entrada : {};
+    const out = {};
+    for (const p of preguntas) {
+      const v = e[p.id];
+      if (p.tipo === 'multiple') {
+        let sel = [...new Set((Array.isArray(v) ? v : []).map(Number))].filter(i => Number.isInteger(i) && p.opciones[i] != null).sort((a, b) => a - b);
+        if (Number.isInteger(p.exclusiva) && sel.includes(p.exclusiva) && sel.length > 1) sel = sel.filter(i => i !== p.exclusiva);
+        if (!sel.length) throw err(400, 'Falta responder: ' + p.texto);
+        out[p.id] = { opciones: sel, texto: sel.map(i => p.opciones[i]).join(' · ') };
+      } else {
+        const i = v === '' || v == null ? NaN : Number(v);
+        if (!Number.isInteger(i) || p.opciones[i] == null) throw err(400, 'Falta responder: ' + p.texto);
+        out[p.id] = { opcion: i, texto: p.opciones[i] };
+      }
+    }
+    return out;
   }
 
   // Valida y limpia una pregunta (desde el panel o desde un archivo importado). Lanza error si algo no cuadra.
@@ -1269,7 +1326,8 @@
       alertas: asp.test ? (asp.test.alertas || []).length : 0, autoDescartado: !!asp.motivoDescarte,
       usuario: asp.usuario || '', tieneClave: !!asp.hash, celula: asp.celula, celulaSugerida: asp.test ? asp.test.celulaSugerida : null, estado: estadoDe(asp), estadoTest: asp.test ? asp.test.estado : 'pendiente',
       creado: asp.creado, aprobadoFecha: asp.aprobadoFecha || null, ultimoAcceso: asp.ultimoAcceso,
-      progreso: p.progreso, completo: p.completo, promedio: p.promedio, ppm: asp.boost && asp.boost.mecanografia ? asp.boost.mecanografia.mejor : null };
+      progreso: p.progreso, completo: p.completo, promedio: p.promedio, ppm: asp.boost && asp.boost.mecanografia ? asp.boost.mecanografia.mejor : null,
+      evaluaciones: (asp.capacitacion || []).length, ultimaEvaluacion: (asp.capacitacion || []).length ? asp.capacitacion[asp.capacitacion.length - 1] : null };
   }
 
   const admin = {
@@ -1504,6 +1562,44 @@
         aprobados: aprobados.length, descartados: asps.filter(a => estadoDe(a) === 'descartado').length, completados, porCelula, porModulo, masFalladas, celulas: cfg.celulas };
     },
 
+    /* ----- Evaluación de la capacitación (AdminCX › Personal › Aspirantes) ----- */
+    async capacitacionPreguntas({ store }) {
+      const cfg = await cargarConfig(store);
+      return { preguntas: preguntasCapacitacion(cfg), deFabrica: !(cfg.capacitacion && cfg.capacitacion.preguntas && cfg.capacitacion.preguntas.length) };
+    },
+    async guardarCapacitacionPreguntas({ store, body }) {
+      const cfg = await store.get('config', 'general') || await cargarConfig(store);
+      const preguntas = body.deFabrica ? null : normalizarPreguntasCap(body.preguntas);
+      cfg.capacitacion = preguntas ? { preguntas, actualizado: ahora() } : {};
+      await store.put('config', cfg);
+      return { ok: true, preguntas: preguntas || EVAL_CAP_DEFAULT };
+    },
+    // Una evaluación por día y por evaluador: si vuelve a guardar el mismo día, la reemplaza.
+    async evaluarCapacitacion({ store, body, user }) {
+      const cfg = await cargarConfig(store);
+      const asp = await store.get('aspirantes', body.id);
+      if (!asp) throw err(404, 'Aspirante no encontrado.');
+      const dia = /^\d{4}-\d{2}-\d{2}$/.test(String(body.dia || '')) ? String(body.dia) : ahora().slice(0, 10);
+      const preguntas = preguntasCapacitacion(cfg);
+      const respuestas = respuestasCapacitacion(preguntas, body.respuestas);
+      const por = limpiar(user.nombre || user.usuario, 80);
+      const lista = (asp.capacitacion || []).filter(e => !(e.dia === dia && e.por === por));
+      const ev = { id: nuevoId('ev'), dia, fecha: ahora(), por, respuestas,
+        preguntas: preguntas.map(p => ({ id: p.id, texto: p.texto })) };   // copia: si luego cambian las preguntas, la evaluación se sigue leyendo
+      lista.push(ev);
+      lista.sort((a, b) => String(a.dia).localeCompare(String(b.dia)) || String(a.fecha).localeCompare(String(b.fecha)));
+      asp.capacitacion = lista.slice(-60);
+      await store.put('aspirantes', asp);
+      return { ok: true, evaluacion: ev, capacitacion: asp.capacitacion };
+    },
+    async eliminarEvaluacion({ store, body }) {
+      const asp = await store.get('aspirantes', body.id);
+      if (!asp) throw err(404, 'Aspirante no encontrado.');
+      asp.capacitacion = (asp.capacitacion || []).filter(e => e.id !== body.evaluacion);
+      await store.put('aspirantes', asp);
+      return { ok: true, capacitacion: asp.capacitacion };
+    },
+
     /* ----- Equipo del panel ----- */
     async usuarios({ store }) {
       const us = await store.find('usuarios', {});
@@ -1652,6 +1748,6 @@
     return tabla[accion](ctx);
   }
 
-  const H = { COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, TIPOS, FORMATO_ARCHIVO, elegidas, seccionesVisibles, cumpleCondicion, ordenarPreguntas, evaluarPostulacion, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, iniciarSesion, vistaAspirante, estadoDe, PERFILES, ejecutar, SIM_ACCIONES, SIM_FORMATO, revisarOrtografia };
+  const H = { EVAL_CAP_DEFAULT, preguntasCapacitacion, normalizarPreguntasCap, respuestasCapacitacion, COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, TIPOS, FORMATO_ARCHIVO, elegidas, seccionesVisibles, cumpleCondicion, ordenarPreguntas, evaluarPostulacion, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, iniciarSesion, vistaAspirante, estadoDe, PERFILES, ejecutar, SIM_ACCIONES, SIM_FORMATO, revisarOrtografia };
   if (typeof module !== 'undefined' && module.exports) module.exports = H; else root.ElxHandlers = H;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -13,10 +13,11 @@ En **Vercel → Settings → Environment Variables**:
 | `JWT_SECRET` | Texto aleatorio de 32 caracteres o más, distinto al de AdminCX |
 | `ADMIN_USER` | Usuario de la cuenta principal del panel |
 | `ADMIN_PASS` | Clave de la cuenta principal (12 caracteres o más) |
+| `PUENTE_SECRET` | Texto aleatorio de 64 caracteres. **El mismo** en AdminCX. Activa la entrada desde AdminCX (E-learning y Personal › Aspirantes). Si lo borras, se apaga y se cortan esas sesiones. |
 
 Cada vez que cambies una variable: **Deployments → … → Redeploy**.
 
-Para generar un `JWT_SECRET` sin instalar nada, abre la consola del navegador (F12) y pega:
+Para generar un `JWT_SECRET` o un `PUENTE_SECRET` sin instalar nada, abre la consola del navegador (F12) y pega:
 
 ```js
 [...crypto.getRandomValues(new Uint8Array(32))].map(b => b.toString(16).padStart(2, '0')).join('')

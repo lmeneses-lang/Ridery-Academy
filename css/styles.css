@@ -519,3 +519,8 @@ tr.clickable:hover { background: var(--surface-2); }
 .sim-nivel.bloqueado { opacity: .6; }
 .sim-nivel-pie { margin-top: auto; padding-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .sim-orto { margin: 0; padding-left: 18px; color: var(--warn); font-size: .85rem; }
+
+/* ---------- Panel dentro de AdminCX (admin.html?embebido=1) ----------
+   AdminCX ya tiene su barra arriba: aquí se esconde la propia. */
+body.embebido { --top-h: 0px; }
+body.embebido .topbar { display: none; }
