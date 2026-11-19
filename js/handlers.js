@@ -341,14 +341,14 @@
      maxAbiertos > 0 → los tickets llegan de forma progresiva (nunca más de N abiertos a la vez);
      maxAbiertos = 0 → llegan por tiempo («llegada» de cada caso), como en un pico real. */
   const SIM_NIVELES_DEFAULT = [
-    { id: 'basico', ruta: 'ORDERS', nombre: 'Básico', descripcion: 'Un ticket a la vez para que te adaptes a Zendesk. Sin panel de órdenes.', minutos: 15, maxAbiertos: 1, intervalo: 8, abandono: 240, panel: false, estados: false,
+    { id: 'basico', ruta: 'ORDERS', nombre: 'Básico', descripcion: 'Un ticket a la vez para que te adaptes a Zendesk. Sin panel de órdenes.', minutos: 15, maxAbiertos: 1, intervalo: 8, abandono: 240, panel: false, estados: true,
       casos: ['ord-incompleto', 'ord-pago', 'ord-direccion'] },
     { id: 'intermedio', ruta: 'ORDERS', nombre: 'Intermedio', descripcion: 'Hasta 2 tickets a la vez, Panel de órdenes y estatus del ticket. Aparece un caso que no es de Orders.', minutos: 20, maxAbiertos: 2, intervalo: 10, abandono: 180, panel: true, estados: true,
       casos: ['ord-incompleto', 'ord-retraso', 'ord-pago', 'fx-conductor-pago', 'ord-mal-estado', 'ord-sin-respuesta'] },
     { id: 'avanzado', ruta: 'ORDERS', nombre: 'Realidad', descripcion: 'Como un pico real: los tickets llegan por tiempo aunque no hayas terminado los anteriores, y el panel no se detiene.', minutos: 25, maxAbiertos: 0, intervalo: 0, abandono: 120, panel: true, estados: true,
       casos: ['ord-retraso', 'ord-incompleto', 'ord-pago', 'fx-conductor-pago', 'ord-mal-estado', 'ord-direccion', 'fx-viaje-cobro', 'ord-no-llego', 'ord-sin-respuesta'] }
 ,
-    { id: 'viajes-basico', ruta: 'VIAJES', adminModulos: ['trips'], nombre: 'Básico', descripcion: 'Un ticket a la vez. Aprende a buscar viajes en el Admin: Waiting, Running y Completed Requests, detalle y mensajes.', minutos: 15, maxAbiertos: 1, intervalo: 8, abandono: 240, herramientas: ['admin'], estados: false,
+    { id: 'viajes-basico', ruta: 'VIAJES', adminModulos: ['trips'], nombre: 'Básico', descripcion: 'Un ticket a la vez. Aprende a buscar viajes en el Admin: Waiting, Running y Completed Requests, detalle y mensajes.', minutos: 15, maxAbiertos: 1, intervalo: 8, abandono: 240, herramientas: ['admin'], estados: true,
       casos: ['via-no-lo-veo', 'via-objeto', 'via-cobro'] },
     { id: 'viajes-intermedio', ruta: 'VIAJES', adminModulos: ['trips'], nombre: 'Intermedio', descripcion: 'Hasta 2 tickets a la vez y estatus del ticket. Incluye un viaje viejo que solo aparece en «Trip History» y un caso que no es de viajes.', minutos: 20, maxAbiertos: 2, intervalo: 10, abandono: 180, herramientas: ['admin'], estados: true,
       casos: ['via-cobro', 'via-no-lo-veo', 'via-deuda', 'fx-pedido-zupper', 'via-objeto'] },
@@ -712,7 +712,7 @@
       ] }
   );
   SIM_NIVELES_DEFAULT.push(
-    { id: 'celulas-basico', ruta: 'CELULAS', nombre: 'Básico', descripcion: 'Un ticket a la vez. Busca usuarios en Users y viajes en Trips; usa Add Wallet, View Document y Cancel Trip con su motivo.', minutos: 15, maxAbiertos: 1, intervalo: 8, abandono: 240, herramientas: ['admin'], estados: false,
+    { id: 'celulas-basico', ruta: 'CELULAS', nombre: 'Básico', descripcion: 'Un ticket a la vez. Busca usuarios en Users y viajes en Trips; usa Add Wallet, View Document y Cancel Trip con su motivo.', minutos: 15, maxAbiertos: 1, intervalo: 8, abandono: 240, herramientas: ['admin'], estados: true,
       casos: ['cel-referidos', 'cel-autenticacion', 'cel-no-realizado'] },
     { id: 'celulas-intermedio', ruta: 'CELULAS', nombre: 'Intermedio', descripcion: 'Hasta 2 tickets a la vez. Conductores: Service Providers, Driver\'s Records, Cancelled Trips por Provider Id, Datos Bancarios y liquidaciones. Ojo con el ID de usuario y el de conductor.', minutos: 20, maxAbiertos: 2, intervalo: 10, abandono: 180, herramientas: ['admin'], estados: true,
       casos: ['cel-suspendido', 'cel-strikes', 'cel-pago-rebotado', 'cel-bad-review', 'cel-referidos'] },
@@ -1497,7 +1497,7 @@
       const r = { id: n.id, ruta, rutaNombre: SIM_RUTAS[ruta] || ruta, nombre: n.nombre, descripcion: n.descripcion, minutos: n.minutos, tickets: (n.casos || []).length, panel: hs.includes('zupper'), admin: hs.includes('admin'),
         bloqueado: s.ordenNiveles !== false && !anteriorListo, enCurso: !!curso, usadas, permitidos, ilimitado, quedan: ilimitado ? 1 : Math.max(0, permitidos - usadas), terminado: terminadas.length > 0,
         intento: curso ? hechos : usadas + 1, aprobado: !!aprobadoEn, aprobadoEn,
-        abandono: Number(n.abandono) || 0, maxAbiertos: Number(n.maxAbiertos) || 0, estados: !!n.estados,
+        abandono: Number(n.abandono) || 0, maxAbiertos: Number(n.maxAbiertos) || 0, estados: true,
         grupo: n.grupo || grupoDeRuta(ruta), etapa: (SIM_ETAPAS[ruta] || {}).titulo || SIM_RUTAS[ruta] || ruta, herramientasEtapa: (SIM_ETAPAS[ruta] || {}).herramientas || [] };
       listo[ruta] = r.terminado;
       return r;
@@ -1534,7 +1534,7 @@
         if (!progresivo) casos.sort((a, b) => (a.llegada || 0) - (b.llegada || 0));
         let numero = 2988100 + Math.floor(Math.random() * 800);
         ses = { id: nuevoId('sim'), nivel: n.id, inicio: ahora(), fin: null, estado: 'en-curso', velocidad: Number(s.velocidad) || 10, minutos: Number(n.minutos) || 20,
-          herramientas: herramientasDe(n), panel: herramientasDe(n).includes('zupper'), vistas: [], conEstados: !!n.estados, abandono: Number(n.abandono) || 0, maxAbiertos: progresivo ? Number(n.maxAbiertos) : 0, intervalo: Number(n.intervalo) || 8,
+          herramientas: herramientasDe(n), panel: herramientasDe(n).includes('zupper'), vistas: [], conEstados: true, abandono: Number(n.abandono) || 0, maxAbiertos: progresivo ? Number(n.maxAbiertos) : 0, intervalo: Number(n.intervalo) || 8,
           casos: casos.map((c, k) => ({ id: c.id, numero: numero += 1 + Math.floor(Math.random() * 9), llegada: progresivo ? (k < n.maxAbiertos ? k * (Number(n.intervalo) || 8) : null) : (Number(c.llegada) || 0), ultimoCliente: null,
             humor: c.humor == null ? 3 : c.humor, paso: 0, pasos: pasosBase(c), chat: c.pasos[0].cliente.map(t => ({ de: 'cliente', t })), respuestas: [],
             motivo: '', motivoOk: false, estadoTicket: 'nuevo', estadoOk: false, cerrado: false, primera: null,
@@ -1609,7 +1609,7 @@
       const d = s.casos.find(x => x.id === body.ticket);
       if (!c || !d) throw err(404, 'Ticket no encontrado.');
       if (c.cerrado) throw err(409, 'Este ticket ya no está en tu bandeja.');
-      const estado = ses.conEstados ? String(body.estado || '') : 'resuelto';
+      const estado = String(body.estado || 'resuelto');
       if (!SIM_ESTADOS_TICKET[estado]) throw err(400, 'Elige el estatus del ticket.');
       const motivo = limpiar(body.motivo, 120);
       if (!motivo || !s.motivos.includes(motivo)) throw err(400, 'Elige el motivo de contacto antes de enviar el ticket.');

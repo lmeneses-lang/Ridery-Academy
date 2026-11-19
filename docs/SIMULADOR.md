@@ -54,7 +54,7 @@ Con **«Niveles en orden»** encendido (en Configurar), cada nivel se desbloquea
 
 | Nivel | Cómo llegan los tickets | Abandono del cliente | Panel Zupper | Estatus del ticket |
 |---|---|---|---|---|
-| **Básico** (3 tickets, 15 min) | Uno a la vez: el siguiente llega cuando resuelve el anterior | 4 min sin respuesta | No | Solo «Resuelto» |
+| **Básico** (3 tickets, 15 min) | Uno a la vez: el siguiente llega cuando resuelve el anterior | 4 min sin respuesta | No | Abierto · PENDIENTE · Aún no recibimos respuesta · Resuelto |
 | **Intermedio** (6 tickets, 20 min) | Máximo 2 abiertos a la vez | 3 min | Sí | Abierto · PENDIENTE · Aún no recibimos respuesta · Resuelto |
 | **Realidad** (9 tickets, 25 min) | Por tiempo, en ráfaga, aunque no haya terminado los anteriores | 2 min | Sí | Igual que Intermedio |
 
@@ -96,7 +96,7 @@ Con **«Niveles en orden»** encendido (en Configurar), cada nivel se desbloquea
 | Respuesta sugerida | buena 2 · regular 1 · mala 0 |
 | Respuesta escrita | no cuenta hasta que Calidad la califica |
 | Motivo de contacto correcto | 2 por ticket |
-| Estatus correcto (Intermedio y Realidad) | 2 por ticket |
+| Estatus correcto (todos los niveles, como en Zendesk) | 2 por ticket |
 | Acción esperada en el panel, hecha a tiempo | 2 |
 
 **Calificación del cliente** (Bien/Mal): si el cliente terminó Neutral o Positivo es «Bien»; si terminó Negativo o peor, o abandonó, «Mal».

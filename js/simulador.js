@@ -321,7 +321,7 @@
   function vistaTicket(main, t) {
     const nombre = t.cliente.nombre.split(' ')[0];
     const tags = ['whatsapp', Z.admin ? 'trips' : 'orders', 'sentiment__' + (t.nivel >= 3 ? 'neutral' : 'negative'), 'sentiment_confidence__high', 'language_es'];
-    if (!Z.estadoSel[t.id]) Z.estadoSel[t.id] = Z.ses.conEstados ? (t.estadoTicket === 'nuevo' ? 'abierto' : t.estadoTicket) : 'resuelto';
+    if (!Z.estadoSel[t.id]) Z.estadoSel[t.id] = t.estadoTicket === 'nuevo' ? 'abierto' : t.estadoTicket;
     main.innerHTML = '<div class="zd-ticket">' +
       '<div class="zd-sub"><span class="zd-crumb">Organización (crear)</span><span class="zd-crumb">' + esc(nombre) + '</span><span class="zd-crumb act"><span class="zd-estado ' + ESTADO_COLOR[t.estadoTicket] + '">' + esc(estadoTxt(t)) + '</span> Ticket #' + t.numero + '</span></div>' +
       '<div class="zd-cols">' +
@@ -361,7 +361,6 @@
   }
   function botonEnviar(t) {
     if (t.cerrado) return '<button class="zd-btn" disabled>' + esc(estadoTxt(t)) + '</button>';
-    if (!Z.ses.conEstados) return '<button class="zd-btn" data-enviar-estado>Enviar como <b>Resuelto</b></button>';
     const e = Z.estadoSel[t.id];
     return '<div class="zd-split"><button class="zd-btn" data-enviar-estado>Enviar como <b>' + esc(Z.ses.estadosTicket[e]) + '</b></button><button class="zd-btn zd-split-ch" data-menu-estado aria-haspopup="true" aria-label="Elegir estatus">' + ic('up') + '</button>' +
       '<div class="zd-menu-est" hidden>' + Object.entries(Z.ses.estadosTicket).map(([k, n]) => '<button data-est="' + k + '" class="' + (k === e ? 'act' : '') + '"><span class="zd-sq ' + ESTADO_COLOR[k] + '"></span>' + esc(n) + '</button>').join('') + '</div></div>';
@@ -414,7 +413,7 @@
     try {
       const r = await Z.call('simResponder', Object.assign({ sesion: Z.ses.id, ticket: t.id }, op ? { opcion: op.i } : { otro: texto }));
       t.chat.push({ de: 'agente', t: texto });
-      if (t.estadoTicket === 'nuevo') { t.estadoTicket = 'abierto'; if (Z.ses.conEstados) Z.estadoSel[t.id] = 'abierto'; }
+      if (t.estadoTicket === 'nuevo') { t.estadoTicket = 'abierto'; Z.estadoSel[t.id] = 'abierto'; }
       Z.esperaDesde[t.id] = null;
       delete Z.seleccion[t.id]; delete Z.borrador[t.id];
       t.opciones = []; Z.escribiendo[t.id] = !!r.mensajes.length;
