@@ -390,31 +390,30 @@
     return null;
   }
 
+  /* Tu camino: cada módulo es un paso. Los de «Para todos» (antes «Tronco común») van primero; luego los de su célula. */
+  const esComun = m => m.celula === 'COMUN';
+  const grupoTxt = m => esComun(m) ? 'Para todos' : 'Tu célula: ' + ((celulaDe(m.celula) || {}).nombre || m.celula);
+  const pasoDe = m => S.ruta.modulos.indexOf(m) + 1;
+  const estadoPaso = m => m.estado === 'aprobado' ? 'ok' : m.estado === 'bloqueado' ? 'lock' : m.estado === 'agotado' ? 'fail' : 'go';
   function sidebar(v) {
     const r = S.ruta, cel = celulaDe(S.asp.celula);
     const activo = moduloDe(v);
     const sig = siguientePendiente();
     const abrir = activo ? activo._id : (sig && sig.m ? sig.m._id : (r.modulos[0] && r.modulos[0]._id));
-    let html = '<aside class="sidebar" id="sidebar" aria-label="Contenido del curso"><div class="sidebar-head"><div class="row-between"><span class="eyebrow">Tu ruta</span>' +
+    let html = '<aside class="sidebar" id="sidebar" aria-label="Tu camino"><div class="sidebar-head"><div class="row-between"><span class="eyebrow">Tu camino</span>' +
       '<button class="icon-btn drawer-toggle" data-act="drawer" aria-label="Cerrar">' + icon('x') + '</button></div>' +
-      '<h3>' + (cel ? 'Célula ' + esc(cel.nombre) : 'Tronco común') + '</h3>' +
+      '<h3>' + (cel ? 'Célula ' + esc(cel.nombre) : 'Formación CX') + '</h3>' +
       (!cel ? '<span class="pill pill-warn" style="align-self:flex-start">Célula en revisión</span>' : '') +
-      '<div class="bar' + (r.completo ? ' ok' : '') + '"><span style="width:' + r.progreso + '%"></span></div><span class="small muted num">' + r.progreso + '% completado</span></div>';
-    let n = 0;
-    let grupo = null;
+      '<div class="bar' + (r.completo ? ' ok' : '') + '"><span style="width:' + r.progreso + '%"></span></div><span class="small muted num">' + r.progreso + '% completado</span></div><div class="camino">';
     r.modulos.forEach(m => {
-      if (m.celula !== grupo) {
-        grupo = m.celula;
-        html += '<div class="eyebrow" style="padding:16px 20px 4px">' + (m.celula === 'COMUN' ? 'Tronco común' : esc((celulaDe(m.celula) || {}).nombre || m.celula)) + '</div>';
-      }
-      n++;
+      const n = pasoDe(m), ep = estadoPaso(m);
       const abierto = S.abiertos[m._id] != null ? S.abiertos[m._id] : m._id === abrir;
       const bloq = m.estado === 'bloqueado';
-      const hechas = m.lecciones.filter(l => l.completada).length;
-      const meta = bloq ? 'Bloqueado' : m.estado === 'aprobado' ? 'Aprobado' : m.estado === 'agotado' ? 'Sin intentos' : hechas + ' de ' + m.lecciones.length + ' lecciones';
-      html += '<div class="mod' + (abierto ? ' open' : '') + '" data-mod="' + esc(m._id) + '"><button class="mod-head" aria-expanded="' + abierto + '">' +
-        dot(m.estado === 'aprobado' ? 'done' : bloq ? 'lock' : m.estado === 'agotado' ? 'fail' : '', n) +
-        '<span class="grow"><span class="mod-title" style="display:block">' + esc(m.titulo) + '</span><span class="mod-meta">' + meta + '</span></span>' + icon('chev', 'chev') + '</button><div class="mod-items">';
+      const hechas = m.lecciones.filter(l => l.completada).length, total = m.lecciones.length + (m.examen.preguntas ? 1 : 0);
+      const meta = bloq ? grupoTxt(m) + ' · bloqueado' : m.estado === 'aprobado' ? grupoTxt(m) + ' · listo' : m.estado === 'agotado' ? 'Sin intentos' : grupoTxt(m) + ' · ' + (hechas + (m.examen.aprobado ? 1 : 0)) + ' de ' + total + ' hecho';
+      html += '<div class="mod paso-' + ep + (abierto ? ' open' : '') + '" data-mod="' + esc(m._id) + '"><button class="mod-head" aria-expanded="' + abierto + '">' +
+        '<span class="bola">' + (ep === 'ok' ? icon('check') : ep === 'fail' ? icon('x') : n) + '</span>' +
+        '<span class="grow"><span class="mod-title" style="display:block">Paso ' + n + ' · ' + esc(m.titulo) + '</span><span class="mod-meta">' + esc(meta) + '</span></span>' + icon('chev', 'chev') + '</button><div class="mod-items">';
       m.lecciones.forEach(l => {
         const act = v.tipo === 'leccion' && v.id === l.id;
         html += '<button class="item' + (act ? ' active' : '') + '" data-ir="leccion" data-id="' + esc(l.id) + '"' + (bloq ? ' disabled' : '') + (act ? ' aria-current="page"' : '') + '>' +
@@ -424,10 +423,12 @@
         const act = v.tipo === 'examen' && v.modId === m._id;
         html += '<button class="item' + (act ? ' active' : '') + '" data-ir="examen" data-mod="' + esc(m._id) + '"' + (bloq ? ' disabled' : '') + '>' +
           dot(m.examen.aprobado ? 'done' : m.estado === 'agotado' ? 'fail' : (bloq || !m.examen.habilitado) ? 'lock' : '') +
-          '<span class="grow">Examen del módulo</span><span class="small muted num">' + (m.examen.mejor != null ? m.examen.mejor + '%' : m.examen.preguntas + ' preg.') + '</span></button>';
+          '<span class="grow">Examen · ' + m.examen.preguntas + ' preguntas</span><span class="small muted num">' + (m.examen.mejor != null ? m.examen.mejor + '%' : '') + '</span></button>';
       }
       html += '</div></div>';
     });
+    const n = r.modulos.length + 1;
+    html += '<div class="mod paso-' + (r.completo ? 'go' : 'lock') + '"><button class="mod-head" data-act="practica"><span class="bola">' + n + '</span><span class="grow"><span class="mod-title" style="display:block">Paso ' + n + ' · Practica y demuestra</span><span class="mod-meta">Boost y Assessment</span></span>' + icon('right', 'chev') + '</button></div></div>';
     if (S.asp.celula && !r.tieneCelula) html += '<div class="small muted" style="padding:16px 20px">Tu célula todavía no tiene módulos cargados.</div>';
     if (r.completo) html += '<div class="mod"><button class="item' + (v.tipo === 'certificado' ? ' active' : '') + '" data-ir="certificado" style="padding:14px 20px">' + dot('done') + '<b class="grow">Certificado</b>' + icon('award') + '</button></div>';
     return html + '</aside>';
@@ -450,7 +451,8 @@
       sb.classList.add('show'); bd = document.createElement('div'); bd.className = 'backdrop'; bd.addEventListener('click', cerrarDrawer); document.body.appendChild(bd);
     }));
     limpiezas.push(() => { if (bd) bd.remove(); });
-    sb.querySelectorAll('.mod-head').forEach(h => h.addEventListener('click', () => {
+    const pr = sb.querySelector('[data-act="practica"]'); if (pr) pr.addEventListener('click', () => irSeccion(S.ruta.completo ? 'assessment' : 'boost'));
+    sb.querySelectorAll('.mod-head:not([data-act])').forEach(h => h.addEventListener('click', () => {
       const mod = h.parentElement; const on = !mod.classList.contains('open');
       mod.classList.toggle('open', on); h.setAttribute('aria-expanded', String(on)); S.abiertos[mod.dataset.mod] = on;
     }));
@@ -467,35 +469,96 @@
   }
   function ir(v) { verCurso(v); window.scrollTo(0, 0); const m = app.querySelector('#main h1'); if (m) { m.setAttribute('tabindex', '-1'); m.focus({ preventScroll: true }); } }
 
-  /* ---------- Inicio del curso ---------- */
+  /* ---------- Inicio del curso: tu siguiente paso + tu camino ---------- */
   function vistaInicio(el) {
     const r = S.ruta, cel = celulaDe(S.asp.celula), sig = siguientePendiente();
-    const aprob = r.modulos.filter(m => m.estado === 'aprobado').length;
     const notas = r.modulos.filter(m => m.examen.mejor != null).map(m => m.examen.mejor);
-    const prom = notas.length ? Math.round(notas.reduce((a, b) => a + b, 0) / notas.length) + '%' : '—';
-    let cont = '';
-    if (r.completo) cont = '<div class="continue"><div class="stack-sm"><span class="eyebrow">Formación completada</span><h2>Aprobaste todos los módulos</h2></div><button class="btn" data-go="certificado">Ver certificado' + icon('award') + '</button></div>';
-    else if (sig && sig.tipo === 'leccion') cont = '<div class="continue"><div class="stack-sm"><span class="eyebrow">' + (r.progreso ? 'Continúa donde lo dejaste' : 'Empieza aquí') + '</span><h2>' + esc(sig.l.titulo) + '</h2><span class="small" style="opacity:.85">' + esc(sig.m.titulo) + '</span></div><button class="btn" data-go="sig">' + (r.progreso ? 'Continuar' : 'Empezar') + icon('right') + '</button></div>';
-    else if (sig && sig.tipo === 'examen') cont = '<div class="continue"><div class="stack-sm"><span class="eyebrow">Siguiente paso</span><h2>Examen: ' + esc(sig.m.titulo) + '</h2><span class="small" style="opacity:.85">' + sig.m.examen.preguntas + ' preguntas · nota mínima ' + S.reglas.notaMinima + '%</span></div><button class="btn" data-go="sig">Ir al examen' + icon('right') + '</button></div>';
-    else if (sig && sig.tipo === 'agotado') cont = '<div class="notice">Usaste todos los intentos del examen de <b>' + esc(sig.m.titulo) + '</b>. Tu supervisor puede habilitarte un nuevo intento.</div>';
-    else if (!S.asp.celula) cont = '<div class="notice info">Terminaste el tronco común. Tu formación de célula se habilita cuando un supervisor te asigne una.</div>';
-    else if (!r.tieneCelula) cont = '<div class="notice info">Terminaste el tronco común. La formación de ' + esc(cel ? cel.nombre : 'tu célula') + ' todavía no tiene módulos cargados; te avisaremos cuando esté lista.</div>';
+    const prom = notas.length ? Math.round(notas.reduce((a, b) => a + b, 0) / notas.length) : null;
+    const thr = S.reglas.porcentajeVideo, nm = S.reglas.notaMinima;
+    let hero = '';
+    if (r.completo) hero = '<div class="hero-paso"><div><small>¡FORMACIÓN COMPLETADA!</small><h2>Aprobaste todos tus pasos</h2><p>Descarga tu certificado y sigue practicando en Boost y Assessment.</p></div><button class="btn btn-primary hero-cta" data-go="certificado">' + icon('award') + 'Ver certificado</button></div>';
+    else if (sig && (sig.tipo === 'leccion' || sig.tipo === 'examen')) {
+      const m = sig.m, l = sig.l, li = l ? m.lecciones.indexOf(l) + 1 : 0;
+      const que = sig.tipo === 'leccion'
+        ? [(l.youtube ? 'Mira el video completo (mínimo ' + thr + '%)' : 'Lee la lección completa'), 'Marca la lección como completada', (m.examen.preguntas ? 'Aprueba el examen (' + nm + '%)' : 'Sigue con la próxima lección')]
+        : ['Responde las ' + m.examen.preguntas + ' preguntas', 'Revisa tus respuestas antes de enviar', 'Necesitas ' + nm + '% para pasar'];
+      hero = '<div class="hero-paso"><div><small>' + (r.progreso ? 'TU SIGUIENTE PASO' : 'EMPIEZA AQUÍ') + '</small><h2>' + esc(sig.tipo === 'leccion' ? l.titulo : 'Examen: ' + m.titulo) + '</h2>' +
+        '<p>Paso ' + pasoDe(m) + ' · ' + esc(m.titulo) + ' · ' + (sig.tipo === 'leccion' ? 'Lección ' + li + ' de ' + m.lecciones.length : m.examen.preguntas + ' preguntas') + '</p>' +
+        '<div class="hero-que">' + que.map((t, i) => '<span><b>' + (i + 1) + '</b>' + esc(t) + '</span>').join('') + '</div></div>' +
+        '<button class="btn btn-primary hero-cta" data-go="sig">' + icon('play') + (sig.tipo === 'examen' ? 'Ir al examen' : r.progreso ? 'Continuar' : 'Empezar') + '</button></div>';
+    }
+    else if (sig && sig.tipo === 'agotado') hero = '<div class="notice">Usaste todos los intentos del examen de <b>' + esc(sig.m.titulo) + '</b>. Tu supervisor puede habilitarte un nuevo intento.</div>';
+    else if (!S.asp.celula) hero = '<div class="notice info">Terminaste los pasos «Para todos». Tu formación de célula se habilita cuando un supervisor te asigne una.</div>';
+    else if (!r.tieneCelula) hero = '<div class="notice info">Terminaste los pasos «Para todos». La formación de ' + esc(cel ? cel.nombre : 'tu célula') + ' todavía no tiene módulos cargados; te avisaremos cuando esté lista.</div>';
 
-    let n = 0;
-    el.innerHTML = '<div class="stack-sm"><span class="eyebrow">Inicio</span><h1>Hola, ' + esc(S.asp.nombre.split(' ')[0]) + '</h1><p class="muted">' + (cel ? 'Célula ' + esc(cel.nombre) : 'Célula en revisión') + '</p></div>' +
-      (!S.asp.celula ? '<div class="notice">Tu perfil está en revisión. Mientras tanto puedes avanzar con el tronco común.</div>' : '') + cont +
-      '<div class="stats"><div class="stat"><span class="small muted">Progreso</span><b>' + r.progreso + '%</b></div><div class="stat"><span class="small muted">Módulos aprobados</span><b>' + aprob + ' / ' + r.modulos.length + '</b></div><div class="stat"><span class="small muted">Promedio de exámenes</span><b>' + prom + '</b></div></div>' +
-      '<div class="stack-sm"><h2>Módulos</h2><div class="mod-list">' + r.modulos.map(m => {
-        n++;
-        const est = { aprobado: ['pill-ok', 'Aprobado'], disponible: ['pill-brand', m.lecciones.some(l => l.completada) || m.examen.intentos ? 'En curso' : 'Disponible'], bloqueado: ['', 'Bloqueado'], agotado: ['pill-bad', 'Sin intentos'] }[m.estado];
-        return '<div class="mod-card"><span class="idx num">' + String(n).padStart(2, '0') + '</span><div class="stack-sm" style="gap:2px;min-width:0"><b>' + esc(m.titulo) + '</b><span class="small muted">' +
-          (m.celula === 'COMUN' ? 'Tronco común' : esc((celulaDe(m.celula) || {}).nombre || m.celula)) + ' · ' + m.lecciones.length + ' lecciones' + (m.examen.preguntas ? ' · examen' : '') + '</span></div>' +
-          '<span class="pill ' + est[0] + '">' + (m.estado === 'bloqueado' ? icon('lock') : '') + est[1] + '</span></div>';
-      }).join('') + '</div>' + (r.modulos.length > 1 ? '<p class="small muted">Los módulos se desbloquean en orden: aprueba el examen de uno para pasar al siguiente.</p>' : '') + '</div>';
+    const tarjeta = (m, k) => {
+      const ep = estadoPaso(m), hechas = m.lecciones.filter(l => l.completada).length + (m.examen.aprobado ? 1 : 0), total = m.lecciones.length + (m.examen.preguntas ? 1 : 0);
+      const pct = m.estado === 'aprobado' ? 100 : Math.round(hechas / Math.max(1, total) * 100);
+      const etq = { ok: '✓ LISTO', go: (sig && sig.m === m) ? 'TE TOCA' : 'EN CURSO', lock: 'BLOQUEADO', fail: 'SIN INTENTOS' }[ep];
+      const pie = ep === 'ok' ? '<span class="chip-ok">' + icon('check') + 'Examen ' + (m.examen.mejor != null ? m.examen.mejor + '%' : 'aprobado') + '</span>'
+        : ep === 'lock' ? '<span class="chip-g">' + icon('lock') + 'Se abre al aprobar el Paso ' + (pasoDe(m) - 1) + '</span>'
+        : '<span class="chip-g">' + hechas + ' de ' + total + ' hecho' + (m.examen.preguntas && !m.examen.aprobado ? ' · examen pendiente' : '') + '</span>';
+      return '<button class="paso-card ' + ep + ((sig && sig.m === m) ? ' toca' : '') + '" style="--i:' + k + '" data-mod-ir="' + esc(m._id) + '"' + (ep === 'lock' ? ' disabled' : '') + '>' +
+        '<span class="paso-n">PASO ' + pasoDe(m) + ' · ' + etq + '</span><span class="paso-g">' + esc(grupoTxt(m)) + '</span><h3>' + esc(m.titulo) + '</h3>' +
+        (m.descripcion ? '<p>' + esc(m.descripcion) + '</p>' : '<p>' + m.lecciones.length + (m.lecciones.length === 1 ? ' lección' : ' lecciones') + (m.examen.preguntas ? ' y un examen' : '') + '.</p>') +
+        '<span class="bar' + (ep === 'ok' ? ' ok' : '') + '"><span style="width:' + pct + '%"></span></span>' + pie + '</button>';
+    };
+    const nPract = r.modulos.length + 1;
+    el.innerHTML = '<div class="stack-sm anim-in"><span class="eyebrow">Mi formación</span><h1>Hola, ' + esc(S.asp.nombre.split(' ')[0]) + '</h1><p class="muted">' + (cel ? 'Célula ' + esc(cel.nombre) : 'Célula en revisión') + ' · <b class="num" data-contar="' + r.progreso + '">' + r.progreso + '</b>% de tu camino' + (prom != null ? ' · promedio de exámenes <b class="num">' + prom + '%</b>' : '') + '</p></div>' +
+      (!S.asp.celula ? '<div class="notice">Tu perfil está en revisión. Mientras tanto puedes avanzar con los pasos «Para todos».</div>' : '') + hero +
+      '<div class="stack-sm"><h2>Tu camino</h2><div class="pasos-grid">' + r.modulos.map(tarjeta).join('') +
+        '<button class="paso-card ' + (r.completo ? 'go' : 'extra') + '" style="--i:' + r.modulos.length + '" data-practica><span class="paso-n">PASO ' + nPract + ' · PRACTICA</span><span class="paso-g">Siempre disponible</span><h3>Practica y demuestra</h3><p>Boost para entrenar escritura y memoria; Assessment con el simulador de tickets.</p><span class="chip-g">' + icon('bolt') + 'Ir a Boost</span></button></div></div>' +
+      '<div class="que-es">' + icon('alert') + '<span><b>¿Qué es «Para todos»?</b> Son los temas que todo agente de CX debe saber, sin importar su célula. Cuando los apruebas, sigues con los pasos de tu célula. Haz un paso a la vez: el siguiente se abre al aprobar el examen del anterior.</span></div>';
     el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => {
       if (b.dataset.go === 'certificado') return ir({ tipo: 'certificado' });
       const s = siguientePendiente(); if (s) ir(s.tipo === 'leccion' ? { tipo: 'leccion', id: s.id } : { tipo: 'examen', modId: s.modId });
     }));
+    el.querySelectorAll('[data-mod-ir]').forEach(b => b.addEventListener('click', () => {
+      const m = S.ruta.modulos.find(x => x._id === b.dataset.modIr); if (!m) return;
+      const l = m.lecciones.find(x => !x.completada) || (m.examen.preguntas && !m.examen.aprobado ? null : m.lecciones[0]);
+      ir(l ? { tipo: 'leccion', id: l.id } : { tipo: 'examen', modId: m._id });
+    }));
+    const pr = el.querySelector('[data-practica]'); if (pr) pr.addEventListener('click', () => irSeccion('boost'));
+    contarNumeros(el);
+    tourInicio();
+  }
+  // Números que suben hasta su valor
+  function contarNumeros(el) {
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    el.querySelectorAll('[data-contar]').forEach(n => { const fin = Number(n.dataset.contar) || 0; let t0 = null;
+      const paso = ts => { if (!t0) t0 = ts; const k = Math.min(1, (ts - t0) / 900); n.textContent = Math.round(fin * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(paso); };
+      requestAnimationFrame(paso); });
+  }
+  // Recorrido de bienvenida (solo la primera vez): 3 globitos
+  function tourInicio() {
+    const KEY = 'elx_tour_formacion_v1';
+    try { if (Elx.Store.get(KEY)) return; } catch (e) { return; }
+    const pasos = [['#sidebar .camino', 'Tu camino', 'Tu formación va por pasos. Haz uno a la vez: el siguiente se abre al aprobar el examen del anterior.'],
+      ['.hero-cta', 'Tu siguiente paso', 'Este botón siempre te lleva a lo que te toca ahora. Arriba ves qué tienes que hacer.'],
+      ['[data-sec="boost"]', 'Practica cuando quieras', 'En Boost entrenas escritura y memoria. En Assessment está el simulador de tickets.']];
+    let k = 0, globo = null;
+    const fin = () => { if (globo) globo.remove(); globo = null; window.removeEventListener('resize', mostrar); try { Elx.Store.set(KEY, '1'); } catch (e) {} };
+    function mostrar() {
+      if (globo) globo.remove();
+      let t = null;
+      while (k < pasos.length) { t = document.querySelector(pasos[k][0]); const rr = t && t.getBoundingClientRect(); if (rr && rr.width > 0 && rr.right > 0 && rr.left < innerWidth) break; t = null; k++; }
+      if (!t) return fin();
+      const r = t.getBoundingClientRect(), p = pasos[k];
+      globo = document.createElement('div'); globo.className = 'tour'; globo.setAttribute('role', 'dialog'); globo.setAttribute('aria-label', p[1]);
+      globo.innerHTML = '<b>' + esc(p[1]) + '</b><span>' + esc(p[2]) + '</span><div class="tour-f"><span class="small">' + (k + 1) + ' de ' + pasos.length + '</span><span class="row" style="gap:6px"><button class="btn btn-ghost btn-sm" data-t="saltar">Saltar</button><button class="btn btn-primary btn-sm" data-t="sig">' + (k === pasos.length - 1 ? 'Entendido' : 'Siguiente') + '</button></span></div>';
+      document.body.appendChild(globo);
+      const g = globo.getBoundingClientRect(), W = innerWidth;
+      let left = r.right + 14, top = r.top + scrollY;
+      if (left + g.width > W - 12) { left = Math.max(12, Math.min(W - g.width - 12, r.left)); top = r.bottom + scrollY + 12; globo.classList.add('abajo'); }
+      globo.style.left = left + 'px'; globo.style.top = Math.max(12, top) + 'px';
+      t.classList.add('tour-foco'); setTimeout(() => t.classList.remove('tour-foco'), 2400);
+      globo.querySelector('[data-t="sig"]').addEventListener('click', () => { k++; if (k >= pasos.length) fin(); else mostrar(); });
+      globo.querySelector('[data-t="saltar"]').addEventListener('click', fin);
+      globo.querySelector('[data-t="sig"]').focus();
+    }
+    window.addEventListener('resize', mostrar);
+    limpiezas.push(() => { if (globo) globo.remove(); window.removeEventListener('resize', mostrar); });
+    setTimeout(mostrar, 700);
   }
 
   /* ---------- Lección ---------- */
@@ -506,9 +569,10 @@
     const vid = youtubeId(l.youtube);
     const thr = S.reglas.porcentajeVideo;
     const prev = vecino(v, -1), next = vecino(v, 1);
-    el.innerHTML = '<nav class="crumbs" aria-label="Ubicación"><span>' + esc(m.titulo) + '</span><span>›</span><span>Lección ' + (idx + 1) + ' de ' + m.lecciones.length + '</span></nav>' +
+    el.innerHTML = '<span class="eyebrow">Paso ' + pasoDe(m) + ' · ' + esc(m.titulo) + ' · ' + esc(grupoTxt(m)) + '</span>' + stepperModulo(m, { tipo: 'leccion', id: l.id }) +
       '<h1>' + esc(l.titulo) + '</h1>' +
       (vid ? '<div class="stack-sm"><div class="video" id="video"></div><div class="watch" id="watch"></div></div>' : '') +
+      '<div class="guia" id="guia"></div>' +
       (l.contenido ? '<div class="prose">' + prosa(l.contenido) + '</div>' : '') +
       (l.imagenes.length ? '<div class="stack-sm"><h3>Material de apoyo</h3><div class="gallery">' + l.imagenes.map((u, i) => {
         const t = tipoImagen(u);
@@ -527,13 +591,23 @@
       if (l.completada) { btn.disabled = !next; btn.innerHTML = next ? 'Siguiente' + icon('right') : 'Lección completada'; }
       else { const falta = vid && pct < thr; btn.disabled = falta; btn.innerHTML = icon('check') + 'Marcar como completada'; btn.title = falta ? 'Mira al menos el ' + thr + '% del video' : ''; }
     };
+    let yaListo = !vid || pct >= thr;
     const pintarWatch = () => {
-      const w = el.querySelector('#watch'); if (!w) return;
-      const ok = pct >= thr;
-      w.innerHTML = '<div class="bar' + (ok ? ' ok' : '') + '"><span style="width:' + pct + '%"></span></div><span class="num ' + (ok ? '' : 'muted') + '" style="' + (ok ? 'color:var(--ok);font-weight:600' : '') + '">' +
-        (ok ? 'Video visto ✓' : 'Visto ' + pct + '% · necesitas ' + thr + '% para continuar') + '</span>';
+      const ok = !vid || pct >= thr;
+      const w = el.querySelector('#watch');
+      if (w) w.innerHTML = '<div class="bar' + (ok ? ' ok' : '') + '"><span style="width:' + pct + '%"></span></div><span class="num ' + (ok ? '' : 'muted') + '" style="' + (ok ? 'color:var(--ok);font-weight:700' : '') + '">' +
+        (ok ? (l.completada ? 'Video visto ✓' : pct + '% · ¡Listo! Ya puedes marcarla') : 'Visto ' + pct + '% · necesitas ' + thr + '% para continuar') + '</span>';
+      // Guía: qué hacer en esta pantalla
+      const g = el.querySelector('#guia'), ultima = idx === m.lecciones.length - 1;
+      const pasos = [[vid ? 'Mira el video' : 'Lee la lección', vid ? 'Mínimo ' + thr + '%' + (ok ? ' · hecho' : '') : 'Lee todo el contenido', ok],
+        ['Marca como completada', l.completada ? 'Hecho' : 'Botón de abajo a la derecha', l.completada],
+        ultima && m.examen.preguntas ? ['Presenta el examen', m.examen.preguntas + ' preguntas · nota mínima ' + S.reglas.notaMinima + '%', m.examen.aprobado] : ['Sigue con la próxima lección', (m.lecciones[idx + 1] || {}).titulo || 'Se abre sola al completar', false]];
+      const on = pasos.findIndex(x => !x[2]);
+      if (g) g.innerHTML = pasos.map((x, i) => '<div class="g ' + (x[2] ? 'ok' : i === on ? 'on' : '') + '"><span class="gn">' + (x[2] ? icon('check') : i + 1) + '</span><div><b>' + esc(x[0]) + '</b><small>' + esc(x[1]) + '</small></div></div>').join('');
+      if (ok && !yaListo) { yaListo = true; btn.classList.add('late'); }
     };
     pintarBoton(); pintarWatch();
+    if (yaListo && !l.completada) btn.classList.add('late');
 
     let ultimoEnvio = pct;
     const reportar = async (forzar) => {
@@ -549,13 +623,36 @@
       try {
         const r = await call('progreso', { leccionId: l.id, pct, completar: true });
         S.ruta = r.ruta;
-        toast('Lección completada');
         const n = vecino(v, 1);
-        n ? ir(n) : verCurso({ tipo: 'inicio' });
+        verCurso(v);
+        leccionCompletada(n);
       } catch (e) { btn.disabled = false; manejar(e); }
     });
 
     if (vid) montarVideo(el.querySelector('#video'), vid, l.id, avanzar, () => reportar(true));
+  }
+
+  // Barra de avance del módulo: Lección 1 → Lección 2 → Examen
+  function stepperModulo(m, v) {
+    const items = m.lecciones.map((l, i) => ({ t: 'Lección ' + (i + 1), sub: l.titulo, ok: l.completada, on: v.tipo === 'leccion' && v.id === l.id }));
+    if (m.examen.preguntas) items.push({ t: 'Examen', sub: m.examen.preguntas + ' preguntas', ok: m.examen.aprobado, on: v.tipo === 'examen' });
+    return '<div class="stepper" aria-label="Avance del paso">' + items.map((x, i) => (i ? '<span class="st-l' + (items[i - 1].ok ? ' ok' : '') + '"></span>' : '') +
+      '<span class="st' + (x.ok ? ' ok' : '') + (x.on ? ' on' : '') + '" title="' + esc(x.sub) + '"' + (x.on ? ' aria-current="step"' : '') + '><span class="b">' + (x.ok ? icon('check') : i + 1) + '</span><span class="st-t">' + esc(x.t) + (x.on ? '<small>' + esc(x.sub) + '</small>' : '') + '</span></span>').join('') + '</div>';
+  }
+  // «¡Lección completada!»: check animado, qué sigue y pasa solo en 3 s (salvo «Quedarme aquí»)
+  function leccionCompletada(n) {
+    const m = n && n.modId ? S.ruta.modulos.find(x => x._id === n.modId) : n && n.id ? moduloDe(n) : null;
+    const sigTxt = !n ? 'Vuelve a tu camino para ver lo que sigue' : n.tipo === 'examen' ? 'Examen de ' + m.titulo : (m.lecciones.find(l => l.id === n.id) || {}).titulo || 'la próxima lección';
+    const w = document.createElement('div'); w.className = 'lec-ok'; w.setAttribute('role', 'status');
+    w.innerHTML = '<span class="lec-ok-ic">' + icon('check') + '</span><div class="grow"><b>¡Lección completada!</b><span>Ahora sigue: ' + esc(sigTxt) + '</span>' +
+      '<div class="lec-ok-auto"><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" fill="none" stroke="#2a3040" stroke-width="4"/><circle class="lec-ok-ring" cx="18" cy="18" r="15" fill="none" stroke="#38CEA6" stroke-width="4" stroke-dasharray="94.2" transform="rotate(-90 18 18)"/></svg>' +
+      '<span>Continúa en <b data-s>3</b> s</span><button class="lec-ok-link" data-q>Quedarme aquí</button><button class="lec-ok-go" data-y>Ir ahora</button></div></div>';
+    document.body.appendChild(w);
+    let s = 3; const tic = setInterval(() => { s--; const b = w.querySelector('[data-s]'); if (b) b.textContent = s; if (s <= 0) { cerrar(); ir(n || { tipo: 'inicio' }); } }, 1000);
+    function cerrar() { clearInterval(tic); w.classList.add('fuera'); setTimeout(() => w.remove(), 250); }
+    w.querySelector('[data-q]').addEventListener('click', cerrar);
+    w.querySelector('[data-y]').addEventListener('click', () => { cerrar(); ir(n || { tipo: 'inicio' }); });
+    limpiezas.push(() => { clearInterval(tic); w.remove(); });
   }
 
   /* Reproductor: cuenta solo los segundos realmente reproducidos (adelantar no suma) */
@@ -632,7 +729,7 @@
     else if (m.estado === 'agotado') cuerpo = '<div class="feedback bad">' + icon('alert') + '<span class="body">Usaste tus ' + S.reglas.intentosMax + ' intentos. Tu mejor nota fue <b>' + (e.mejor || 0) + '%</b>. Tu supervisor puede habilitarte un nuevo intento.</span></div>';
     else if (faltan.length) cuerpo = '<div class="notice">Completa ' + (faltan.length === 1 ? 'la lección pendiente' : 'las ' + faltan.length + ' lecciones pendientes') + ' para habilitar el examen.</div><div class="row"><button class="btn btn-primary" id="x-pend">Ir a «' + esc(faltan[0].titulo) + '»' + icon('right') + '</button></div>';
     else cuerpo = '<div class="row"><button class="btn btn-primary" id="x-start">' + (e.intentos ? 'Intentar de nuevo' : 'Comenzar examen') + icon('right') + '</button></div>';
-    el.innerHTML = '<nav class="crumbs"><span>' + esc(m.titulo) + '</span><span>›</span><span>Examen</span></nav><h1>Examen del módulo</h1>' +
+    el.innerHTML = '<span class="eyebrow">Paso ' + pasoDe(m) + ' · ' + esc(m.titulo) + ' · ' + esc(grupoTxt(m)) + '</span>' + stepperModulo(m, { tipo: 'examen' }) + '<h1>Examen: ' + esc(m.titulo) + '</h1>' +
       '<div class="stats"><div class="stat"><span class="small muted">Preguntas</span><b>' + e.preguntas + '</b></div><div class="stat"><span class="small muted">Nota mínima</span><b>' + S.reglas.notaMinima + '%</b></div><div class="stat"><span class="small muted">Intentos restantes</span><b>' + e.restantes + ' de ' + S.reglas.intentosMax + '</b></div></div>' +
       (e.intentos && !e.aprobado ? '<p class="muted">Tu mejor nota hasta ahora: <b class="num">' + (e.mejor || 0) + '%</b></p>' : '') +
       '<p class="muted">Todas las preguntas son de selección simple. Las preguntas y opciones cambian de orden en cada intento. Antes de enviar podrás revisar tus respuestas.</p>' + cuerpo;
@@ -701,6 +798,7 @@
         (!d.ok && d.correcta ? '<span>Respuesta correcta: <b>' + esc(d.correcta) + '</b></span>' : '') +
         (d.explicacion ? '<span class="muted">' + esc(d.explicacion) + '</span>' : '') + '</div></div></div>').join('') +
       (!r.aprobado && r.restantes ? '<p class="small muted">Las respuestas correctas se muestran cuando apruebas o al terminar tus intentos.</p>' : '');
+    celebrarExamen(m, r, siguiente);
     el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => {
       const g = b.dataset.go;
       if (g === 'next') ir(siguiente);
@@ -709,6 +807,66 @@
       else if (g === 'repaso') ir({ tipo: 'leccion', id: m.lecciones[0].id });
       else if (g === 'retry') { const mm = moduloDe({ modId: m._id }); empezarExamen(app.querySelector('#inner'), mm); }
     }));
+  }
+
+  /* ---------- Celebraciones ---------- */
+  function confeti(cont, n) {
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const c = document.createElement('div'); c.className = 'confeti'; c.setAttribute('aria-hidden', 'true');
+    const col = ['#38CEA6', '#D71D5C', '#272883', '#F5C04A', '#ffffff'];
+    for (let k = 0; k < (n || 70); k++) { const i = document.createElement('i'); i.style.left = (k * 37 % 100) + '%'; i.style.background = col[k % 5]; i.style.animationDelay = (k % 14) * 0.09 + 's'; i.style.animationDuration = (2.3 + (k % 5) * .3) + 's'; c.appendChild(i); }
+    cont.appendChild(c);
+  }
+  function modalFiesta(html, alAbrir) {
+    const w = document.createElement('div'); w.className = 'fiesta-wrap'; w.innerHTML = html;
+    document.body.appendChild(w);
+    const cerrar = () => { w.classList.add('fuera'); setTimeout(() => w.remove(), 220); document.removeEventListener('keydown', esc_); };
+    const esc_ = e => { if (e.key === 'Escape') cerrar(); };
+    document.addEventListener('keydown', esc_);
+    w.addEventListener('click', e => { if (e.target === w) cerrar(); });
+    w.querySelectorAll('[data-cerrar]').forEach(b => b.addEventListener('click', cerrar));
+    limpiezas.push(() => w.remove());
+    if (alAbrir) alAbrir(w, cerrar);
+    const f = w.querySelector('.btn-primary'); if (f) f.focus();
+    return w;
+  }
+  // Al enviar un examen: «¡Felicidades!», hito al terminar «Para todos» o toda la ruta, o «¡Casi!»
+  function celebrarExamen(m, r, siguiente) {
+    const nombre = esc(S.asp.nombre.split(' ')[0]);
+    const mm = S.ruta.modulos.find(x => x._id === m._id) || m;
+    const sigMod = siguiente && siguiente.modId ? S.ruta.modulos.find(x => x._id === siguiente.modId) : siguiente && siguiente.id ? moduloDe(siguiente) : null;
+    const irSig = () => siguiente ? ir(siguiente) : ir({ tipo: 'inicio' });
+    if (r.aprobado) {
+      const terminoBase = esComun(mm) && !S.ruta.modulos.some(x => esComun(x) && x.estado !== 'aprobado');
+      if (r.ruta.completo || (terminoBase && sigMod && !esComun(sigMod))) {
+        // Hito a pantalla completa
+        const total = S.ruta.modulos.length + 1, hechos = S.ruta.modulos.filter(x => x.estado === 'aprobado').length;
+        const nodos = Array.from({ length: total }, (_, i) => (i ? '<span class="h-ln' + (i <= hechos ? ' ok' : '') + '"></span>' : '') + '<span class="h-nd' + (i < hechos ? ' ok' : i === hechos ? ' go' : '') + '">' + (i < hechos ? icon('check') : i + 1) + '</span>').join('');
+        const cel = celulaDe(S.asp.celula);
+        return modalFiesta('<div class="hito" role="dialog" aria-modal="true" aria-labelledby="h-t"><small>¡HITO ALCANZADO!</small><h2 id="h-t">' + (r.ruta.completo ? '¡Completaste toda tu formación, ' + nombre + '!' : 'Terminaste la base que todo agente de CX necesita') + '</h2>' +
+          '<p>' + (r.ruta.completo ? 'Aprobaste todos tus pasos. Ya puedes ver tu certificado y seguir practicando en Boost y Assessment.' : 'Ahora empieza lo propio de tu célula' + (cel ? ': <b>' + esc(cel.nombre) + '</b>' : '') + '.') + '</p>' +
+          '<div class="h-track">' + nodos + '</div><div class="row" style="justify-content:center"><button class="btn btn-ghost h-sec" data-cerrar>Ver mi resultado</button>' +
+          '<button class="btn btn-primary h-cta" data-y>' + (r.ruta.completo ? icon('award') + 'Ver certificado' : 'Empezar ' + esc(sigMod.titulo) + ' →') + '</button></div></div>',
+          (w, cerrar) => { confeti(w.querySelector('.hito'), 90); w.querySelector('[data-y]').addEventListener('click', () => { cerrar(); r.ruta.completo ? ir({ tipo: 'certificado' }) : irSig(); }); });
+      }
+      return modalFiesta('<div class="fiesta" role="dialog" aria-modal="true" aria-labelledby="f-t"><div class="medalla">' + icon('award') + '</div><h2 id="f-t">¡Felicidades, ' + nombre + '!</h2>' +
+        '<p class="muted">Completaste <b>' + esc(mm.titulo) + '</b>.' + (mm.descripcion ? ' ' + esc(mm.descripcion) : '') + '</p>' +
+        '<div class="f-kp"><div><b class="ok num" data-contar="' + r.nota + '">' + r.nota + '</b><b class="ok">%</b><span>Tu nota</span></div><div><b class="num">' + r.correctas + '/' + r.total + '</b><span>Respuestas correctas</span></div><div><b class="num" data-contar="' + r.ruta.progreso + '">' + r.ruta.progreso + '</b><b>%</b><span>De tu camino</span></div></div>' +
+        (sigMod ? '<div class="f-unl"><span class="f-lk">' + icon('check') + '</span><div class="grow"><small>DESBLOQUEASTE</small><b>Paso ' + pasoDe(sigMod) + ' · ' + esc(sigMod.titulo) + '</b></div><button class="btn btn-primary" data-y>Ir ahora →</button></div>' : '<button class="btn btn-primary" data-y>Volver a mi camino</button>') +
+        '<button class="btn btn-ghost btn-sm" data-cerrar>Ver mis respuestas</button></div>',
+        (w, cerrar) => { confeti(w); contarNumeros(w); w.querySelector('[data-y]').addEventListener('click', () => { cerrar(); irSig(); }); });
+    }
+    // No aprobó: motivador, con qué repasar
+    const casi = r.nota >= r.notaMinima - 20;
+    const malas = (r.detalle || []).map((d, i) => ({ d, i })).filter(x => !x.d.ok);
+    return modalFiesta('<div class="fiesta casi" role="dialog" aria-modal="true" aria-labelledby="c-t"><div class="nota-anillo">' + anillo(r.nota, false) + '</div><h2 id="c-t">' + (casi ? '¡Casi! Te faltó poco' : 'Todavía no lo logras') + '</h2>' +
+      '<p class="muted">Necesitas ' + r.notaMinima + '% para pasar. ' + (r.restantes ? 'Repasa esto y vuelve a intentarlo: te ' + (r.restantes === 1 ? 'queda <b>1 intento</b>' : 'quedan <b>' + r.restantes + ' intentos</b>') + '.' : 'Usaste todos tus intentos; tu supervisor puede habilitarte uno nuevo.') + '</p>' +
+      (malas.length ? '<div class="f-rev"><h4>REPASA ESTO</h4>' + malas.slice(0, 5).map(x => '<div>' + icon('alert') + '<span>Pregunta ' + (x.i + 1) + ' · ' + esc(x.d.texto) + '</span></div>').join('') + '<span class="small muted">Vuelve a ver las lecciones de «' + esc(mm.titulo) + '».</span></div>' : '') +
+      '<div class="row" style="justify-content:center"><button class="btn btn-secondary" data-rep>Repasar la lección</button>' + (r.restantes ? '<button class="btn btn-primary" data-ret>' + icon('refresh') + 'Intentar de nuevo</button>' : '<button class="btn btn-primary" data-cerrar>Entendido</button>') + '</div></div>',
+      (w, cerrar) => {
+        w.querySelector('[data-rep]').addEventListener('click', () => { cerrar(); ir({ tipo: 'leccion', id: mm.lecciones[0].id }); });
+        const rt = w.querySelector('[data-ret]'); if (rt) rt.addEventListener('click', () => { cerrar(); empezarExamen(app.querySelector('#inner'), moduloDe({ modId: mm._id })); });
+      });
   }
 
   /* ---------- Certificado ---------- */
