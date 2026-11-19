@@ -496,3 +496,11 @@ body.zd-abierto { overflow: hidden; }
 .adm-almc b { font-size: 12px; font-weight: 400; } .adm-almc span { font-size: 22px; }
 .adm-almc .ab-apply { min-width: 0; padding: 4px 12px; }
 @media (max-width: 1000px) { .adm-alm { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ap-ficha, .amod-g { grid-template-columns: 1fr; } .ap-perfil-g { flex-direction: column; } }
+
+/* ---------- Intentos ---------- */
+.zd-intento { font-size: 12px; font-weight: 700; color: #1f73b7; background: #e8f1fb; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.zd-intento-fin { display: flex; flex-direction: column; gap: 4px; margin: 14px 0 4px; padding: 12px 14px; border-radius: 8px; background: #fff4e5; border: 1px solid #f5c98b; text-align: left; }
+.zd-intento-fin.bien { background: #e9f7ef; border-color: #9bd3b0; }
+.zd-intento-fin span { font-size: 13px; color: #555; }
+.zd.oscuro .zd-intento-fin span { color: #ccc; }
+.zd-fin-acc { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }

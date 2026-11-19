@@ -844,7 +844,7 @@
     'reporte-usuario': ["User's Records (reporte)", null, '']
   };
 
-  const SIMULADOR_DEFAULT = { activo: true, ordenNiveles: true, intentos: 1, velocidad: 10, niveles: SIM_NIVELES_DEFAULT, motivos: SIM_MOTIVOS_DEFAULT, casos: SIM_CASOS_DEFAULT, ordenes: SIM_ORDENES_DEFAULT, viajes: SIM_VIAJES_DEFAULT, admin: SIM_ADMIN_DEFAULT };
+  const SIMULADOR_DEFAULT = { activo: true, ordenNiveles: true, intentos: 0, aprobacion: 80, velocidad: 10, niveles: SIM_NIVELES_DEFAULT, motivos: SIM_MOTIVOS_DEFAULT, casos: SIM_CASOS_DEFAULT, ordenes: SIM_ORDENES_DEFAULT, viajes: SIM_VIAJES_DEFAULT, admin: SIM_ADMIN_DEFAULT };
 
   /* Revisión básica de ortografía para las respuestas escritas («Otro»): la ve Calidad al calificar. */
   const SIN_TILDE = { tambien: 'también', ademas: 'además', despues: 'después', informacion: 'información', direccion: 'dirección', numero: 'número', gestion: 'gestión', solucion: 'solución',
@@ -1293,6 +1293,9 @@
       SIM_VIAJES_DEFAULT.filter(v => !s.viajes.some(x => x.id === v.id)).forEach(v => s.viajes.push(v));
     }
     s.admin = Object.assign({}, SIM_ADMIN_DEFAULT, s.admin || {});
+    // Configuraciones guardadas antes de los intentos ilimitados: se pasan a ilimitados (0) con nota de aprobación 80 %
+    if (!cfg.simulador || cfg.simulador.aprobacion == null) { s.intentos = 0; s.aprobacion = 80; }
+    s.aprobacion = Number(s.aprobacion) || 80;
     return s;
   }
   const humorTxt = h => SIM_HUMOR[Math.max(0, Math.min(4, h))];
@@ -1428,7 +1431,7 @@
     const def = id => s.casos.find(c => c.id === id) || { pasos: [], cliente: {} };
     const nivel = s.niveles.find(n => n.id === ses.nivel) || {};
     return {
-      id: ses.id, nivel: ses.nivel, nivelNombre: nivel.nombre || ses.nivel, inicio: ses.inicio, ahora: ahora(), estado: ses.estado, velocidad: ses.velocidad, minutos: ses.minutos,
+      id: ses.id, nivel: ses.nivel, nivelNombre: nivel.nombre || ses.nivel, intento: ses.intento || null, ilimitado: !(Number(s.intentos) > 0), inicio: ses.inicio, ahora: ahora(), estado: ses.estado, velocidad: ses.velocidad, minutos: ses.minutos,
       panel: !!ses.panel, herramientas: ses.herramientas || (ses.panel ? ['zupper'] : []), conEstados: !!ses.conEstados, abandono: ses.abandono || 0, estadosTicket: SIM_ESTADOS_TICKET, motivos: s.motivos, acciones: SIM_ACCIONES,
       tickets: ses.casos.map(c => {
         const d = def(c.id), paso = d.pasos[c.paso];
@@ -1460,6 +1463,8 @@
     return { cfg, s, asp, sim, ses };
   }
   // Niveles con su estado para este aspirante: bloqueado / disponible / agotado
+  // Intentos por nivel: contador propio (las sesiones viejas se recortan); para datos de antes, cuenta las sesiones
+  const intentosDe = (sim, nivel) => (sim.contador && sim.contador[nivel] != null) ? sim.contador[nivel] : sim.sesiones.filter(x => (x.nivel || 'avanzado') === nivel).length;
   function nivelesDe(s, sim) {
     const listo = {};
     return s.niveles.map(n => {
@@ -1467,11 +1472,15 @@
       const ses = sim.sesiones.filter(x => (x.nivel || 'avanzado') === n.id);
       const terminadas = ses.filter(x => x.estado === 'terminada' || vencida(x));
       const curso = ses.find(x => x.estado === 'en-curso' && !vencida(x));
-      const permitidos = (Number(s.intentos) || 1) + ((sim.extra && sim.extra[n.id]) || 0);
-      const usadas = ses.length - (curso ? 1 : 0);
+      const ilimitado = !(Number(s.intentos) > 0);
+      const permitidos = ilimitado ? null : Number(s.intentos) + ((sim.extra && sim.extra[n.id]) || 0);
+      const hechos = intentosDe(sim, n.id);                       // intentos empezados (incluye el que está en curso)
+      const usadas = hechos - (curso ? 1 : 0);
+      const aprobadoEn = (sim.aprobados || {})[n.id] || null;
       const hs = herramientasDe(n);
       const r = { id: n.id, ruta, rutaNombre: SIM_RUTAS[ruta] || ruta, nombre: n.nombre, descripcion: n.descripcion, minutos: n.minutos, tickets: (n.casos || []).length, panel: hs.includes('zupper'), admin: hs.includes('admin'),
-        bloqueado: s.ordenNiveles !== false && !anteriorListo, enCurso: !!curso, usadas, permitidos, quedan: Math.max(0, permitidos - usadas), terminado: terminadas.length > 0 };
+        bloqueado: s.ordenNiveles !== false && !anteriorListo, enCurso: !!curso, usadas, permitidos, ilimitado, quedan: ilimitado ? 1 : Math.max(0, permitidos - usadas), terminado: terminadas.length > 0,
+        intento: curso ? hechos : usadas + 1, aprobado: !!aprobadoEn, aprobadoEn };
       listo[ruta] = r.terminado;
       return r;
     });
@@ -1500,7 +1509,7 @@
         const n = s.niveles.find(x => x.id === body.nivel);
         if (!nv || !n) throw err(400, 'Elige un nivel.');
         if (nv.bloqueado) throw err(403, 'Primero termina el nivel anterior.');   // solo si «Niveles en orden» está encendido
-        if (!nv.quedan) throw err(403, 'Ya usaste tus intentos de este nivel. Si necesitas otro, escríbele al equipo.');
+        if (!nv.ilimitado && !nv.quedan) throw err(403, 'Ya usaste tus intentos de este nivel. Si necesitas otro, escríbele al equipo.');
         const casos = (n.casos || []).map(id => s.casos.find(c => c.id === id && c.activo !== false)).filter(Boolean);
         if (!casos.length) throw err(403, 'Este nivel todavía no tiene casos.');
         const progresivo = Number(n.maxAbiertos) > 0;
@@ -1513,8 +1522,11 @@
             motivo: '', motivoOk: false, estadoTicket: 'nuevo', estadoOk: false, cerrado: false, primera: null,
             consulta: !!(c.consulta && herramientasDe(n).includes(c.consulta.herramienta)), verifico: null })),
           acciones: [], resumen: null };
+        sim.contador = sim.contador || {};
+        sim.contador[n.id] = intentosDe(sim, n.id) + 1;
+        ses.intento = sim.contador[n.id];
         sim.sesiones.push(ses);
-        sim.sesiones = sim.sesiones.slice(-10);
+        sim.sesiones = sim.sesiones.slice(-30);
       }
       asp.simulador = sim;
       await store.put('aspirantes', asp);
@@ -1691,11 +1703,18 @@
       const ses = sim.sesiones.find(x => x.id === body.sesion);
       if (!ses) throw err(404, 'Simulación no encontrada.');
       terminarSim(ses, s);
+      // ¿Lo hizo bien? (nota ≥ aprobación). Se guarda en qué intento lo logró por primera vez.
+      const intento = ses.intento || intentosDe(sim, ses.nivel);
+      const bien = ses.resumen.nota >= s.aprobacion && !ses.resumen.pendientes;
+      sim.aprobados = sim.aprobados || {};
+      if (bien && !sim.aprobados[ses.nivel]) sim.aprobados[ses.nivel] = intento;
       asp.simulador = sim;
       await store.put('aspirantes', asp);
-      const r = ses.resumen;    // el aspirante no ve su nota: la revisa el equipo
+      const r = ses.resumen;    // el aspirante no ve su nota: solo si lo hizo bien y en qué intento
       const siguiente = s.niveles[s.niveles.findIndex(n => n.id === ses.nivel) + 1];
+      const nv = nivelesDe(s, sim).find(n => n.id === ses.nivel) || {};
       return { resueltos: r.tickets.resueltos, total: r.tickets.total, primeraPromedio: r.primeraPromedio, acciones: r.ordenes.acciones, siguiente: siguiente ? siguiente.nombre : null, csat: r.csat,
+        intento, bien, pendienteCalidad: !!r.pendientes, aprobadoEn: sim.aprobados[ses.nivel] || null, puedeRepetir: !!(nv.ilimitado || nv.quedan),
         calificaciones: ses.casos.map(c => { const d = s.casos.find(x => x.id === c.id) || {}; return { numero: c.numero, cliente: (d.cliente || {}).nombre || '', asunto: d.asunto || '', calificacion: csatDe(c), humor: humorTxt(c.humor), abandonado: !!c.abandonado }; }) };
     }
   };
@@ -1709,12 +1728,13 @@
       for (const a of asps) for (const x of a.simulador.sesiones) {
         if (vencida(x)) terminarSim(x, s);
         const r = x.resumen || puntosSim(x, s);
-        filas.push({ id: a._id, nombre: a.nombre, celula: a.celula, sesion: x.id, nivel: ((n => n ? (n.ruta === 'VIAJES' ? 'Viajes · ' : 'Orders · ') + n.nombre : 'Realidad')(s.niveles.find(n => n.id === x.nivel))), inicio: x.inicio, fin: x.fin, estado: x.estado,
+        filas.push({ id: a._id, nombre: a.nombre, celula: a.celula, sesion: x.id, nivel: ((n => n ? ({ VIAJES: 'Viajes · ', CELULAS: 'Células · ' }[n.ruta] || 'Orders · ') + n.nombre : 'Realidad')(s.niveles.find(n => n.id === x.nivel))), intento: x.intento || null,
+          aprobadoEn: ((a.simulador.aprobados || {})[x.nivel]) || null, inicio: x.inicio, fin: x.fin, estado: x.estado,
           nota: r.nota, pendientes: r.pendientes, ortografia: r.ortografia || 0, resueltos: r.tickets.resueltos, total: r.tickets.total, primeraPromedio: r.primeraPromedio,
           panel: !!x.panel, csat: r.csat || null, malas: r.ordenes.malas, sinGestion: r.ordenes.sinGestion.length });
       }
       filas.sort((x, y) => String(y.inicio).localeCompare(String(x.inicio)));
-      return { filas, config: { activo: s.activo !== false, ordenNiveles: s.ordenNiveles !== false, intentos: s.intentos, velocidad: s.velocidad, tickets: s.casos.length, ordenes: s.ordenes.length,
+      return { filas, config: { activo: s.activo !== false, ordenNiveles: s.ordenNiveles !== false, intentos: s.intentos, aprobacion: s.aprobacion, velocidad: s.velocidad, tickets: s.casos.length, ordenes: s.ordenes.length,
         niveles: s.niveles.map(n => ({ nombre: n.nombre, minutos: n.minutos, tickets: (n.casos || []).length })) } };
     },
     async simDetalle({ store, body }) {
@@ -1749,7 +1769,13 @@
       const r = c && c.respuestas[Number(body.k)];
       if (!r || !r.otro) throw err(404, 'Respuesta no encontrada.');
       r.v = body.v; r.revisada = ahora();
-      if (x.estado === 'terminada') x.resumen = puntosSim(x, s);
+      if (x.estado === 'terminada') {
+        x.resumen = puntosSim(x, s);
+        // Al revisar las escritas, si ya alcanza la nota, cuenta como «lo hizo bien» en ese intento
+        const sim = a.simulador; sim.aprobados = sim.aprobados || {};
+        const prev = sim.aprobados[x.nivel], it = x.intento || null;
+        if (it && !x.resumen.pendientes && x.resumen.nota >= s.aprobacion && (!prev || it < prev)) sim.aprobados[x.nivel] = it;
+      }
       await store.put('aspirantes', a);
       return { resumen: x.resumen || puntosSim(x, s) };
     },
@@ -1770,14 +1796,14 @@
     async simConfig({ store }) {
       const cfg = await cargarConfig(store);
       const s = configSim(cfg);
-      return { simulador: { formato: SIM_FORMATO, activo: s.activo !== false, ordenNiveles: s.ordenNiveles !== false, intentos: s.intentos, velocidad: s.velocidad, niveles: s.niveles, motivos: s.motivos, casos: s.casos, ordenes: s.ordenes, viajes: s.viajes },
+      return { simulador: { formato: SIM_FORMATO, activo: s.activo !== false, ordenNiveles: s.ordenNiveles !== false, intentos: s.intentos, aprobacion: s.aprobacion, velocidad: s.velocidad, niveles: s.niveles, motivos: s.motivos, casos: s.casos, ordenes: s.ordenes, viajes: s.viajes },
         acciones: SIM_ACCIONES, estadosTicket: SIM_ESTADOS_TICKET, estComercio: SIM_EST_COMERCIO, estEntrega: SIM_EST_ENTREGA };
     },
     async simGuardarConfig({ store, body }) {
       const cfg = await cargarConfig(store);
       const s = configSim(cfg);
       const n = (v, min, max, def) => { const x = Math.round(Number(v)); return x >= min && x <= max ? x : def; };
-      const nuevo = { activo: body.activo !== false, ordenNiveles: body.ordenNiveles !== false, intentos: n(body.intentos, 1, 10, s.intentos), velocidad: n(body.velocidad, 1, 30, s.velocidad),
+      const nuevo = { activo: body.activo !== false, ordenNiveles: body.ordenNiveles !== false, intentos: n(body.intentos, 0, 50, s.intentos), aprobacion: n(body.aprobacion, 1, 100, s.aprobacion), velocidad: n(body.velocidad, 1, 30, s.velocidad),
         niveles: s.niveles, motivos: s.motivos, casos: s.casos, ordenes: s.ordenes, viajes: s.viajes };
       if (body.archivo) {   // archivo .json exportado desde el panel y editado
         const f = body.archivo;

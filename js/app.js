@@ -935,10 +935,11 @@
       if (n.enCurso) pie = '<button class="btn btn-primary btn-sm" data-nivel="' + esc(n.id) + '">' + icon('play') + 'Continuar</button>';
       else if (n.bloqueado) pie = '<span class="pill">' + icon('lock') + 'Termina el nivel anterior</span>';
       else if (curso) pie = '<span class="pill">Tienes otro nivel en curso</span>';
+      else if (n.ilimitado) pie = '<button class="btn ' + (n.usadas ? 'btn-secondary' : 'btn-primary') + ' btn-sm" data-nivel="' + esc(n.id) + '">' + icon(n.usadas ? 'refresh' : 'play') + (n.usadas ? 'Reiniciar prueba' : 'Empezar') + '</button><span class="small muted">' + (n.usadas ? 'Vas por el intento #' + n.intento : 'Intentos sin límite') + '</span>';
       else if (n.quedan) pie = '<button class="btn ' + (n.terminado ? 'btn-secondary' : 'btn-primary') + ' btn-sm" data-nivel="' + esc(n.id) + '">' + icon('play') + (n.terminado ? 'Repetir' : 'Empezar') + '</button><span class="small muted">' + (n.quedan === 1 ? '1 intento' : n.quedan + ' intentos') + '</span>';
       else pie = '<span class="pill pill-ok">' + icon('check') + 'Enviado</span>';
-      return '<article class="sim-nivel' + (n.bloqueado ? ' bloqueado' : '') + '"><div class="row-between"><span class="eyebrow">Nivel ' + (k + 1) + '</span>' + (n.terminado ? '<span class="pill pill-ok">' + icon('check') + 'Hecho</span>' : '') + '</div>' +
-        '<h3>' + esc(n.nombre) + '</h3><p class="small muted">' + esc(n.descripcion) + '</p><p class="small"><b>' + n.tickets + '</b> tickets · <b>' + n.minutos + '</b> min' + (n.panel ? ' · Panel Zupper' : '') + (n.admin ? ' · Admin' : '') + '</p><div class="sim-nivel-pie">' + pie + '</div></article>';
+      return '<article class="sim-nivel' + (n.bloqueado ? ' bloqueado' : '') + '"><div class="row-between"><span class="eyebrow">Nivel ' + (k + 1) + '</span>' + (n.aprobado ? '<span class="pill pill-ok">' + icon('check') + 'Logrado</span>' : n.terminado ? '<span class="pill">Hecho</span>' : '') + '</div>' +
+        '<h3>' + esc(n.nombre) + '</h3><p class="small muted">' + esc(n.descripcion) + '</p><p class="small"><b>' + n.tickets + '</b> tickets · <b>' + n.minutos + '</b> min' + (n.panel ? ' · Panel Zupper' : '') + (n.admin ? ' · Admin' : '') + '</p>' + (n.aprobado ? '<p class="small sim-logro">' + icon('check') + 'Lo lograste en el intento #' + n.aprobadoEn + (n.usadas > n.aprobadoEn ? ' · ' + n.usadas + ' intentos en total' : '') + '</p>' : n.usadas ? '<p class="small muted">' + n.usadas + (n.usadas === 1 ? ' intento' : ' intentos') + ' · aún no lo logras</p>' : '') + '<div class="sim-nivel-pie">' + pie + '</div></article>';
     };
     const ult = r.ultimas[0];
     card.innerHTML = '<div class="sim-card-in"><span class="boost-ic">' + icon('chat') + '</span><div class="stack-sm" style="gap:6px;flex:1;min-width:0"><h2>Simulador de tickets</h2>' +
@@ -947,7 +948,7 @@
       (ult ? '<p class="small muted">Último intento (' + esc(ult.nivel) + '): ' + Elx.fechaHora(ult.fecha) + ' · ' + ult.resueltos + '/' + ult.total + ' tickets atendidos. Tu resultado lo revisa el equipo.</p>' : '');
     card.querySelectorAll('[data-nivel]').forEach(go => go.addEventListener('click', async () => {
       const n = r.niveles.find(x => x.id === go.dataset.nivel);
-      if (!n.enCurso && !await confirmar({ titulo: '¿Empezar el nivel ' + n.nombre + '?', texto: 'El reloj de ' + n.minutos + ' minutos empieza al entrar y no se detiene aunque salgas. Ten el sonido activo.', ok: 'Empezar' })) return;
+      if (!n.enCurso && !await confirmar({ titulo: (n.usadas ? '¿Reiniciar' : '¿Empezar') + ' el nivel ' + n.nombre + '?', texto: (n.ilimitado ? 'Este será tu intento #' + n.intento + '. ' : '') + 'El reloj de ' + n.minutos + ' minutos empieza al entrar y no se detiene aunque salgas. Ten el sonido activo.', ok: n.usadas ? 'Reiniciar' : 'Empezar' })) return;
       go.disabled = true;
       try {
         await window.ElxSimulador.abrir({ call, nivel: n.id, alSalir: e => { if (e && e.status === 401) return manejar(e); if (S.seccion === 'assessment') pintarSimulador(document.getElementById('sim-card')); } });

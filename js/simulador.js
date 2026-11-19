@@ -200,9 +200,9 @@
   function pintar() {
     Z.root.innerHTML =
       '<div class="zd-alerta" role="note">' + ic('info') + '<span><b>Ridery Academy · Nivel ' + esc(Z.ses.nivelNombre) + ':</b> los tickets y órdenes son de práctica. Atiende como si fueran reales.</span>' +
-      '<span class="zd-reloj">' + ic('clock') + 'Tiempo restante <b data-reloj>' + mmss(Z.ses.minutos * 60 - segSesion()) + '</b></span>' +
+      (Z.ses.intento ? '<span class="zd-intento">Intento #' + Z.ses.intento + '</span>' : '') + '<span class="zd-reloj">' + ic('clock') + 'Tiempo restante <b data-reloj>' + mmss(Z.ses.minutos * 60 - segSesion()) + '</b></span>' +
       '<button class="zd-link" data-salir title="El tiempo sigue corriendo">Salir</button><button class="zd-link" data-sonido>' + (Z.silencio ? 'Activar sonido' : 'Silenciar') + '</button>' +
-      '<button class="zd-btn zd-btn-sm" data-terminar>Terminar simulación</button></div>' +
+      (Z.ses.ilimitado ? '<button class="zd-link" data-reiniciar title="Cierra este intento y empieza el nivel desde cero">Reiniciar prueba</button>' : '') + '<button class="zd-btn zd-btn-sm" data-terminar>Terminar simulación</button></div>' +
       '<div class="cr" id="cr"></div><div class="zd-zen" id="zd-zen">' +
       '<header class="zd-top"><span class="zd-logo" aria-hidden="true">RA</span><button class="zd-workspace">Soporte ' + ic('chev') + '</button><nav class="zd-tabs" id="zd-tabs" aria-label="Pestañas"></nav>' +
       '<div class="zd-top-ic">' + ic('search') + '<span class="zd-sep"></span>' + ic('bell') + '<span class="zd-sep"></span>' + ic('grid') +
@@ -212,6 +212,7 @@
       '<button title="Reportes" disabled>' + ic('chart') + '</button><span class="zd-rail-sep"></span><button title="Base de conocimientos" disabled>' + ic('book') + '</button></nav>' +
       '<main class="zd-main" id="zd-main"></main></div></div><div class="zd-app" id="zd-app" hidden></div>';
     Z.root.querySelector('[data-terminar]').addEventListener('click', () => terminar(false));
+    const rb = Z.root.querySelector('[data-reiniciar]'); if (rb) rb.addEventListener('click', () => reiniciarPrueba(true));
     Z.root.querySelector('[data-salir]').addEventListener('click', async () => {
       if (!await confirmar({ titulo: '¿Salir del simulador?', texto: 'El tiempo sigue corriendo. Puedes volver a entrar desde Assessment para continuar donde quedaste.', ok: 'Salir', cancelar: 'Seguir' })) return;
       const cb = Z.alSalir; cerrar(); Z.ses = null; if (cb) cb();
@@ -577,9 +578,23 @@
           (r.csat.sinAtender ? '<span><b>' + r.csat.sinAtender + '</b>Sin atender</span>' : '') + '</div>' +
           '<ul class="zd-csat-l">' + r.calificaciones.map(c => '<li><span class="zd-csat-p ' + (c.calificacion === 'Bien' ? 'bien' : c.calificacion === 'Mal' ? 'mal' : '') + '">' + esc(c.calificacion) + '</span><span><b>#' + c.numero + ' · ' + esc(c.cliente) + '</b><small>' + esc(c.asunto) + ' · ' + (c.abandonado ? 'el cliente abandonó por falta de respuesta' : 'el cliente quedó ' + esc(c.humor.toLowerCase())) + '</small></span></li>').join('') + '</ul>' +
           '<p class="zd-muted small">Así calificaría el cliente tu atención según cómo le respondiste. Tus respuestas escritas las revisa Calidad aparte.</p></div>' : '') +
+        (r.intento ? '<div class="zd-intento-fin ' + (r.aprobadoEn ? 'bien' : '') + '">' + (r.bien ? '<b>¡Lo hiciste bien en el intento #' + r.intento + '!</b>' + (r.aprobadoEn && r.aprobadoEn < r.intento ? '<span>La primera vez que lo lograste fue en el intento #' + r.aprobadoEn + '.</span>' : '')
+          : r.aprobadoEn ? '<b>Intento #' + r.intento + ' terminado.</b><span>Ya lo habías logrado en el intento #' + r.aprobadoEn + '.</span>'
+          : r.pendienteCalidad ? '<b>Intento #' + r.intento + ' terminado.</b><span>Tienes respuestas escritas que revisa Calidad; cuando las califiquen sabrás si lo lograste.</span>'
+          : '<b>Intento #' + r.intento + ': todavía no lo logras.</b><span>Revisa cómo quedaron tus clientes y vuelve a intentarlo' + (r.puedeRepetir ? ': puedes reiniciar la prueba las veces que quieras.' : '.') + '</span>') + '</div>' : '') +
         (r.siguiente ? '<p class="zd-muted">Ya puedes entrar al nivel <b>' + esc(r.siguiente) + '</b> desde Assessment.</p>' : '') : '') +
-      '<button class="zd-btn" data-volver>Volver a Ridery Academy</button></div></div>';
+      '<div class="zd-fin-acc">' + (r && r.puedeRepetir ? '<button class="zd-btn zd-btn-sec" data-otra>Reiniciar prueba</button>' : '') + '<button class="zd-btn" data-volver>Volver a Ridery Academy</button></div></div></div>';
     main.querySelector('[data-volver]').addEventListener('click', () => { const cb = Z.alSalir; Z.ses = null; Z.terminando = false; cerrar(); if (cb) cb(); });
+    const otra = main.querySelector('[data-otra]'); if (otra) otra.addEventListener('click', () => reiniciarPrueba(false));
+  }
+  // Reiniciar prueba: cierra el intento actual (cuenta como intento) y abre el mismo nivel desde cero
+  async function reiniciarPrueba(preguntar) {
+    if (!Z.ses) return;
+    if (preguntar && !await confirmar({ titulo: '¿Reiniciar la prueba?', texto: 'Este intento se cierra y empiezas el nivel ' + Z.ses.nivelNombre + ' desde cero. Puedes reiniciar las veces que quieras hasta lograrlo.', ok: 'Reiniciar' })) return;
+    const nivel = Z.ses.nivel, call = Z.call, alSalir = Z.alSalir;
+    if (!Z.root || !Z.root.classList.contains('zd-terminada')) { try { await call('simTerminar', { sesion: Z.ses.id }); } catch (e) { /* si ya terminó, seguimos */ } }
+    cerrar(); Z.ses = null; Z.terminando = false;
+    try { await abrir({ call, nivel, alSalir }); } catch (e) { toast(e.message || 'No se pudo reiniciar.', 'bad'); if (alSalir) alSalir(); }
   }
   function manejar(e) {
     if (e.status === 409 && /tiempo/.test(e.message)) return terminar(true);

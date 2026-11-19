@@ -40,7 +40,12 @@ Hay tres rutas de práctica, cada una con sus 3 niveles (Básico → Intermedio 
 
 Con **«Niveles en orden»** encendido (en Configurar), cada nivel se desbloquea al terminar el anterior. Apagado, el aspirante elige el nivel que quiera desde el principio.
 
-**Intentos por nivel** son las veces que cada aspirante puede hacer cada nivel; por defecto es 1. Reclutamiento puede darle uno extra a una persona con «Darle otro intento».
+**Intentos por nivel:** por defecto son **sin límite** (0 en Configurar). El aspirante puede **reiniciar la prueba** las veces que quiera: desde la tarjeta del nivel («Reiniciar prueba»), desde la barra de arriba mientras la hace, o al terminar. Cada reinicio cierra el intento actual y cuenta como uno más.
+
+- Ve en qué intento va («Intento #3») y, cuando un intento llega a la **nota para «lo hizo bien»** (80 % por defecto, se cambia en Configurar), ve «Lo lograste en el intento #N». No ve su nota.
+- Si el intento tiene respuestas escritas sin revisar, queda pendiente hasta que Calidad las califique.
+- Calidad ve en Resultados el número de intento de cada simulación y en cuál lo logró.
+- Si se pone un número en «Intentos por nivel», ese es el máximo, y Reclutamiento puede darle uno extra a una persona con «Darle otro intento».
 
 | Nivel | Cómo llegan los tickets | Abandono del cliente | Panel Zupper | Estatus del ticket |
 |---|---|---|---|---|

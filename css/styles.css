@@ -557,3 +557,5 @@ span.bx-frase { cursor: default; } span.bx-frase.bien { background: var(--ok-sof
    AdminCX ya tiene su barra arriba: aquí se esconde la propia. */
 body.embebido { --top-h: 0px; }
 body.embebido .topbar { display: none; }
+.sim-logro { color: var(--ok, #1e8e5a); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.sim-logro svg { width: 14px; height: 14px; }
