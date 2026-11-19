@@ -174,7 +174,7 @@
     if (rest <= 0) return terminar(true);
     if (Z.app === 'zupper') actualizarPanel();
     if (Math.floor(s) % 3 === 0) pintarNavegador();
-    if (Z.app === 'admin' && Math.floor(s) % 10 === 0 && !Z.root.querySelector('.adm :focus, .amenu') && !Z.root.querySelector('.adm-volver')) pintarApp();
+    if (Z.app === 'admin' && Math.floor(s) % 10 === 0 && window.ElxSimAdmin.vivo() && !Z.root.querySelector('.adm :focus, .amenu, .adm-modal') && !Z.root.querySelector('.adm-volver')) pintarApp();
     const ah = Z.root.querySelector('.adm-hora'); if (ah) ah.textContent = horaPanel(minPanel());
     else actualizarEspera();
   }
@@ -326,7 +326,7 @@
       '<div class="zd-cols">' +
       '<aside class="zd-campos"><div class="zd-aviso">' + ic('info') + '<span>Ticket actualizado</span></div>' +
       '<div class="zd-campo"><label>Etiquetas</label><div class="zd-tags">' + tags.map(x => '<span>' + esc(x) + ' ×</span>').join('') + '</div></div>' +
-      '<div class="zd-campo"><label for="zd-motivo">Motivo de Contacto | ' + (Z.admin ? 'Trips' : 'Orders') + '</label><select id="zd-motivo"' + (t.cerrado ? ' disabled' : '') + '><option value="">-</option>' +
+      '<div class="zd-campo"><label for="zd-motivo">Motivo de Contacto | ' + (/^celulas/.test(Z.ses.nivel) ? 'Células' : Z.admin ? 'Trips' : 'Orders') + '</label><select id="zd-motivo"' + (t.cerrado ? ' disabled' : '') + '><option value="">-</option>' +
         Z.ses.motivos.map(m => '<option' + ((Z.motivo[t.id] || '') === m ? ' selected' : '') + '>' + esc(m) + '</option>').join('') + '</select></div>' +
       '<div class="zd-campo"><label>Calificación</label><input disabled></div>' +
       '<label class="zd-check"><input type="checkbox" disabled> Cerrar el Ticket</label>' +
@@ -343,7 +343,7 @@
         '<dt>Hora local</dt><dd>' + new Date(ahora()).toLocaleString('es-VE', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ' GMT-4</dd><dt>Notas</dt><dd><div class="zd-notas">' + esc(t.cliente.notas || '') + '</div></dd></dl>' +
         '<div class="zd-ctx-b"><h3>Historial de interacción</h3><div class="zd-hist act"><span class="zd-sq ' + ESTADO_COLOR[t.estadoTicket] + '"></span><div><b>Conversación con ' + esc(nombre) + '</b><small>Ahora · Estado ' + esc(estadoTxt(t)) + '</small></div></div>' +
         '<div class="zd-hist"><span class="zd-sq gris"></span><div><b>Conversación con ' + esc(nombre) + '</b><small>21 oct. 18:38 · Estado Resuelto</small></div></div></div>' +
-        (Z.admin ? '<div class="zd-ctx-b"><h3>¿Es por un viaje?</h3><p class="zd-muted">Búscalo en el Admin: Waiting, Running o Completed Requests, o en All Trips (usa «Trip History» para viajes viejos).</p><button class="zd-btn zd-btn-sec zd-btn-sm" data-ir4>' + ic('car') + 'Abrir Admin</button></div>' : '') +
+        (Z.admin ? '<div class="zd-ctx-b"><h3>Admin de Ridery</h3><p class="zd-muted">Viajes en Trips (usa «Trip History» para viajes viejos); usuarios en Users y conductores en Service Providers. Ojo: el ID de usuario y el de conductor son distintos.</p><button class="zd-btn zd-btn-sec zd-btn-sm" data-ir4>' + ic('car') + 'Abrir Admin</button></div>' : '') +
         (Z.ses.panel ? '<div class="zd-ctx-b"><h3>¿Es por una orden?</h3><p class="zd-muted">Búscala en el Panel Zupper por número de orden o por el nombre del cliente.</p><button class="zd-btn zd-btn-sec zd-btn-sm" data-ir3>' + ic('store') + 'Abrir Panel Zupper</button></div>' : '') + '</aside>' +
       '</div>' +
       '<footer class="zd-pie"><div class="zd-macro">' + ic('bolt') + '<select disabled><option>Aplicar macro</option></select></div><div class="grow"></div>' +

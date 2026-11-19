@@ -559,7 +559,292 @@
     }
   })();
 
-  const SIMULADOR_DEFAULT = { activo: true, ordenNiveles: true, intentos: 1, velocidad: 10, niveles: SIM_NIVELES_DEFAULT, motivos: SIM_MOTIVOS_DEFAULT, casos: SIM_CASOS_DEFAULT, ordenes: SIM_ORDENES_DEFAULT, viajes: SIM_VIAJES_DEFAULT };
+  /* ---------- Simulador: ruta CÉLULAS (Admin completo) ----------
+     Tickets de las otras células (Supply, Payments, Match & Pricing, CX, Fraud, Trips) que se
+     resuelven con los demás módulos del Admin: Service Providers, Users, Reviews, Trip Payment…
+     El ID de usuario y el ID de conductor son distintos: buscar uno en el módulo del otro no lo
+     encuentra (o encuentra a otra persona). consulta.id lleva prefijo: «u:» usuario, «p:» conductor.
+     adminEsperada: { accion, objetivo, nota } → acción en el Admin que suma 2 puntos si se hace bien.
+     Todos los nombres, teléfonos e IDs son inventados. */
+  SIM_MOTIVOS_DEFAULT.push('Payments : Wallet / referidos', 'Fraud : Autenticación', 'Trips : Viaje no realizado', 'Supply : Conductor suspendido', 'Match & Pricing : Strikes',
+    'Payments : Pago no recibido', 'CX : Bad review', 'Payments : Efectivo no pagado');
+  SIM_CASOS_DEFAULT.push(
+    { id: 'cel-referidos', celula: 'PAYMENTS', activo: true, llegada: 0, humor: 2, asunto: 'Me quitaron los KM de mis referidos', consulta: { herramienta: 'admin', id: 'u:302915' },
+      adminEsperada: { accion: 'agregar-wallet', objetivo: 'u:302915', nota: 'Abonar 5 KM en Add Wallet con el tipo «Vencimiento de referidos».' },
+      cliente: { nombre: 'Daniela Quintero', telefono: '+584141203367', notas: 'Usuario: ID 302915' },
+      motivo: 'Payments : Wallet / referidos',
+      pasos: [
+        { cliente: ['Hola, tenía 5 km en mi wallet por los referidos y hoy amanecieron en cero', 'Mi ID de usuario es 302915'],
+          opciones: [
+            op('buena', 'Hola, Daniela. Gracias por el ID; ya reviso los movimientos de tu wallet.', 'Dale, gracias', 1),
+            op('regular', 'Los referidos se vencen, eso es normal.', '¿Y entonces los pierdo así nada más?', -1),
+            op('mala', 'Seguro los usaste en un viaje y no te acuerdas.', 'No he pedido ni un viaje esta semana…', -2)
+          ], otro: ['Ok, espero'] },
+        { verificar: true, cliente: [],
+          opciones: [
+            op('buena', 'Listo, Daniela. En tu Wallet History aparece un descuento de 5 KM por vencimiento de referidos, porque tus referidos no usaron la app en los últimos meses. Ya te los aboné de nuevo; los ves en tu wallet al actualizar la app.', '¡Ya me aparecen! Mil gracias', 2),
+            op('regular', 'Tus referidos se vencieron. Cuando invites a alguien nuevo vuelves a sumar.', 'Pero esos km ya me los habían dado…', -1),
+            op('mala', 'No veo ningún movimiento en tu cuenta.', '¿Cómo que no? Yo los tenía', -2)
+          ], otro: ['¿Me los van a devolver?'] }
+      ] },
+    { id: 'cel-autenticacion', celula: 'FRAUD', activo: true, llegada: 25, humor: 2, asunto: 'No me aprueban la autenticación', consulta: { herramienta: 'admin', id: 'u:1873402' },
+      cliente: { nombre: 'Kelvin Rojas', telefono: '+584247781902', notas: 'Usuario: ID 1873402' },
+      motivo: 'Fraud : Autenticación',
+      pasos: [
+        { cliente: ['Buenas, ya subí mi cédula 3 veces y no me aprueban', 'Mi ID es 1873402'],
+          opciones: [
+            op('buena', 'Hola, Kelvin. Gracias por el ID; voy a revisar el documento que cargaste para decirte qué pasó.', 'Ok, gracias', 1),
+            op('regular', 'Vuelve a intentarlo más tarde.', 'Ya lo intenté 3 veces…', -1),
+            op('mala', 'Ya te aprobé la autenticación.', '¿En serio? Ok', 0)
+          ], otro: ['Ok'] },
+        { verificar: true, cliente: [],
+          opciones: [
+            op('buena', 'Revisé la foto de tu cédula: el flash hace un reflejo que tapa el número y tu nombre, por eso no se puede validar. Tómale una foto nueva con luz natural, sin flash y bien enfocada, y vuelve a cargarla desde la app.', 'Ahhh, ok. Ya la tomo de nuevo, gracias', 2),
+            op('mala', 'Tu cédula parece alterada, no podemos aprobarla.', '¿Alterada? Es mi cédula original 😡', -3),
+            op('regular', 'La foto no es válida, súbela otra vez.', '¿Pero qué tiene de malo?', -1)
+          ], otro: ['¿Qué tengo que hacer?'] }
+      ] },
+    { id: 'cel-no-realizado', celula: 'TRIPS', activo: true, llegada: 50, humor: 1, asunto: 'Me cobraron un viaje que no se hizo', consulta: { herramienta: 'admin', id: '86162544' },
+      adminEsperada: { accion: 'cancelar-viaje', objetivo: '86162544', nota: 'Cancelar el viaje #86162544 con el motivo «Viaje no realizado».' },
+      cliente: { nombre: 'Gabriela Salcedo', telefono: '+584126650148', notas: 'Usuario: ID 1950733' },
+      motivo: 'Trips : Viaje no realizado',
+      pasos: [
+        { cliente: ['El conductor nunca llegó y me descontaron el viaje de la wallet', 'Él lo inició y lo terminó sin buscarme, ¡qué abuso!'],
+          opciones: [
+            op('buena', 'Hola, Gabriela. Lamento mucho lo que pasó. Voy a revisar ese viaje de inmediato para ayudarte.', 'Por favor, porque me dejaron botada', 1),
+            op('regular', 'Envíame captura del cobro.', 'Ya les dije lo que pasó…', -1),
+            op('mala', 'Si el viaje aparece completado es porque se hizo.', 'No se hizo, ¿me estás diciendo mentirosa?', -2)
+          ], otro: ['Ok'] },
+        { verificar: true, cliente: [],
+          opciones: [
+            op('buena', 'Revisé tu viaje #86162544: aparece completado, pero con 0 km recorridos, así que no se realizó. Ya lo cancelé como «viaje no realizado» y el monto de $3,20 vuelve a tu wallet. Disculpa el mal rato.', 'Gracias por resolverlo rápido', 2),
+            op('regular', 'Voy a reportar al conductor.', '¿Y mi dinero?', -1),
+            op('mala', 'El viaje está completado, no se puede hacer nada.', 'Esto es un robo. Voy a borrar la app', -2)
+          ], otro: ['¿Me devuelven el dinero?'] }
+      ] },
+    { id: 'cel-suspendido', celula: 'SUPPLY', activo: true, llegada: 80, humor: 1, asunto: 'Conductor: me suspendieron la cuenta', consulta: { herramienta: 'admin', id: 'p:448203' },
+      cliente: { nombre: 'Wilmer Peraza', telefono: '+584125507712', notas: 'Conductor: ID 448203' },
+      motivo: 'Supply : Conductor suspendido',
+      pasos: [
+        { cliente: ['Buenas, soy conductor, mi ID es 448203', 'Me suspendieron y no sé por qué, necesito trabajar'],
+          opciones: [
+            op('buena', 'Hola, Wilmer. Entiendo la preocupación; déjame revisar tu perfil para decirte qué pasó.', 'Gracias, estoy parado desde hace rato', 1),
+            op('regular', 'Ve a la oficina para que te expliquen.', '¿Hasta la oficina? Dime por lo menos qué pasó', -1),
+            op('mala', 'Si te suspendieron por algo será.', 'Qué falta de respeto…', -2)
+          ], otro: ['Ok'] },
+        { verificar: true, cliente: [],
+          opciones: [
+            op('buena', 'Revisé tu perfil: la suspensión viene de un viaje que iniciaste y finalizaste sin realizarlo; el usuario lo reportó y el recorrido marca 0 km. Lo siento, pero no podemos levantarla: está prohibido finalizar viajes que no se hicieron. Si te pasa de nuevo, escríbenos y nosotros lo cancelamos por ti. La suspensión es temporal.', 'Ok… no sabía, la próxima les escribo', 2),
+            op('mala', 'Ya te quité la suspensión, puedes trabajar.', '¡Gracias! … sigue saliendo suspendido', -1),
+            op('regular', 'No veo nada raro en tu cuenta, debe ser un error.', '¿Entonces por qué estoy suspendido?', -1)
+          ], otro: ['¿Y cuándo me la quitan?'] }
+      ] },
+    { id: 'cel-strikes', celula: 'MATCH AND PRICING', activo: true, llegada: 110, humor: 1, asunto: 'Conductor: suspendido por cancelaciones', consulta: { herramienta: 'admin', id: 'p:391577' },
+      cliente: { nombre: 'Jhonny Barrios', telefono: '+584166603481', notas: 'Conductor: ID 391577' },
+      motivo: 'Match & Pricing : Strikes',
+      pasos: [
+        { cliente: ['Me suspendieron por cancelaciones y yo solo cancelé dos', 'ID 391577'],
+          opciones: [
+            op('buena', 'Hola, Jhonny. Entiendo lo que te pasó; voy a revisar tus cancelaciones de hoy.', 'Revisa, que yo cancelé dos nada más', 1),
+            op('regular', 'Las suspensiones las pone el sistema, no se pueden quitar.', '¿Ni siquiera lo vas a revisar?', -1),
+            op('mala', 'Para qué cancelas, entonces.', 'Me cancelaron a mí el usuario, no seas así', -2)
+          ], otro: ['Ok'] },
+        { verificar: true, cliente: [],
+          opciones: [
+            op('buena', 'Entiendo lo que te pasó. Hoy se registraron 3 cancelaciones seguidas en tu cuenta (viajes 86161204, 86161250 y 86161297) y por eso el sistema te suspendió automáticamente, para proteger tus métricas. Para la próxima, si ya llevas 2 cancelaciones, escríbenos antes y te ayudamos a cancelar el viaje.', 'Ah, verdad, la tercera fue sin querer. Ok, gracias', 2),
+            op('mala', 'Ya pedí que te desbloqueen.', '¿En cuánto tiempo?', -1),
+            op('regular', 'Tienes 3 cancelaciones. Espera que se te quite.', 'Pues bueno…', -1)
+          ], otro: ['¿Y entonces?'] }
+      ] },
+    { id: 'cel-pago-rebotado', celula: 'PAYMENTS', activo: true, llegada: 140, humor: 2, asunto: 'Conductor: no me llegó el pago de la semana', consulta: { herramienta: 'admin', id: 'p:215664' },
+      adminEsperada: { accion: 'rechazar-cuenta', objetivo: 'p:215664', nota: 'Rechazar la cuenta bancaria en Datos Bancarios Providers para que la cargue de nuevo.' },
+      cliente: { nombre: 'Rosmery Linares', telefono: '+584241197023', notas: 'Conductora: ID 215664' },
+      motivo: 'Payments : Pago no recibido',
+      pasos: [
+        { cliente: ['Hola, este corte no me llegó el pago y siempre me llegaba normal', 'Mi ID de conductora es 215664'],
+          opciones: [
+            op('buena', 'Hola, Rosmery. Gracias por el ID; voy a revisar tu liquidación de este corte.', 'Ok, quedo atenta', 1),
+            op('regular', 'Los pagos se hacen los martes, espera.', 'Hoy es jueves y no ha llegado nada', -1),
+            op('mala', 'Seguro tu banco está caído.', 'Mi banco funciona perfecto', -2)
+          ], otro: ['Ok'] },
+        { verificar: true, cliente: [],
+          opciones: [
+            op('buena', 'Revisé tu liquidación: tu banco rechazó la transferencia de este corte y el sistema te sacó del pago. Ya rechacé tu cuenta en el sistema para que la cargues de nuevo: en la app, ve a Cuentas bancarias → Agregar cuenta bancaria. Tu saldo queda para el próximo corte.', 'Ok, ya la cargo de nuevo. Gracias', 2),
+            op('regular', 'Tu pago fue rechazado, comunícate con tu banco.', '¿Y qué le digo al banco?', -1),
+            op('mala', 'Ya te hice la transferencia manual.', '¡Gracias! … no me ha llegado nada', -2)
+          ], otro: ['¿Y entonces qué hago?'] }
+      ] },
+    { id: 'cel-bad-review', celula: 'CX', activo: true, llegada: 170, humor: 1, asunto: 'El conductor fue grosero', consulta: { herramienta: 'admin', id: '86163011' },
+      adminEsperada: { accion: 'contactado', objetivo: '86163011', nota: 'Marcar la reseña del viaje #86163011 como «Contacted» en Reviews.' },
+      cliente: { nombre: 'Mariana Ferrer', telefono: '+584143360921', notas: 'Usuario: ID 2604418' },
+      motivo: 'CX : Bad review',
+      pasos: [
+        { cliente: ['Quiero quejarme del conductor del viaje de esta mañana', 'Fue grosero conmigo y el carro estaba sucísimo'],
+          opciones: [
+            op('buena', 'Hola, Mariana. Lamento mucho la experiencia; ninguna persona debería pasar por eso. Voy a revisar el viaje para registrar tu reporte.', 'Gracias, de verdad fue muy desagradable', 1),
+            op('regular', 'Califícalo con una estrella en la app.', 'Ya lo hice, por eso les escribo', -1),
+            op('mala', 'Debe haber tenido un mal día.', 'Eso no es excusa…', -2)
+          ], otro: ['Ok'] },
+        { verificar: true, cliente: [],
+          opciones: [
+            op('buena', 'Ubiqué tu viaje #86163011 con el conductor Leonardo Ávila y la calificación que dejaste. Ya registré tu reporte para que el equipo haga seguimiento con él. Gracias por avisarnos: nos ayuda a mejorar el servicio.', 'Gracias por la atención', 2),
+            op('mala', 'Ya bloqueé al conductor.', 'Ok… gracias', 0),
+            op('regular', 'Te reembolso el viaje.', 'No quería el dinero, quería que lo supieran', -1)
+          ], otro: ['¿Y qué van a hacer?'] }
+      ] },
+    { id: 'cel-efectivo', celula: 'PAYMENTS', activo: true, llegada: 200, humor: 2, asunto: 'Conductor: el usuario no me pagó', consulta: { herramienta: 'admin', id: '86163870' },
+      adminEsperada: { accion: 'reporte-usuario', objetivo: 'u:1144290', nota: "Dejar el reporte del usuario en User's Records." },
+      cliente: { nombre: 'Eduardo Nava', telefono: '+584126601375', notas: 'Conductor: ID 330981' },
+      motivo: 'Payments : Efectivo no pagado',
+      pasos: [
+        { cliente: ['El usuario del viaje 86163870 se bajó y no me dio el efectivo', 'Quiero que me paguen ese viaje'],
+          opciones: [
+            op('buena', 'Hola, Eduardo. Lamento lo que pasó; déjame revisar el viaje.', 'Ok', 1),
+            op('mala', 'Ya te abono el viaje a tu wallet.', '¡Gracias!', 1),
+            op('regular', 'Eso pasa, la próxima ten cuidado.', 'Pero yo perdí mi dinero…', -1)
+          ], otro: ['Ok'] },
+        { verificar: true, cliente: [],
+          opciones: [
+            op('buena', 'Revisé el viaje #86163870: se pagó en efectivo y quedó validado. Ya dejé el reporte del usuario en el sistema. Lamentablemente no podemos reponerte el monto: antes de iniciar o finalizar un viaje en efectivo tienes que tener el dinero en tus manos.', 'Ok, entiendo. La próxima cobro antes', 2),
+            op('mala', 'Te hago un ajuste en tu liquidación por ese monto.', 'Perfecto, gracias', 1),
+            op('regular', 'No podemos hacer nada, es entre tú y el usuario.', '¿Ni un reporte?', -2)
+          ], otro: ['¿Me lo van a pagar?'] }
+      ] }
+  );
+  SIM_NIVELES_DEFAULT.push(
+    { id: 'celulas-basico', ruta: 'CELULAS', nombre: 'Básico', descripcion: 'Un ticket a la vez. Busca usuarios en Users y viajes en Trips; usa Add Wallet, View Document y Cancel Trip con su motivo.', minutos: 15, maxAbiertos: 1, intervalo: 8, abandono: 240, herramientas: ['admin'], estados: false,
+      casos: ['cel-referidos', 'cel-autenticacion', 'cel-no-realizado'] },
+    { id: 'celulas-intermedio', ruta: 'CELULAS', nombre: 'Intermedio', descripcion: 'Hasta 2 tickets a la vez. Conductores: Service Providers, Driver\'s Records, Cancelled Trips por Provider Id, Datos Bancarios y liquidaciones. Ojo con el ID de usuario y el de conductor.', minutos: 20, maxAbiertos: 2, intervalo: 10, abandono: 180, herramientas: ['admin'], estados: true,
+      casos: ['cel-suspendido', 'cel-strikes', 'cel-pago-rebotado', 'cel-bad-review', 'cel-referidos'] },
+    { id: 'celulas-avanzado', ruta: 'CELULAS', nombre: 'Realidad', descripcion: 'Todas las células a la vez, como un turno real: los tickets llegan por tiempo.', minutos: 25, maxAbiertos: 0, intervalo: 0, abandono: 120, herramientas: ['admin'], estados: true,
+      casos: ['cel-referidos', 'cel-autenticacion', 'cel-no-realizado', 'cel-suspendido', 'cel-strikes', 'cel-pago-rebotado', 'cel-bad-review', 'cel-efectivo'] }
+  );
+  SIM_RUTAS.CELULAS = 'Células · Zendesk + Admin completo';
+  const CANCELACIONES_ADMIN = ['Viaje no realizado', 'Prueba', 'No requiere el servicio', 'Modificación de reserva', 'Mover al Completed', 'Validación de cash (SOPORTE)', 'Conductor escribió para solicitar cancelar el viaje (Accepted)',
+    'Conductor escribió para solicitar cancelar el viaje (Coming)', 'Conductor escribió para solicitar cancelar el viaje (Arrived)', 'Conductor se quedó accidentado', 'Viaje duplicado', 'Error en viaje', 'Destino no completado'];
+  const TIPOS_WALLET = ['Vencimiento de referidos', 'Reembolso de viaje', 'Compensación por mala experiencia', 'Ajuste de saldo', 'Promoción', 'Error de cobro'];
+  // Viajes de los casos de células (min = minuto del panel; negativo = antes de empezar)
+  SIM_VIAJES_DEFAULT.push(
+    vj({ id: '86162544', userId: '1950733', user: 'Gabriela Salcedo Mora', email: 'gabysalcedo@gmail.com', tel: '+58 4126650148', providerId: '412870', provider: 'Ramón Antonio Vielma',
+      servicio: 'Económico', tarifa: 'Económico / 0.35 per KM / 0.16 per minute.', ciudad: 'Barquisimeto, Lara', pickup: 'Av. Los Leones, Barquisimeto', destino: 'C.C. Las Trinitarias',
+      providerAddr: 'Av. Lara, Barquisimeto', min: -70, estimado: 3.20, monto: 3.20, km: 0.00, realTime: 1.1, surge: 1, pago: 'Pay By Wallet', pagoEstado: 'Paid',
+      eventos: [{ min: -70, st: 'Accepted' }, { min: -64, st: 'Started' }, { min: -63, st: 'Completed' }],
+      reglas: [{ accion: 'cancelar-viaje', desde: -9999, hasta: 9999, v: 'buena', motivo: 'Viaje no realizado', nota: 'Canceló como «Viaje no realizado» un viaje con 0 km.' }] }),
+    vj({ id: '86160133', userId: '2210846', user: 'Andreína Colmenares', email: 'andreinacolm@gmail.com', tel: '+58 4241886032', providerId: '448203', provider: 'Wilmer José Peraza Linárez',
+      servicio: 'Moto', tarifa: 'Moto / 0.21 per KM / 0.17 per minute.', ciudad: 'Valencia, Carabobo', pickup: 'Urb. Prebo, Valencia', destino: 'Av. Cedeño, Valencia',
+      providerAddr: 'Urb. Prebo, Valencia', min: -420, estimado: 1.60, monto: 1.60, km: 0.00, realTime: 0.8, surge: 1, pago: 'Pay By Pago Móvil Auto', pagoEstado: 'Paid',
+      cancelDesc: { motivo: 'Viaje no realizado', ticket: '2986541', admin: 'Soporte · Valentina R.', nota: 'Usuario indica que el conductor nunca llegó; recorrido de 0 km.', captura: 'prnt.sc/rA7xk2' },
+      eventos: [{ min: -420, st: 'Accepted' }, { min: -415, st: 'Started' }, { min: -414, st: 'Completed' }, { min: -380, st: 'Cancelled' }] }),
+    vj({ id: '86161204', userId: '3317702', user: 'Luis Ernesto Pinto', email: 'luispinto@gmail.com', tel: '+58 4141908844', providerId: '391577', provider: 'Jhonny Alexander Barrios',
+      servicio: 'Moto Baratica', tarifa: 'Moto Baratica / 0.18 per KM / 0.10 per minute.', ciudad: 'Maracay, Aragua', pickup: 'Av. Bolívar, Maracay', destino: 'Base Aragua', min: -160, estimado: 1.10, monto: 1.10, km: 0, realTime: 0, surge: 1,
+      pago: 'Pay By Wallet', pagoEstado: 'Pending', cancelDesc: { motivo: 'Cancelado por el conductor', ticket: '', admin: '', nota: '' }, eventos: [{ min: -160, st: 'Accepted' }, { min: -156, st: 'Cancelled' }] }),
+    vj({ id: '86161250', userId: '1288130', user: 'Yusmary Pacheco', email: 'yusmaryp@gmail.com', tel: '+58 4243310076', providerId: '391577', provider: 'Jhonny Alexander Barrios',
+      servicio: 'Moto Baratica', tarifa: 'Moto Baratica / 0.18 per KM / 0.10 per minute.', ciudad: 'Maracay, Aragua', pickup: 'Las Delicias, Maracay', destino: 'C.C. Parque Aragua', min: -140, estimado: 1.25, monto: 1.25, km: 0, realTime: 0, surge: 1,
+      pago: 'Pay By Pago Móvil Auto', pagoEstado: 'Pending', cancelDesc: { motivo: 'Cancelado por el conductor', ticket: '', admin: '', nota: '' }, eventos: [{ min: -140, st: 'Accepted' }, { min: -137, st: 'Cancelled' }] }),
+    vj({ id: '86161297', userId: '904417', user: 'Carlos Duque', email: 'cduque@hotmail.com', tel: '+58 4125519034', providerId: '391577', provider: 'Jhonny Alexander Barrios',
+      servicio: 'Moto Baratica', tarifa: 'Moto Baratica / 0.18 per KM / 0.10 per minute.', ciudad: 'Maracay, Aragua', pickup: 'San Jacinto, Maracay', destino: 'Hospital Central de Maracay', min: -118, estimado: 0.95, monto: 0.95, km: 0, realTime: 0, surge: 1,
+      pago: 'Pay By Wallet', pagoEstado: 'Pending', cancelDesc: { motivo: 'Cancelado por el conductor', ticket: '', admin: '', nota: '' }, eventos: [{ min: -118, st: 'Accepted' }, { min: -117, st: 'Cancelled' }] }),
+    vj({ id: '86163011', userId: '2604418', user: 'Mariana Ferrer Díaz', email: 'marianaferrer@gmail.com', tel: '+58 4143360921', providerId: '455120', provider: 'Leonardo José Ávila',
+      servicio: 'Carro', tarifa: 'Carro / 0.40 per KM / 0.16 per minute.', ciudad: 'Caracas, Capital District', pickup: 'Los Palos Grandes, Caracas', destino: 'Torre Británica, Altamira', providerAddr: 'Chacao, Caracas',
+      min: -95, estimado: 4.80, monto: 4.80, km: 5.4, realTime: 18.2, surge: 1, pago: 'Pay By Debito Inmediato', pagoEstado: 'Paid', eventos: [{ min: -95, st: 'Accepted' }, { min: -88, st: 'Started' }, { min: -70, st: 'Completed' }] }),
+    vj({ id: '86163870', userId: '1144290', user: 'Héctor Lugo', email: 'hectorlugo@gmail.com', tel: '+58 4247001189', providerId: '330981', provider: 'Eduardo Rafael Nava',
+      servicio: 'Económico', tarifa: 'Económico / 0.35 per KM / 0.16 per minute.', ciudad: 'Maracaibo, Zulia', pickup: 'Av. Delicias, Maracaibo', destino: 'C.C. Lago Mall', providerAddr: 'Av. Delicias, Maracaibo',
+      min: -55, estimado: 3.60, monto: 3.60, km: 6.1, realTime: 14.5, surge: 1, pago: 'Pay By Cash', pagoEstado: 'Paid', eventos: [{ min: -55, st: 'Accepted' }, { min: -50, st: 'Started' }, { min: -36, st: 'Completed' }] })
+  );
+
+  /* Datos del Admin completo: usuarios, conductores, reseñas, cuentas, liquidaciones, store…
+     reglas: qué acción espera el caso; nunca se envían al navegador. */
+  const SIM_ADMIN_DEFAULT = (function () {
+    const hoy = 'HOY';   // el navegador lo cambia por la fecha de la simulación
+    const u = (id, nombre, o) => Object.assign({ id, nombre, tel: '', email: '', cedula: 'N/A', req: 0, comp: 0, canc: 0, disputas: 0, sos: 0, ciudad: '', wallet: 0, corporate: '—', app: 'android - 6.4.0', ota: '6.4.0',
+      registro: '2025-03-14T09:12:00', creadoPor: 'User App', estado: 'Active', documento: 'ok', walletHist: [], records: [], referidos: [] }, o);
+    const p = (id, nombre, o) => Object.assign({ id, nombre, tel: '', email: '', req: 0, comp: 0, canc: 0, acc: 0, rating: 4.8, disputas: 0, sos: 0, ciudad: '', ciudadReg: '', servicios: 'Moto', wallet: 0, app: 'android - 6.2.0',
+      registro: '2024-08-02T10:00:00', aprobado: '2024-08-05T15:20:00', categoria: 'Impulso', estado: 'Approved', motivoEstado: 'N/A', online: false, ubic: '', vehiculos: [], records: [], cuentas: [], cashBlock: [], liq: null }, o);
+    const usuarios = [
+      u('302915', 'Daniela Quintero', { tel: '+584141203367', email: 'daniquintero@gmail.com', cedula: 'V-26114830', req: 41, comp: 37, canc: 4, ciudad: 'Caracas', wallet: 0, registro: '2023-02-19T18:40:00',
+        walletHist: [{ id: '9150221', tipo: 'Referral', pagoTipo: 'Referral bonus', fecha: '2026-05-02T10:14:00', ciudad: 'Caracas', moneda: 'KM', monto: 5, addcut: 'Add', wallet: 5, desde: 'Referral: Pedro Salas' },
+          { id: '9178840', tipo: 'Vencimiento de referidos', pagoTipo: 'System', fecha: hoy, ciudad: 'Caracas', moneda: 'KM', monto: 5, addcut: 'Cut', wallet: 0, desde: 'System' }],
+        referidos: [{ nombre: 'Pedro Salas', fecha: '2026-05-02', estado: 'Vencido' }] }),
+      u('1873402', 'Kelvin Rojas', { tel: '+584247781902', email: 'kelvinrojas99@gmail.com', cedula: 'N/A', req: 3, comp: 2, canc: 1, ciudad: 'San Cristóbal', documento: 'flash', registro: '2026-11-10T21:03:00' }),
+      u('1950733', 'Gabriela Salcedo Mora', { tel: '+584126650148', email: 'gabysalcedo@gmail.com', cedula: 'V-24771906', req: 88, comp: 80, canc: 8, ciudad: 'Barquisimeto', wallet: 1.4,
+        walletHist: [{ id: '9177001', tipo: 'Trip', pagoTipo: 'Pay By Wallet', fecha: hoy, ciudad: 'Barquisimeto', moneda: 'USD', monto: 3.2, addcut: 'Cut', wallet: 1.4, desde: 'Trip #86162544' }] }),
+      u('2604418', 'Mariana Ferrer Díaz', { tel: '+584143360921', email: 'marianaferrer@gmail.com', cedula: 'V-20339187', req: 156, comp: 149, canc: 7, ciudad: 'Caracas', corporate: '—' }),
+      u('1144290', 'Héctor Lugo', { tel: '+584247001189', email: 'hectorlugo@gmail.com', cedula: 'V-17902554', req: 23, comp: 21, canc: 2, disputas: 2, ciudad: 'Maracaibo' }),
+      // Trampa: mismo número que el conductor 448203 pero es otra persona (usuaria)
+      u('448203', 'Carla Victoria Méndez', { tel: '+584121130547', email: 'carlavmendez@gmail.com', cedula: 'V-19226015', req: 12, comp: 12, ciudad: 'Mérida', registro: '2021-09-30T08:15:00' }),
+      u('391577', 'Rafael Contreras', { tel: '+584149900215', email: 'rcontreras@gmail.com', cedula: 'N/A', req: 2, comp: 1, canc: 1, ciudad: 'Puerto Ordaz', registro: '2021-07-11T12:00:00' })
+    ];
+    const conductores = [
+      p('448203', 'Wilmer José Peraza Linárez', { tel: '+584125507712', email: 'wilmerperaza@gmail.com', req: 2210, comp: 2098, canc: 64, acc: 2162, rating: 4.86, ciudad: 'Valencia', ciudadReg: 'Valencia', servicios: 'Moto,Envíos Moto', wallet: 12.4,
+        estado: 'Suspended', motivoEstado: 'Strike generado por cancelación del administrador', online: false, ubic: 'Urb. Prebo, Valencia',
+        vehiculos: [{ marca: 'Bera', placa: 'AF4K21P', modelo: 'SBR 150', color: 'Rojo', anio: 2022, tipo: 'Moto' }],
+        records: [{ id: '5318840', admin: 'System updated', fecha: hoy, motivo: 'Strike generado por cancelación del administrador · Viaje 86160133', tipo: 'Suspended' },
+          { id: '5207712', admin: 'Soporte · Analista ATC', fecha: '2026-09-03T11:20:00', motivo: 'Vehículo AF4K21P aprobado', tipo: 'Approved' }] }),
+      p('391577', 'Jhonny Alexander Barrios', { tel: '+584166603481', email: 'jhonnybarrios@gmail.com', req: 980, comp: 902, canc: 71, acc: 950, rating: 4.71, ciudad: 'Maracay', ciudadReg: 'Maracay', servicios: 'Moto,Moto Baratica', wallet: 3.1,
+        estado: 'Suspended', motivoEstado: 'Límite de cancelaciones', ubic: 'Av. Bolívar, Maracay',
+        vehiculos: [{ marca: 'Empire', placa: 'AB2M77K', modelo: 'Horse 150', color: 'Negro', anio: 2021, tipo: 'Moto' }],
+        records: [{ id: '5318902', admin: 'System updated', fecha: hoy, motivo: 'Strike generado por cancelación · 3 cancelaciones seguidas', tipo: 'Suspended' }] }),
+      p('215664', 'Rosmery Linares', { tel: '+584241197023', email: 'rosmerylinares@gmail.com', req: 3120, comp: 3011, canc: 52, acc: 3080, rating: 4.93, ciudad: 'Caracas', ciudadReg: 'Caracas', servicios: 'Económico,Carro', wallet: 86.35, online: true, ubic: 'Chacao, Caracas',
+        vehiculos: [{ marca: 'Chevrolet', placa: 'AB123CD', modelo: 'Aveo', color: 'Gris', anio: 2013, tipo: 'Carro' }],
+        cuentas: [{ id: '2', nombre: 'Transferencia Bancaria', banco: 'Banesco', titular: 'Rosmery Linares', numero: '01340412********8821', cedula: 'V-18339201', estado: 'Approved' },
+          { id: '1', nombre: 'Pago Movil', banco: 'Banesco', titular: 'Rosmery Linares', numero: '04241197023', cedula: 'V-18339201', estado: 'Approved' }],
+        liq: { removido: 'Yes', estadoBanco: 'Rechazado por el banco' } }),
+      p('455120', 'Leonardo José Ávila', { tel: '+584142280611', email: 'leoavila@gmail.com', req: 1402, comp: 1350, canc: 30, acc: 1388, rating: 4.42, ciudad: 'Caracas', ciudadReg: 'Caracas', servicios: 'Carro,Económico', wallet: 22.1, online: true, ubic: 'Altamira, Caracas',
+        vehiculos: [{ marca: 'Toyota', placa: 'AC556MN', modelo: 'Yaris', color: 'Blanco', anio: 2010, tipo: 'Carro' }] }),
+      p('330981', 'Eduardo Rafael Nava', { tel: '+584126601375', email: 'eduardonava@gmail.com', req: 640, comp: 612, canc: 20, acc: 630, rating: 4.88, ciudad: 'Maracaibo', ciudadReg: 'Maracaibo', servicios: 'Económico', wallet: -3.6, online: true, ubic: 'Av. Delicias, Maracaibo',
+        vehiculos: [{ marca: 'Ford', placa: 'AA901XY', modelo: 'Fiesta', color: 'Azul', anio: 2008, tipo: 'Carro' }] }),
+      p('412870', 'Ramón Antonio Vielma', { tel: '+584145503318', email: 'ramonvielma@gmail.com', req: 510, comp: 470, canc: 35, acc: 498, rating: 4.51, ciudad: 'Barquisimeto', ciudadReg: 'Barquisimeto', servicios: 'Económico', wallet: 9.8, online: true, ubic: 'Av. Lara, Barquisimeto',
+        vehiculos: [{ marca: 'Renault', placa: 'AD330PL', modelo: 'Logan', color: 'Plata', anio: 2012, tipo: 'Carro' }] }),
+      // Trampa: mismo número que la usuaria 302915 pero es otra persona (conductor)
+      p('302915', 'Yorman Daniel Quiñones', { tel: '+584268830142', email: 'yormanq@gmail.com', req: 77, comp: 70, canc: 7, acc: 75, rating: 4.7, ciudad: 'Caracas', ciudadReg: 'Caracas', servicios: 'Moto', wallet: 0.5, ubic: 'Petare, Caracas',
+        vehiculos: [{ marca: 'Suzuki', placa: 'AE77Q1M', modelo: 'GN 125', color: 'Negro', anio: 2019, tipo: 'Moto' }] }),
+      p('1873402', 'Nelson Paredes', { tel: '+584163345870', email: 'nparedes@gmail.com', estado: 'Unapproved', motivoEstado: 'Documentos pendientes', ciudad: 'Mérida', ciudadReg: 'Mérida', registro: '2026-11-12T10:00:00', aprobado: '' })
+    ];
+    // Relleno para que las listas se vean llenas (nombres inventados)
+    const nombresU = ['Andrea Liscano', 'José Gregorio Uzcátegui', 'Paola Rivero', 'Miguel Ángel Tovar', 'Rosángela Peña', 'Kevin Marcano', 'Luisana Villegas', 'Fernando Chirinos', 'Yelitza Bracho', 'Orlando Mujica', 'Verónica Alfonzo', 'Simón Arteaga'];
+    const ciudades = ['Caracas', 'Valencia', 'Maracay', 'Maracaibo', 'Barquisimeto', 'Mérida', 'Puerto La Cruz', 'San Cristóbal', 'Maturín', 'Puerto Ordaz'];
+    nombresU.forEach((n, k) => usuarios.push(u(String(3628720 + k * 3), n, { tel: '+58412' + (5501200 + k * 7311), email: n.split(' ')[0].toLowerCase() + (k + 11) + '@gmail.com', cedula: k % 3 ? 'N/A' : 'V-' + (27000000 + k * 31337),
+      ciudad: k % 4 ? '' : ciudades[k % ciudades.length], app: k % 3 ? 'android - 6.4.3' : 'ios - 6.5.0', ota: k % 4 === 1 ? 'N/A' : '6.4.3', registro: hoy })));
+    const nombresP = ['Darwin Castellanos', 'Johana Carolina Rojas', 'Rubén Velásquez', 'Jimmy Díaz', 'Ángel Alexander Álvarez', 'Edward López', 'Juan Carlos Guzmán', 'Willy Machado', 'Henry Rafael Blanco', 'Daniel Eduardo Pacheco', 'Gregory Castillo', 'Enmanuel Ortega'];
+    nombresP.forEach((n, k) => conductores.push(p(String(448210 + k * 3), n, { tel: '+58424' + (1200300 + k * 5113), email: n.split(' ')[0].toLowerCase() + '.' + (k + 3) + '@gmail.com', req: (k * 37) % 60, comp: (k * 29) % 40, canc: k % 4, acc: (k * 31) % 50,
+      ciudad: ciudades[(k * 3) % ciudades.length], ciudadReg: ciudades[(k * 3) % ciudades.length], servicios: k % 2 ? 'Moto,Envíos Moto,Moto Baratica' : 'Económico,Carro', wallet: Math.round(((k * 13) % 40) * 10) / 100, online: k % 3 !== 0,
+      ubic: ciudades[(k * 3) % ciudades.length], estado: k === 4 ? 'Blocked' : k === 7 ? 'Cash Blocked' : k === 9 ? 'Unapproved' : 'Approved', motivoEstado: k === 4 ? 'Suplantación de identidad' : k === 7 ? 'Deuda en efectivo' : 'N/A',
+      registro: hoy, aprobado: k === 9 ? '' : hoy, vehiculos: [{ marca: k % 2 ? 'Tvs' : 'Chevrolet', placa: 'A' + String.fromCharCode(65 + k) + (200 + k) + 'V' + k, modelo: k % 2 ? 'Stryker 125' : 'Spark', color: k % 2 ? 'Negro' : 'Blanco', anio: 2015 + (k % 10), tipo: k % 2 ? 'Moto' : 'Carro' }],
+      cuentas: [{ id: '1', nombre: 'Pago Movil', banco: 'Mercantil', titular: n, numero: '0424' + (1200300 + k * 5113), cedula: 'V-' + (19000000 + k * 77123), estado: 'Approved' }] })));
+    // Los conductores de los viajes de relleno también existen en Service Providers
+    const reviews = [
+      { viaje: '86163011', fecha: hoy, userId: '2604418', user: 'Mariana Ferrer Díaz', tercero: '-', userTel: '+58 4143360921', userRate: 1, userComment: 'Muy grosero y el carro estaba sucio', providerId: '455120', provider: 'Leonardo José Ávila', providerTel: '+58 4142280611', providerRate: 5, providerComment: '', contactado: false, estado: 'Bad Review' },
+      { viaje: '86162544', fecha: hoy, userId: '1950733', user: 'Gabriela Salcedo Mora', tercero: '-', userTel: '+58 4126650148', userRate: 1, userComment: 'Nunca llegó', providerId: '412870', provider: 'Ramón Antonio Vielma', providerTel: '+58 4145503318', providerRate: 0, providerComment: '', contactado: false, estado: 'Bad Review' },
+      { viaje: '86163870', fecha: hoy, userId: '1144290', user: 'Héctor Lugo', tercero: '-', userTel: '+58 4247001189', userRate: 5, userComment: 'Rated by the system', providerId: '330981', provider: 'Eduardo Rafael Nava', providerTel: '+58 4126601375', providerRate: 1, providerComment: 'No me pagó el efectivo', contactado: false, estado: 'Bad Review' }
+    ];
+    const liquidaciones = ['Corte 10/11/2026 - 16/11/2026', 'Corte 03/11/2026 - 09/11/2026', 'Corte 27/10/2026 - 02/11/2026'];
+    const almacenes = [['BARQUISIMETO', 543], ['MÉRIDA', 383], ['SAN CRISTÓBAL', 728], ['PTO LA CRUZ', 435], ['MARACAIBO', 1334], ['VALENCIA', 182], ['PTO ORDAZ', 1217], ['CARACAS', 637]];
+    const stock = ['SUDADERA VERDE MANGA LARGA CON CAPUCHA', 'SUDADERA VERDE MANGA LARGA BOX - NUEVO', 'CASCO INTEGRAL RIDERY', 'CHAQUETA IMPERMEABLE RIDERY', 'BOLSO DE ENVÍOS 45L'];
+    const servicios = [['Moto', 0.21, 0.17, 0.80], ['Moto Baratica', 0.18, 0.10, 0.60], ['Económico', 0.35, 0.16, 1.20], ['Baratica', 0.25, 0.12, 0.90], ['Carro', 0.40, 0.16, 1.40], ['Ridery Premium', 0.60, 0.20, 2.50], ['Camioneta', 0.55, 0.18, 2.00], ['Envíos Moto', 0.22, 0.10, 1.00]];
+    const promos = [['BIENVENIDO', '20%', 'Primer viaje', 'Active', '2026-12-31'], ['RIDERYMOTO', '$0.50', 'Moto y Moto Baratica', 'Active', '2026-11-30'], ['NAVIDAD26', '15%', 'Todas las flotas', 'Inactive', '2026-12-24'], ['CORPORATIVO', '10%', 'Cuentas corporativas', 'Active', '2027-01-31']];
+    return { usuarios, conductores, reviews, liquidaciones, almacenes, stock, servicios, promos, cancelaciones: CANCELACIONES_ADMIN, tiposWallet: TIPOS_WALLET,
+      reglas: [
+        { accion: 'agregar-wallet', objetivo: 'u:302915', v: 'buena', tipo: 'Vencimiento de referidos', monto: 5, nota: 'Abonó los KM vencidos con el tipo correcto.' },
+        { accion: 'rechazar-cuenta', objetivo: 'p:215664', v: 'buena', nota: 'Rechazó la cuenta para que la conductora la cargue de nuevo.' },
+        { accion: 'contactado', objetivo: '86163011', v: 'buena', nota: 'Marcó la reseña como contactada.' },
+        { accion: 'contactado', objetivo: '86163870', v: 'buena', nota: 'Marcó la reseña como contactada.' },
+        { accion: 'contactado', objetivo: '86162544', v: 'buena', nota: 'Marcó la reseña como contactada.' },
+        { accion: 'reporte-usuario', objetivo: 'u:1144290', v: 'buena', nota: 'Dejó el reporte del usuario que no pagó el efectivo.' }
+      ] };
+  })();
+  // Acciones del Admin completo y cómo se califican si no hay una regla que las espere
+  const SIM_ACCIONES_ADMIN = {
+    'agregar-wallet': ['Add Wallet', 'mala', 'Abonó saldo a una wallet sin que el caso lo pidiera.'],
+    'rechazar-cuenta': ['Reject (cuenta bancaria)', 'mala', 'Rechazó una cuenta bancaria sin motivo.'],
+    'contactado': ['Contacted (reseña)', null, ''],
+    'declinar-usuario': ['Decline (usuario)', 'mala', 'Declinó (sancionó) a un usuario sin motivo.'],
+    'eliminar-usuario': ['Delete User', 'mala', 'Eliminó una cuenta: esta herramienta nunca se usa en soporte.'],
+    'eliminar-conductor': ['Delete Provider', 'mala', 'Eliminó un conductor: esta herramienta nunca se usa en soporte.'],
+    'cambiar-clave': ['Change Password', 'mala', 'Cambió la clave de un usuario sin que lo pidiera.'],
+    'reporte-usuario': ["User's Records (reporte)", null, '']
+  };
+
+  const SIMULADOR_DEFAULT = { activo: true, ordenNiveles: true, intentos: 1, velocidad: 10, niveles: SIM_NIVELES_DEFAULT, motivos: SIM_MOTIVOS_DEFAULT, casos: SIM_CASOS_DEFAULT, ordenes: SIM_ORDENES_DEFAULT, viajes: SIM_VIAJES_DEFAULT, admin: SIM_ADMIN_DEFAULT };
 
   /* Revisión básica de ortografía para las respuestas escritas («Otro»): la ve Calidad al calificar. */
   const SIN_TILDE = { tambien: 'también', ademas: 'además', despues: 'después', informacion: 'información', direccion: 'dirección', numero: 'número', gestion: 'gestión', solucion: 'solución',
@@ -996,12 +1281,18 @@
     s.casos = s.casos || []; s.ordenes = s.ordenes || [];
     s.niveles = (s.niveles && s.niveles.length) ? s.niveles : SIM_NIVELES_DEFAULT;
     s.viajes = (s.viajes && s.viajes.length) ? s.viajes : SIM_VIAJES_DEFAULT;
-    // Configuraciones guardadas antes de la ruta VIAJES: se agregan sus niveles y casos de ejemplo
-    if (!s.niveles.some(n => n.ruta === 'VIAJES')) {
-      s.niveles = s.niveles.map(n => Object.assign({ ruta: 'ORDERS' }, n)).concat(SIM_NIVELES_DEFAULT.filter(n => n.ruta === 'VIAJES'));
-      SIM_CASOS_DEFAULT.filter(c => c.celula === 'TRIPS' && !s.casos.some(x => x.id === c.id)).forEach(c => s.casos.push(c));
+    // Configuraciones guardadas antes de las rutas VIAJES y CÉLULAS: se agregan sus niveles, casos y viajes de ejemplo
+    s.niveles = s.niveles.map(n => Object.assign({ ruta: 'ORDERS' }, n));
+    for (const ruta of ['VIAJES', 'CELULAS']) {
+      if (s.niveles.some(n => n.ruta === ruta)) continue;
+      const nuevos = SIM_NIVELES_DEFAULT.filter(n => n.ruta === ruta);
+      s.niveles = s.niveles.concat(nuevos);
+      const ids = new Set([].concat(...nuevos.map(n => n.casos)));
+      SIM_CASOS_DEFAULT.filter(c => ids.has(c.id) && !s.casos.some(x => x.id === c.id)).forEach(c => s.casos.push(c));
       SIM_MOTIVOS_DEFAULT.filter(m => !s.motivos.includes(m)).forEach(m => s.motivos.push(m));
+      SIM_VIAJES_DEFAULT.filter(v => !s.viajes.some(x => x.id === v.id)).forEach(v => s.viajes.push(v));
     }
+    s.admin = Object.assign({}, SIM_ADMIN_DEFAULT, s.admin || {});
     return s;
   }
   const humorTxt = h => SIM_HUMOR[Math.max(0, Math.min(4, h))];
@@ -1108,6 +1399,16 @@
       }
       op = Math.min(op, omax);
     }
+    if ((ses.herramientas || []).includes('admin')) {
+      const ACC = { 'cancelar-viaje': 'Cancel Trip' };
+      for (const c of ses.casos) {
+        const d = s.casos.find(x => x.id === c.id), e = d && d.adminEsperada;
+        if (!e) continue;
+        omax += 2;
+        const hecha = ses.acciones.find(a => a.herramienta === 'admin' && a.accion === e.accion && a.orden === e.objetivo && (a.v === 'buena' || a.v === 'regular'));
+        if (hecha) op += SIM_PUNTOS[hecha.v]; else sinGestion.push('Admin · ' + (ACC[e.accion] || (SIM_ACCIONES_ADMIN[e.accion] || [e.accion])[0]) + ': ' + e.nota);
+      }
+    }
     const max = tmax + omax, pts = tp + op;
     const csat = { bien: ses.casos.filter(c => csatDe(c) === 'Bien').length, mal: ses.casos.filter(c => csatDe(c) === 'Mal').length, sinAtender: ses.casos.filter(c => csatDe(c) === 'Sin atender').length };
     const conConsulta = ses.casos.filter(c => c.consulta && c.verifico != null);
@@ -1139,7 +1440,8 @@
       ordenes: ses.panel ? s.ordenes.map(o => ({ id: o.id, comercio: o.comercio, cliente: o.cliente, total: o.total || '', metodo: o.metodo || 'movil', pago: o.pago || 'Pagada', items: o.items || [],
         eventos: (o.eventos || []).map(e => ({ min: e.min, c: e.c || '', e: e.e || '', rep: e.rep || '', rol: e.rep ? (e.rol || 'Repartidor') : '' })) })) : [],
       viajes: (ses.herramientas || []).includes('admin') ? s.viajes.map(v => { const x = Object.assign({}, v); delete x.reglas; return x; }) : [],
-      hechas: ses.acciones.map(a => ({ herramienta: a.herramienta || 'zupper', orden: a.orden, accion: a.accion, min: a.min, texto: a.texto, c: a.c || '', e: a.e || '', rep: a.rep || '', rol: a.rol || '', st: a.st || '' }))
+      admin: (ses.herramientas || []).includes('admin') ? (() => { const x = Object.assign({}, s.admin); delete x.reglas; return x; })() : null,
+      hechas: ses.acciones.map(a => ({ herramienta: a.herramienta || 'zupper', orden: a.orden, accion: a.accion, min: a.min, texto: a.texto, c: a.c || '', e: a.e || '', rep: a.rep || '', rol: a.rol || '', st: a.st || '', dato: a.dato || null }))
     };
   }
   // Cambios de llegada para que el navegador los conozca (llegada progresiva)
@@ -1299,14 +1601,58 @@
       if (body.que !== 'cancelar-viaje') throw err(400, 'Acción desconocida.');
       const min = minutoSim(ses);
       const st = estadoViaje(v, min, ses.acciones);
-      if (!['Waiting', 'Accepted', 'Arrived', 'Started'].includes(st)) throw err(409, 'Solo se pueden cancelar viajes en espera o en curso.');
+      if (!['Waiting', 'Accepted', 'Arrived', 'Started', 'Completed'].includes(st)) throw err(409, 'Este viaje ya está cancelado.');
+      const motivo = limpiar(body.motivo, 80), desc = limpiar(body.descripcion, 300);
+      if (!motivo) throw err(400, 'Elige el motivo de cancelación (Cancelation Reason).');
       const regla = (v.reglas || []).find(x => x.accion === 'cancelar-viaje' && min >= x.desde && min < x.hasta);
-      const a = { herramienta: 'admin', orden: v.id, accion: 'cancelar-viaje', min, f: ahora(), texto: 'Viaje #' + v.id + ' cancelado desde el Admin.', st: 'Cancelled',
-        v: regla ? regla.v : 'mala', nota: regla ? regla.nota : 'Canceló un viaje sin motivo.' };
+      let cal = regla ? regla.v : 'mala', nota = regla ? regla.nota : 'Canceló un viaje sin motivo.';
+      if (regla && regla.motivo && regla.motivo !== motivo && cal === 'buena') { cal = 'regular'; nota = 'Canceló el viaje correcto, pero con el motivo «' + motivo + '»; era «' + regla.motivo + '».'; }
+      const a = { herramienta: 'admin', orden: v.id, accion: 'cancelar-viaje', min, f: ahora(), texto: 'Viaje #' + v.id + ' cancelado desde el Admin · ' + motivo + '.', st: 'Cancelled',
+        v: cal, nota, dato: { motivo, descripcion: desc } };
       ses.acciones.push(a);
       asp.simulador = sim;
       await store.put('aspirantes', asp);
-      return { hecha: { herramienta: 'admin', orden: v.id, accion: a.accion, min, texto: a.texto, st: 'Cancelled' } };
+      return { hecha: { herramienta: 'admin', orden: v.id, accion: a.accion, min, texto: a.texto, st: 'Cancelled', dato: a.dato } };
+    },
+    // Acciones de los demás módulos del Admin (Users, Service Providers, Reviews…)
+    async simAccionAdmin({ store, user, body }) {
+      const { s, asp, sim, ses } = await sesionSim(store, user, body);
+      if (!(ses.herramientas || []).includes('admin')) throw err(403, 'Este nivel no tiene Admin.');
+      const que = String(body.que || ''), def = SIM_ACCIONES_ADMIN[que];
+      if (!def) throw err(400, 'Acción desconocida.');
+      const objetivo = limpiar(body.objetivo, 30);
+      const ad = s.admin || SIM_ADMIN_DEFAULT;
+      const existe = objetivo.startsWith('u:') ? ad.usuarios.some(x => 'u:' + x.id === objetivo) : objetivo.startsWith('p:') ? ad.conductores.some(x => 'p:' + x.id === objetivo) : (ad.reviews || []).some(x => x.viaje === objetivo);
+      if (!existe) throw err(404, 'No encontramos ese registro.');
+      const min = minutoSim(ses);
+      const dato = {};
+      if (que === 'agregar-wallet') {
+        dato.monto = Math.round(Number(body.monto) * 100) / 100; dato.tipo = limpiar(body.tipo, 60); dato.addcut = body.addcut === 'Cut' ? 'Cut' : 'Add'; dato.moneda = body.moneda === 'USD' ? 'USD' : 'KM';
+        if (!(dato.monto > 0) || dato.monto > 500) throw err(400, 'Escribe un monto válido.');
+        if (!dato.tipo) throw err(400, 'Elige el tipo de abono.');
+      }
+      if (['rechazar-cuenta', 'declinar-usuario', 'reporte-usuario'].includes(que)) { dato.motivo = limpiar(body.motivo, 300); if (!dato.motivo) throw err(400, 'Escribe el motivo.'); }
+      if (que === 'rechazar-cuenta') dato.cuenta = limpiar(body.cuenta, 10);
+      const repetida = ses.acciones.some(a => a.herramienta === 'admin' && a.accion === que && a.orden === objetivo);
+      const regla = (ad.reglas || []).find(r => r.accion === que && r.objetivo === objetivo);
+      let v = regla ? regla.v : def[1], nota = regla ? regla.nota : def[2];
+      if (regla && que === 'agregar-wallet') {
+        const fallas = [];
+        if (regla.tipo && regla.tipo !== dato.tipo) fallas.push('tipo «' + dato.tipo + '» (era «' + regla.tipo + '»)');
+        if (regla.monto && Number(regla.monto) !== dato.monto) fallas.push('monto ' + dato.monto + ' (era ' + regla.monto + ')');
+        if (dato.addcut !== 'Add') fallas.push('descontó en vez de abonar');
+        if (fallas.length) { v = dato.addcut !== 'Add' ? 'mala' : 'regular'; nota = 'Abonó a la cuenta correcta, pero con ' + fallas.join(' y ') + '.'; }
+      }
+      if (repetida && v === 'buena') { v = null; nota = 'Acción repetida.'; }
+      const textos = { 'agregar-wallet': (dato.addcut === 'Cut' ? 'Descuento' : 'Abono') + ' de ' + dato.monto + ' ' + dato.moneda + ' (' + dato.tipo + ') en la wallet del usuario ' + objetivo.slice(2) + '.',
+        'rechazar-cuenta': 'Cuenta bancaria del conductor ' + objetivo.slice(2) + ' rechazada.', 'contactado': 'Reseña del viaje #' + objetivo + ' marcada como contactada.',
+        'declinar-usuario': 'Usuario ' + objetivo.slice(2) + ' declinado.', 'eliminar-usuario': 'Usuario ' + objetivo.slice(2) + ' eliminado.', 'eliminar-conductor': 'Conductor ' + objetivo.slice(2) + ' eliminado.',
+        'cambiar-clave': 'Clave del usuario ' + objetivo.slice(2) + ' cambiada.', 'reporte-usuario': "Reporte cargado en User's Records del usuario " + objetivo.slice(2) + '.' };
+      const a = { herramienta: 'admin', orden: objetivo, accion: que, min, f: ahora(), texto: textos[que], v, nota, dato };
+      ses.acciones.push(a);
+      asp.simulador = sim;
+      await store.put('aspirantes', asp);
+      return { hecha: { herramienta: 'admin', orden: objetivo, accion: que, min, texto: a.texto, st: '', dato } };
     },
     async simAccion({ store, user, body }) {
       const { s, asp, sim, ses } = await sesionSim(store, user, body);
@@ -1388,7 +1734,7 @@
             respuestas: c.respuestas.map((r, k) => ({ k, paso: r.paso, t: r.t, v: r.v, otro: r.otro, seg: r.seg, ortografia: r.ortografia || [],
               opciones: ((d.pasos[r.paso] || {}).opciones || []).map(o => ({ t: o.t, v: o.v })) })) };
         }),
-        viajesAcciones: x.acciones.filter(a => a.herramienta === 'admin').map(a => ({ viaje: a.orden, min: a.min, v: a.v, nota: a.nota })),
+        viajesAcciones: x.acciones.filter(a => a.herramienta === 'admin').map(a => ({ viaje: a.orden, min: a.min, v: a.v, nota: a.nota, texto: a.texto || '' })),
         ordenes: !x.panel ? [] : s.ordenes.filter(o => (o.reglas || []).length || x.acciones.some(y => y.orden === o.id)).map(o => ({ id: o.id, comercio: o.comercio,
           acciones: x.acciones.filter(y => y.orden === o.id).map(y => ({ accion: SIM_ACCIONES[y.accion] || y.accion, min: y.min, v: y.v, nota: y.nota })),
           esperadas: (o.reglas || []).filter(r => r.esperada).map(r => ({ accion: SIM_ACCIONES[r.accion] || r.accion, nota: r.nota, hecha: x.acciones.some(y => y.orden === o.id && y.accion === r.accion && y.v === 'buena') })) })) };

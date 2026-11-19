@@ -464,3 +464,35 @@ body.zd-abierto { overflow: hidden; }
 .zd-app > .adm, .zd-app > .zp { flex: 1; min-height: 0; }
 .zd.oscuro .cr { background: #202124; color: #e8eaed; } .zd.oscuro .cr-tab.act, .zd.oscuro .cr-bar { background: #35363a; } .zd.oscuro .cr-tab { color: #e8eaed !important; } .zd.oscuro .cr-url { background: #202124; color: #e8eaed; }
 @media (max-width: 860px) { .cr-tab { width: 150px; min-width: 110px; } .cr-nav { display: none; } }
+
+/* ---------- Admin completo: módulos, modales y fichas ---------- */
+.adm { position: relative; }
+.adm-card.nar { border-color: #F0AD4E; } .adm-card.gra { border-color: #8E1A4E; }
+.adm-h2 { font-size: 16px; font-weight: 400; color: #333; margin: 4px 0 10px; display: flex; align-items: center; gap: 8px; }
+.adm-link { background: none; border: 0; padding: 0; color: #333 !important; display: inline-flex; }
+.adm-modal { position: absolute; inset: 0; background: rgba(0, 0, 0, .45); display: flex; align-items: flex-start; justify-content: center; padding: 60px 16px 16px; z-index: 30; }
+.amod { background: #fff; width: min(520px, 100%); box-shadow: 0 10px 30px rgba(0,0,0,.3); border-radius: 3px; display: flex; flex-direction: column; max-height: 100%; }
+.amod-h { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #eee; font-size: 14px; color: #333; }
+.amod-h button { background: none; border: 0; font-size: 20px !important; color: #888 !important; line-height: 1; }
+.amod-b { padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+.amod-b select, .amod-b input, .amod-b textarea, .ap-ficha input { width: 100%; border: 1px solid #ccc; border-radius: 3px; padding: 7px 9px; font-size: 12px !important; color: #333; background: #fff; font-family: inherit; }
+.amod-l { font-size: 11px; color: #555; display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.amod-n { font-size: 12px; color: #555; margin: 0; }
+.amod-f { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid #eee; }
+.amod-f button { min-width: 96px; }
+.amod-sec { background: #fff; border: 1px solid #ccc; border-radius: 3px; padding: 7px 14px; font-size: 12px !important; color: #333 !important; }
+.amod-g { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.amod-t th { width: 110px; text-align: left; }
+.ap-perfil { display: inline-flex; width: 22px; height: 22px; border-radius: 3px; align-items: center; justify-content: center; }
+.ap-perfil.on { background: #8BC34A; } .ap-perfil.off { background: #D9534F; }
+.ap-perfil .ai { width: 14px; height: 14px; stroke: #fff; }
+.ap-perfil-g { display: flex; gap: 16px; align-items: flex-start; }
+.ap-foto { width: 90px; height: 90px; flex: none; border-radius: 50%; background: #e9ecef; display: flex; align-items: center; justify-content: center; }
+.ap-foto .ai { width: 48px; height: 48px; stroke: #999; }
+.ap-ficha { flex: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; }
+.ap-doc { width: min(420px, 100%); height: auto; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.2); }
+.adm-alm { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.adm-almc { background: #fff; border-top: 26px solid #2F3A45; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px; color: #333; }
+.adm-almc b { font-size: 12px; font-weight: 400; } .adm-almc span { font-size: 22px; }
+.adm-almc .ab-apply { min-width: 0; padding: 4px 12px; }
+@media (max-width: 1000px) { .adm-alm { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ap-ficha, .amod-g { grid-template-columns: 1fr; } .ap-perfil-g { flex-direction: column; } }

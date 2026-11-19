@@ -4,18 +4,35 @@ Lo encuentra el aspirante en **Assessment → Simulador de tickets**. Calidad y 
 
 ## Rutas
 
-Hay dos rutas de práctica, cada una con sus 3 niveles (Básico → Intermedio → Realidad):
+Hay tres rutas de práctica, cada una con sus 3 niveles (Básico → Intermedio → Realidad):
 
 - **Orders:** Zendesk + **Panel Zupper**. Los tickets son de pedidos.
 - **Viajes:** Zendesk + **Admin de Ridery** (réplica de admin.ridery.app). Los tickets son de viajes: cobro de más, conductor que «ya llegó», deuda de un viaje de 2021, objeto perdido y un caso de Zupper que hay que transferir.
+- **Células:** Zendesk + **Admin completo**. Tickets de las demás células, armados con las guías de Material de apoyo de AdminCX:
+
+| Caso | Célula | Dónde se resuelve | Acción esperada en el Admin |
+|---|---|---|---|
+| Me quitaron los KM de referidos (usuario 302915) | Payments | Users → Wallet History | Add Wallet: 5 KM, tipo «Vencimiento de referidos» |
+| No me aprueban la autenticación (usuario 1873402) | Fraud | Users → View Document (foto con flash) | — |
+| Me cobraron un viaje que no se hizo (viaje 86162544) | Trips | Completed Requests → View Map (0 km) | Cancel Trip con motivo «Viaje no realizado» |
+| Conductor suspendido (conductor 448203) | Supply | Service Providers → Driver's Records, Cancelled Trips → See Cancel Description | — |
+| Suspendido por cancelaciones (conductor 391577) | Match & Pricing | Cancelled Trips filtrando por Provider Id: 3 seguidas | — |
+| No me llegó el pago (conductora 215664) | Payments | Trip Payment → Payment Inquiries (Removed from liquidación: Yes) | Reject de la cuenta en Datos Bancarios Providers |
+| El conductor fue grosero (viaje 86163011) | CX | Reviews → Bad Reviews Users | Contacted |
+| El usuario no me pagó el efectivo (viaje 86163870) | Payments | Completed Requests (Pay By Cash, validado) | User's Records: reporte del usuario 1144290 |
+
+**ID de usuario y de conductor:** son números distintos. Users solo busca usuarios y Service Providers solo busca conductores; buscar con el ID en el módulo equivocado no encuentra a la persona. Hay dos trampas a propósito: el **302915** es una usuaria en Users y otro conductor en Service Providers, y el **448203** es un conductor y otra usuaria. Si el aspirante revisa a la persona equivocada, no cuenta como «revisó antes de responder».
 
 **Navegador de práctica:** arriba hay pestañas tipo Chrome, una por herramienta: **Zendesk**, **RIDERY** (Admin) y **Panel Zupper**, cada una con su URL. Como en la vida real, para buscar un viaje el aspirante se cambia de pestaña. Si llega un ticket mientras está en otra herramienta, la pestaña de Zendesk muestra un punto rojo y suena el aviso.
 
 **Admin de práctica:**
 
+- **Todos los módulos del menú:** Trips, Shipments, Reviews (All, Bad Reviews Users/Drivers, Contacted), Map View, Service Providers (All, Online, Approved, Unapproved, Blocked, Cash Blocked, Suspended, Deleted, Provider's Incidents, Datos Bancarios, Payment Agreement, Auto Suspension History), Users (Users, Blocked, Deleted, User's Incidents), Emprende con Ridery, Service Types, Store (Warehouse con stock por ciudad, Inventory, Accessories y reportes), Fraud, Trip Payment (Payment Inquiries con liquidación, Cash Disputes), Report, Settings (Promo Codes) y Administrative.
+- **Action de conductores:** Edit Detail, Vehicle, Banking Detail, History, Driver's Records, Driver's cash blocked history, Referral history, View Document y Delete Provider. **Action de usuarios:** Edit Detail, History, User's Records, Referral history, Wallet History, Delete User, View Document, Decline, Add Wallet, Incident's History y Change Password.
+- **Acciones que se califican:** Add Wallet (monto, moneda, Add/Cut y tipo), Reject de cuenta bancaria, Contacted en Reviews, reporte en User's Records y Cancel Trip con «Cancelation Reason» (la misma lista del Admin). Si el caso espera la acción y se hace bien, suma 2; con otro tipo o motivo, 1. Delete User/Provider, Decline y Change Password sin motivo cuentan como «mala».
 - **Módulos de Trips:** Dashboard, All Trips, Waiting, Running y Completed Requests, Scheduled Requests, Cancelled Trips, Sos Trips y Special trips. Cada uno tiene las mismas columnas y filtros del real: SORT, SEARCH por Id/User Name/User Id/Provider Name/Phone, Date Filter, Trip Type y Apply.
 - **All Trips** sale vacío hasta presionar **Apply**. Los viajes viejos solo aparecen con **Trip History** y una fecha de inicio anterior; por ejemplo, el viaje 254552 de 2021 sale con «2020-01-01».
-- **Menú Action:** View Map (detalle con Trip Requested / Trip Completed, mapas, KM, tiempo, surge y total), Messages (chat entre conductor y usuario), Copy Route Url for Google Maps y Cancel Trip.
+- **Menú Action:** View Map (detalle con Trip Requested / Trip Completed, mapas, KM, tiempo, surge y total), Chat History o Messages, See Cancel Description (motivo, ticket y captura), Copy Route Url for Google Maps y Cancel Trip (también en viajes completados, como en el real).
 - Los viajes avanzan solos: Waiting → Accepted → Started → Completed.
 - **Revisar antes de responder:** algunos casos piden consultar un viaje o una orden. Si el aspirante abrió ese viaje u orden (detalle, mensajes o búsqueda) antes de dar la respuesta clave, suma 2 puntos. Calidad ve en cada ticket si lo revisó o no. Cancelar un viaje sin motivo cuenta como «mala».
 
@@ -79,7 +96,7 @@ Con **«Niveles en orden»** encendido (en Configurar), cada nivel se desbloquea
 ## Dónde se guarda
 
 - **Resultados:** dentro del aspirante (`asp.simulador`). No hay colecciones nuevas en MongoDB.
-- **Casos, órdenes y niveles:** en `config.general.simulador`. Mientras nadie guarde una configuración, se usan los de ejemplo de `js/handlers.js`.
+- **Casos, órdenes, niveles y datos del Admin** (usuarios, conductores, reseñas, liquidaciones): en `config.general.simulador`. Mientras nadie guarde una configuración, se usan los de ejemplo de `js/handlers.js`.
 
 ## Editar casos
 
