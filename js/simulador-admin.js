@@ -27,7 +27,7 @@
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>', chev: '<path d="m6 9 6 6 6-6"/>', up: '<path d="m18 15-6-6-6 6"/>', menu: '<path d="M4 6h16M4 12h16M4 18h16"/>', power: '<path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0"/>',
     msg: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>', export: '<path d="M12 3v12M7 8l5-5 5 5M5 21h14"/>', refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>', left: '<path d="m15 18-6-6 6-6"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>', thumb: '<path d="M7 11v9H4v-9zM7 11l4-8a2 2 0 0 1 3 2l-1 5h6a2 2 0 0 1 2 2l-2 7a2 2 0 0 1-2 1H7"/>', ban: '<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
-    check: '<path d="m5 12 5 5 9-10"/>', file: '<path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/>', box: '<path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>'
+    check: '<path d="m5 12 5 5 9-10"/>', file: '<path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/>', box: '<path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>', lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'
   };
   const ic = (n, c) => '<svg class="ai ' + (c || '') + '" viewBox="0 0 24 24" aria-hidden="true">' + (I[n] || '') + '</svg>';
 
@@ -57,6 +57,9 @@
   const NOMBRE = {}; GRUPOS.forEach(g => g[3].forEach(m => { NOMBRE[m[0]] = m[1].replace(/ \(\d+\)$/, ''); }));
   const grupoDe = mod => (GRUPOS.find(g => g[3].some(m => m[0] === mod)) || GRUPOS[0])[0];
   const esTrip = mod => TRIPS.some(t => t[0] === mod);
+  // Módulos habilitados en esta etapa de la ruta (null = Admin completo)
+  const permitido = grupo => !C || !C.ses.adminModulos || C.ses.adminModulos.includes(grupo);
+  const bloqueoTxt = 'Este módulo se habilita más adelante en tu ruta.';
   const CAMPOS = { waiting: ['Id', 'User Name', 'User Id', 'Phone'], running: ['User Name', 'Id', 'User Id', 'Provider Name', 'Provider Id'], completed: ['User Name', 'Id', 'User Id', 'Provider Name', 'Provider Id'],
     cancelled: ['User Name', 'Id', 'User Id', 'Provider Name', 'Provider Id'], scheduled: ['User Name', 'Id'], all: ['Id', 'User Id', 'User Name', 'Provider Name', 'Provider Id', 'Phone'], sos: ['Id', 'User Name'], special: ['Id'] };
 
@@ -179,6 +182,7 @@
     C = ctx;
     const sidebar = '<aside class="adm-side"><div class="adm-logo"><span>Ridery</span></div><nav>' + GRUPOS.map(g => {
       const abierto = A.grupo === g[0];
+      if (!permitido(g[0])) return '<div class="adm-grupo adm-off"><button class="adm-g" disabled title="' + bloqueoTxt + '">' + ic(g[2]) + g[1] + ic('lock', 'adm-ch') + '</button></div>';
       return '<div class="adm-grupo' + (abierto ? ' abierto' : '') + '"><button class="adm-g" data-grupo="' + g[0] + '">' + ic(g[2]) + g[1] + (g[0] === 'trips' ? '<i class="adm-dot"></i>' : '') + ic(abierto ? 'up' : 'chev', 'adm-ch') + '</button>' +
         (abierto ? '<div class="adm-sub">' + g[3].map(m => '<button data-mod="' + m[0] + '" class="' + (A.modulo === m[0] && !A.vista ? 'act' : '') + '">' + ic(m[2]) + esc(m[1]) + '</button>').join('') + '</div>' : '') + '</div>';
     }).join('') + '</nav></aside>';
@@ -194,6 +198,7 @@
     (MODULOS[A.modulo] || vacio)(cont);
   }
   function abrir(vista, id, sinRegistro) {
+    if ((vista.startsWith('u-') && !permitido('users')) || (vista.startsWith('p-') && !permitido('prov'))) { A.menu = null; return toast(bloqueoTxt); }
     A.vista = vista; A.obj = id; A.menu = null;
     if (!sinRegistro) {
       const reg = vista.startsWith('u-') ? 'u:' + id : vista.startsWith('p-') ? 'p:' + id : id;
@@ -306,7 +311,7 @@
     const online = conductores().filter(p => p.online && estadoConductor(p) === 'Approved').length;
     cont.innerHTML = '<div class="adm-dash">' + [['Waiting Requests', cuenta('waiting'), 'cel', 'waiting'], ['Running Requests', cuenta('running'), 'nav', 'running'], ['Completed Requests', cuenta('completed'), 'ver', 'completed'], ['Cancelled Trips', cuenta('cancelled'), 'roj', 'cancelled'],
       ['Online Providers', online, 'nar', 'prov-online'], ['Bad Reviews', AD().reviews.filter(r => !contactada(r)).length, 'gra', 'rev-users']]
-      .map(x => '<button class="adm-card ' + x[2] + '" data-ir="' + x[3] + '"><b>' + x[1] + '</b><span>' + x[0] + '</span></button>').join('') + '</div>';
+      .filter(x => permitido(grupoDe(x[3]))).map(x => '<button class="adm-card ' + x[2] + '" data-ir="' + x[3] + '"><b>' + x[1] + '</b><span>' + x[0] + '</span></button>').join('') + '</div>';
     cont.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => { A.modulo = b.dataset.ir; A.grupo = grupoDe(A.modulo); C.repintar(); }));
   }
   // Cancel Trip: igual al real, pide «Cancelation Reason» y una descripción

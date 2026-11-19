@@ -559,3 +559,12 @@ body.embebido { --top-h: 0px; }
 body.embebido .topbar { display: none; }
 .sim-logro { color: var(--ok, #1e8e5a); font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .sim-logro svg { width: 14px; height: 14px; }
+/* Simulador: grupos de herramientas (Zupper / Ridery) y etapas */
+.sim-grupos { display: flex; gap: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); width: fit-content; max-width: 100%; flex-wrap: wrap; }
+.sim-gtab { border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 600; padding: 8px 16px; border-radius: var(--r-sm); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.sim-gtab:hover { color: var(--fg); }
+.sim-gtab.act { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
+.sim-gdesc { margin-top: -4px; }
+.sim-etapa { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sim-herr { display: flex; gap: 6px; flex-wrap: wrap; }
+.sim-chip { font-size: .75rem; padding: 2px 9px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-text); font-weight: 600; }

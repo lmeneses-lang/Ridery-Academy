@@ -504,3 +504,4 @@ body.zd-abierto { overflow: hidden; }
 .zd-intento-fin span { font-size: 13px; color: #555; }
 .zd.oscuro .zd-intento-fin span { color: #ccc; }
 .zd-fin-acc { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+.adm-off .adm-g { opacity: .45; cursor: not-allowed; }

@@ -934,7 +934,7 @@
       let pie;
       if (n.enCurso) pie = '<button class="btn btn-primary btn-sm" data-nivel="' + esc(n.id) + '">' + icon('play') + 'Continuar</button>';
       else if (n.bloqueado) pie = '<span class="pill">' + icon('lock') + 'Termina el nivel anterior</span>';
-      else if (curso) pie = '<span class="pill">Tienes otro nivel en curso</span>';
+      else if (curso) pie = '<span class="pill">Termina primero el nivel en curso (' + esc(curso.etapa + ' · ' + curso.nombre) + ')</span>';
       else if (n.ilimitado) pie = '<button class="btn ' + (n.usadas ? 'btn-secondary' : 'btn-primary') + ' btn-sm" data-nivel="' + esc(n.id) + '">' + icon(n.usadas ? 'refresh' : 'play') + (n.usadas ? 'Reiniciar prueba' : 'Empezar') + '</button><span class="small muted">' + (n.usadas ? 'Vas por el intento #' + n.intento : 'Intentos sin límite') + '</span>';
       else if (n.quedan) pie = '<button class="btn ' + (n.terminado ? 'btn-secondary' : 'btn-primary') + ' btn-sm" data-nivel="' + esc(n.id) + '">' + icon('play') + (n.terminado ? 'Repetir' : 'Empezar') + '</button><span class="small muted">' + (n.quedan === 1 ? '1 intento' : n.quedan + ' intentos') + '</span>';
       else pie = '<span class="pill pill-ok">' + icon('check') + 'Enviado</span>';
@@ -942,10 +942,20 @@
         '<h3>' + esc(n.nombre) + '</h3><p class="small muted">' + esc(n.descripcion) + '</p><p class="small"><b>' + n.tickets + '</b> tickets · <b>' + n.minutos + '</b> min' + (n.panel ? ' · Panel Zupper' : '') + (n.admin ? ' · Admin' : '') + '</p>' + (n.aprobado ? '<p class="small sim-logro">' + icon('check') + 'Lo lograste en el intento #' + n.aprobadoEn + (n.usadas > n.aprobadoEn ? ' · ' + n.usadas + ' intentos en total' : '') + '</p>' : n.usadas ? '<p class="small muted">' + n.usadas + (n.usadas === 1 ? ' intento' : ' intentos') + ' · aún no lo logras</p>' : '') + '<div class="sim-nivel-pie">' + pie + '</div></article>';
     };
     const ult = r.ultimas[0];
+    // Zupper y Ridery van separados: cada grupo tiene sus etapas y una no depende de la otra
+    const grupos = (r.grupos || []).filter(g => r.niveles.some(n => n.grupo === g.id));
+    if (!grupos.some(g => g.id === S.simGrupo)) S.simGrupo = (curso && curso.grupo) || (grupos[0] || {}).id;
+    const etapaHTML = ruta => { const ns = r.niveles.filter(n => n.ruta === ruta), h = ns[0].herramientasEtapa || [];
+      return '<div class="sim-ruta"><div class="sim-etapa"><h3>' + esc(ns[0].etapa || ns[0].rutaNombre || ruta) + '</h3><div class="sim-herr">' + h.map(x => '<span class="sim-chip">' + esc(x) + '</span>').join('') + '</div></div><div class="sim-niveles">' + ns.map(nivelHTML).join('') + '</div></div>'; };
+    const g = grupos.find(x => x.id === S.simGrupo);
     card.innerHTML = '<div class="sim-card-in"><span class="boost-ic">' + icon('chat') + '</span><div class="stack-sm" style="gap:6px;flex:1;min-width:0"><h2>Simulador de tickets</h2>' +
-      '<p class="muted small">Una bandeja igual a la que usarás en el trabajo: tickets por WhatsApp con sonido, motivo de contacto y estatus del ticket, junto al Panel Zupper (Orders) o al Admin (Viajes). Cada ruta avanza por niveles. Usa computadora y activa el sonido.</p></div></div>' +
-      (r.activo ? [...new Set(r.niveles.map(n => n.ruta))].map(ruta => { const ns = r.niveles.filter(n => n.ruta === ruta); return '<div class="sim-ruta"><h3>' + esc(ns[0].rutaNombre || ruta) + '</h3><div class="sim-niveles">' + ns.map(nivelHTML).join('') + '</div></div>'; }).join('') : '<span class="pill">No disponible por ahora</span>') +
+      '<p class="muted small">Una bandeja igual a la que usarás en el trabajo: tickets por WhatsApp con sonido, motivo de contacto y estatus del ticket, junto a las herramientas de cada empresa. Zupper y Ridery van por separado: puedes avanzar en una sin terminar la otra. Usa computadora y activa el sonido.</p></div></div>' +
+      (r.activo ? '<div class="sim-grupos" role="tablist" aria-label="Herramientas">' + grupos.map(x => '<button role="tab" aria-selected="' + (x.id === S.simGrupo) + '" class="sim-gtab' + (x.id === S.simGrupo ? ' act' : '') + '" data-grupo="' + esc(x.id) + '">' + esc(x.nombre) +
+          (r.niveles.some(n => n.grupo === x.id && n.enCurso) ? ' <span class="pill pill-brand">En curso</span>' : '') + '</button>').join('') + '</div>' +
+        (g ? '<p class="small muted sim-gdesc">' + esc(g.descripcion) + '</p>' + [...new Set(r.niveles.filter(n => n.grupo === g.id).map(n => n.ruta))].map(etapaHTML).join('') : '')
+        : '<span class="pill">No disponible por ahora</span>') +
       (ult ? '<p class="small muted">Último intento (' + esc(ult.nivel) + '): ' + Elx.fechaHora(ult.fecha) + ' · ' + ult.resueltos + '/' + ult.total + ' tickets atendidos. Tu resultado lo revisa el equipo.</p>' : '');
+    card.querySelectorAll('[data-grupo]').forEach(b => b.addEventListener('click', () => { S.simGrupo = b.dataset.grupo; pintarSimulador(card); }));
     card.querySelectorAll('[data-nivel]').forEach(go => go.addEventListener('click', async () => {
       const n = r.niveles.find(x => x.id === go.dataset.nivel);
       if (!n.enCurso && !await confirmar({ titulo: (n.usadas ? '¿Reiniciar' : '¿Empezar') + ' el nivel ' + n.nombre + '?', texto: (n.ilimitado ? 'Este será tu intento #' + n.intento + '. ' : '') + 'El reloj de ' + n.minutos + ' minutos empieza al entrar y no se detiene aunque salgas. Ten el sonido activo.', ok: n.usadas ? 'Reiniciar' : 'Empezar' })) return;

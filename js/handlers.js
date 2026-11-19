@@ -348,11 +348,11 @@
     { id: 'avanzado', ruta: 'ORDERS', nombre: 'Realidad', descripcion: 'Como un pico real: los tickets llegan por tiempo aunque no hayas terminado los anteriores, y el panel no se detiene.', minutos: 25, maxAbiertos: 0, intervalo: 0, abandono: 120, panel: true, estados: true,
       casos: ['ord-retraso', 'ord-incompleto', 'ord-pago', 'fx-conductor-pago', 'ord-mal-estado', 'ord-direccion', 'fx-viaje-cobro', 'ord-no-llego', 'ord-sin-respuesta'] }
 ,
-    { id: 'viajes-basico', ruta: 'VIAJES', nombre: 'Básico', descripcion: 'Un ticket a la vez. Aprende a buscar viajes en el Admin: Waiting, Running y Completed Requests, detalle y mensajes.', minutos: 15, maxAbiertos: 1, intervalo: 8, abandono: 240, herramientas: ['admin'], estados: false,
+    { id: 'viajes-basico', ruta: 'VIAJES', adminModulos: ['trips'], nombre: 'Básico', descripcion: 'Un ticket a la vez. Aprende a buscar viajes en el Admin: Waiting, Running y Completed Requests, detalle y mensajes.', minutos: 15, maxAbiertos: 1, intervalo: 8, abandono: 240, herramientas: ['admin'], estados: false,
       casos: ['via-no-lo-veo', 'via-objeto', 'via-cobro'] },
-    { id: 'viajes-intermedio', ruta: 'VIAJES', nombre: 'Intermedio', descripcion: 'Hasta 2 tickets a la vez y estatus del ticket. Incluye un viaje viejo que solo aparece en «Trip History» y un caso que no es de viajes.', minutos: 20, maxAbiertos: 2, intervalo: 10, abandono: 180, herramientas: ['admin'], estados: true,
+    { id: 'viajes-intermedio', ruta: 'VIAJES', adminModulos: ['trips'], nombre: 'Intermedio', descripcion: 'Hasta 2 tickets a la vez y estatus del ticket. Incluye un viaje viejo que solo aparece en «Trip History» y un caso que no es de viajes.', minutos: 20, maxAbiertos: 2, intervalo: 10, abandono: 180, herramientas: ['admin'], estados: true,
       casos: ['via-cobro', 'via-no-lo-veo', 'via-deuda', 'fx-pedido-zupper', 'via-objeto'] },
-    { id: 'viajes-avanzado', ruta: 'VIAJES', nombre: 'Realidad', descripcion: 'Como un pico real: los tickets llegan por tiempo aunque no hayas terminado los anteriores.', minutos: 20, maxAbiertos: 0, intervalo: 0, abandono: 120, herramientas: ['admin'], estados: true,
+    { id: 'viajes-avanzado', ruta: 'VIAJES', adminModulos: ['trips'], nombre: 'Realidad', descripcion: 'Como un pico real: los tickets llegan por tiempo aunque no hayas terminado los anteriores.', minutos: 20, maxAbiertos: 0, intervalo: 0, abandono: 120, herramientas: ['admin'], estados: true,
       casos: ['via-cobro', 'via-no-lo-veo', 'via-deuda', 'fx-pedido-zupper', 'via-objeto'] }
   ];
   const SIM_RUTAS = { ORDERS: 'Orders · Zendesk + Panel Zupper', VIAJES: 'Viajes · Zendesk + Admin' };
@@ -720,6 +720,18 @@
       casos: ['cel-referidos', 'cel-autenticacion', 'cel-no-realizado', 'cel-suspendido', 'cel-strikes', 'cel-pago-rebotado', 'cel-bad-review', 'cel-efectivo'] }
   );
   SIM_RUTAS.CELULAS = 'Células · Zendesk + Admin completo';
+  /* Grupos de herramientas: Zupper y Ridery son empresas distintas y sus rutas no dependen una de otra.
+     Dentro de cada grupo, las etapas suman herramientas a medida que avanza la ruta. */
+  const SIM_GRUPOS = [
+    { id: 'ZUPPER', nombre: 'Herramientas Zupper', descripcion: 'Pedidos de Zupper: Zendesk y Panel Zupper.', rutas: ['ORDERS'] },
+    { id: 'RIDERY', nombre: 'Herramientas Ridery', descripcion: 'Viajes, usuarios y conductores de Ridery: Zendesk y el Admin. Cada etapa suma herramientas.', rutas: ['VIAJES', 'CELULAS'] }
+  ];
+  const SIM_ETAPAS = {
+    ORDERS: { titulo: 'Orders', herramientas: ['Zendesk', 'Panel Zupper'] },
+    VIAJES: { titulo: 'Etapa 1 · Viajes', herramientas: ['Zendesk', 'Admin: Trips'] },
+    CELULAS: { titulo: 'Etapa 2 · Células', herramientas: ['Zendesk', 'Admin: Trips', 'Users', 'Service Providers', 'Reviews', 'Trip Payment', 'Store y más'] }
+  };
+  const grupoDeRuta = ruta => (SIM_GRUPOS.find(g => g.rutas.includes(ruta)) || { id: 'OTRAS' }).id;
   const CANCELACIONES_ADMIN = ['Viaje no realizado', 'Prueba', 'No requiere el servicio', 'Modificación de reserva', 'Mover al Completed', 'Validación de cash (SOPORTE)', 'Conductor escribió para solicitar cancelar el viaje (Accepted)',
     'Conductor escribió para solicitar cancelar el viaje (Coming)', 'Conductor escribió para solicitar cancelar el viaje (Arrived)', 'Conductor se quedó accidentado', 'Viaje duplicado', 'Error en viaje', 'Destino no completado'];
   const TIPOS_WALLET = ['Vencimiento de referidos', 'Reembolso de viaje', 'Compensación por mala experiencia', 'Ajuste de saldo', 'Promoción', 'Error de cobro'];
@@ -1293,6 +1305,7 @@
       SIM_VIAJES_DEFAULT.filter(v => !s.viajes.some(x => x.id === v.id)).forEach(v => s.viajes.push(v));
     }
     s.admin = Object.assign({}, SIM_ADMIN_DEFAULT, s.admin || {});
+    s.niveles = s.niveles.map(n => n.ruta === 'VIAJES' && !n.adminModulos ? Object.assign({ adminModulos: ['trips'] }, n) : n);
     // Configuraciones guardadas antes de los intentos ilimitados: se pasan a ilimitados (0) con nota de aprobación 80 %
     if (!cfg.simulador || cfg.simulador.aprobacion == null) { s.intentos = 0; s.aprobacion = 80; }
     s.aprobacion = Number(s.aprobacion) || 80;
@@ -1431,7 +1444,7 @@
     const def = id => s.casos.find(c => c.id === id) || { pasos: [], cliente: {} };
     const nivel = s.niveles.find(n => n.id === ses.nivel) || {};
     return {
-      id: ses.id, nivel: ses.nivel, nivelNombre: nivel.nombre || ses.nivel, intento: ses.intento || null, ilimitado: !(Number(s.intentos) > 0), inicio: ses.inicio, ahora: ahora(), estado: ses.estado, velocidad: ses.velocidad, minutos: ses.minutos,
+      id: ses.id, nivel: ses.nivel, nivelNombre: nivel.nombre || ses.nivel, intento: ses.intento || null, ilimitado: !(Number(s.intentos) > 0), adminModulos: nivel.adminModulos || null, inicio: ses.inicio, ahora: ahora(), estado: ses.estado, velocidad: ses.velocidad, minutos: ses.minutos,
       panel: !!ses.panel, herramientas: ses.herramientas || (ses.panel ? ['zupper'] : []), conEstados: !!ses.conEstados, abandono: ses.abandono || 0, estadosTicket: SIM_ESTADOS_TICKET, motivos: s.motivos, acciones: SIM_ACCIONES,
       tickets: ses.casos.map(c => {
         const d = def(c.id), paso = d.pasos[c.paso];
@@ -1480,7 +1493,8 @@
       const hs = herramientasDe(n);
       const r = { id: n.id, ruta, rutaNombre: SIM_RUTAS[ruta] || ruta, nombre: n.nombre, descripcion: n.descripcion, minutos: n.minutos, tickets: (n.casos || []).length, panel: hs.includes('zupper'), admin: hs.includes('admin'),
         bloqueado: s.ordenNiveles !== false && !anteriorListo, enCurso: !!curso, usadas, permitidos, ilimitado, quedan: ilimitado ? 1 : Math.max(0, permitidos - usadas), terminado: terminadas.length > 0,
-        intento: curso ? hechos : usadas + 1, aprobado: !!aprobadoEn, aprobadoEn };
+        intento: curso ? hechos : usadas + 1, aprobado: !!aprobadoEn, aprobadoEn,
+        grupo: n.grupo || grupoDeRuta(ruta), etapa: (SIM_ETAPAS[ruta] || {}).titulo || SIM_RUTAS[ruta] || ruta, herramientasEtapa: (SIM_ETAPAS[ruta] || {}).herramientas || [] };
       listo[ruta] = r.terminado;
       return r;
     });
@@ -1492,7 +1506,7 @@
       const s = configSim(cfg);
       const asp = await requerirAspirante(store, user);
       const sim = asp.simulador || { sesiones: [] };
-      return { activo: s.activo !== false && s.casos.length > 0, niveles: nivelesDe(s, sim),
+      return { activo: s.activo !== false && s.casos.length > 0, niveles: nivelesDe(s, sim), grupos: SIM_GRUPOS.map(g => ({ id: g.id, nombre: g.nombre, descripcion: g.descripcion })),
         ultimas: sim.sesiones.filter(x => x.estado === 'terminada').slice(-3).reverse().map(x => ({ nivel: (s.niveles.find(n => n.id === x.nivel) || {}).nombre || '', fecha: x.fin,
           resueltos: x.resumen ? x.resumen.tickets.resueltos : 0, total: x.casos.length, primeraPromedio: x.resumen ? x.resumen.primeraPromedio : null })) };
     },
@@ -1828,7 +1842,7 @@
           const cs = (x.casos || []).filter(id => ids.has(id));
           if (!x.id || !cs.length) throw err(400, 'Nivel ' + (k + 1) + ': necesita id y al menos un caso que exista.');
           return { id: limpiar(x.id, 30), nombre: limpiar(x.nombre, 40) || x.id, descripcion: limpiar(x.descripcion, 300), minutos: n(x.minutos, 3, 120, 20), maxAbiertos: n(x.maxAbiertos, 0, 20, 0),
-            intervalo: n(x.intervalo, 0, 300, 8), abandono: n(x.abandono, 0, 3600, 180), ruta: x.ruta === 'VIAJES' ? 'VIAJES' : 'ORDERS',
+            intervalo: n(x.intervalo, 0, 300, 8), abandono: n(x.abandono, 0, 3600, 180), ruta: ['VIAJES', 'CELULAS'].includes(x.ruta) ? x.ruta : 'ORDERS', adminModulos: Array.isArray(x.adminModulos) ? x.adminModulos.map(m => limpiar(m, 20)).filter(Boolean).slice(0, 20) : undefined,
             herramientas: [].concat(x.herramientas || (x.panel ? ['zupper'] : [])).filter(h => h === 'zupper' || h === 'admin'), estados: !!x.estados, casos: cs };
         });
         if (!niveles.length) throw err(400, 'El archivo no trae niveles.');

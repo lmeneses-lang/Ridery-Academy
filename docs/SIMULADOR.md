@@ -4,7 +4,12 @@ Lo encuentra el aspirante en **Assessment → Simulador de tickets**. Calidad y 
 
 ## Rutas
 
-Hay tres rutas de práctica, cada una con sus 3 niveles (Básico → Intermedio → Realidad):
+En Assessment, el simulador está separado en dos pestañas, porque Zupper y Ridery son empresas distintas y **una no depende de la otra**:
+
+- **Herramientas Zupper:** ruta Orders (Zendesk + Panel Zupper).
+- **Herramientas Ridery:** las etapas suman herramientas a medida que avanza la ruta. **Etapa 1 · Viajes** usa Zendesk y solo el módulo **Trips** del Admin (los demás módulos se ven con candado). **Etapa 2 · Células** abre el Admin completo. Para sumar una etapa nueva, se agrega la ruta en `SIM_GRUPOS` y `SIM_ETAPAS` de `js/handlers.js`, y en cada nivel se indica qué módulos del Admin abre con `adminModulos` (por ejemplo `["trips", "users"]`; sin el campo, abre todo).
+
+Cada ruta tiene sus 3 niveles (Básico → Intermedio → Realidad), y los niveles se desbloquean dentro de su misma ruta:
 
 - **Orders:** Zendesk + **Panel Zupper**. Los tickets son de pedidos.
 - **Viajes:** Zendesk + **Admin de Ridery** (réplica de admin.ridery.app). Los tickets son de viajes: cobro de más, conductor que «ya llegó», deuda de un viaje de 2021, objeto perdido y un caso de Zupper que hay que transferir.
