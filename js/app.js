@@ -930,41 +930,84 @@
     try { r = await call('simEstado'); } catch (e) { card.hidden = true; return; }
     if (!card.isConnected) return;
     const curso = r.niveles.find(n => n.enCurso);
-    const nivelHTML = (n) => { const k = r.niveles.filter(x => x.ruta === n.ruta).indexOf(n);
-      let pie;
-      if (n.enCurso) pie = '<button class="btn btn-primary btn-sm" data-nivel="' + esc(n.id) + '">' + icon('play') + 'Continuar</button>';
-      else if (n.bloqueado) pie = '<span class="pill">' + icon('lock') + 'Termina el nivel anterior</span>';
-      else if (curso) pie = '<span class="pill">Termina primero el nivel en curso (' + esc(curso.etapa + ' · ' + curso.nombre) + ')</span>';
-      else if (n.ilimitado) pie = '<button class="btn ' + (n.usadas ? 'btn-secondary' : 'btn-primary') + ' btn-sm" data-nivel="' + esc(n.id) + '">' + icon(n.usadas ? 'refresh' : 'play') + (n.usadas ? 'Reiniciar prueba' : 'Empezar') + '</button><span class="small muted">' + (n.usadas ? 'Vas por el intento #' + n.intento : 'Intentos sin límite') + '</span>';
-      else if (n.quedan) pie = '<button class="btn ' + (n.terminado ? 'btn-secondary' : 'btn-primary') + ' btn-sm" data-nivel="' + esc(n.id) + '">' + icon('play') + (n.terminado ? 'Repetir' : 'Empezar') + '</button><span class="small muted">' + (n.quedan === 1 ? '1 intento' : n.quedan + ' intentos') + '</span>';
-      else pie = '<span class="pill pill-ok">' + icon('check') + 'Enviado</span>';
-      return '<article class="sim-nivel' + (n.bloqueado ? ' bloqueado' : '') + '"><div class="row-between"><span class="eyebrow">Nivel ' + (k + 1) + '</span>' + (n.aprobado ? '<span class="pill pill-ok">' + icon('check') + 'Logrado</span>' : n.terminado ? '<span class="pill">Hecho</span>' : '') + '</div>' +
-        '<h3>' + esc(n.nombre) + '</h3><p class="small muted">' + esc(n.descripcion) + '</p><p class="small"><b>' + n.tickets + '</b> tickets · <b>' + n.minutos + '</b> min' + (n.panel ? ' · Panel Zupper' : '') + (n.admin ? ' · Admin' : '') + '</p>' + (n.aprobado ? '<p class="small sim-logro">' + icon('check') + 'Lo lograste en el intento #' + n.aprobadoEn + (n.usadas > n.aprobadoEn ? ' · ' + n.usadas + ' intentos en total' : '') + '</p>' : n.usadas ? '<p class="small muted">' + n.usadas + (n.usadas === 1 ? ' intento' : ' intentos') + ' · aún no lo logras</p>' : '') + '<div class="sim-nivel-pie">' + pie + '</div></article>';
+    // Niveles recién desbloqueados (desde la última vez que se pintó) para avisar y resaltarlos
+    const antes = S.simBloq || {}, nuevos = r.niveles.filter(n => antes[n.id] === true && !n.bloqueado);
+    S.simBloq = Object.fromEntries(r.niveles.map(n => [n.id, n.bloqueado]));
+    if (nuevos.length) toast('Nivel desbloqueado: ' + nuevos.map(n => n.etapa + ' · ' + n.nombre).join(', '));
+    const pend = r.niveles.filter(n => !n.bloqueado && !n.aprobado && !n.enCurso);
+    const nivelHTML = (n, k) => {
+      const tocaYa = !curso && pend.find(x => x.ruta === n.ruta) === n;      // el siguiente que le toca en esa etapa
+      const cls = n.enCurso ? 'go' : n.bloqueado ? 'lock' : n.aprobado ? 'ok' : tocaYa ? 'go' : '';
+      const est = n.enCurso ? '<span class="sim-est go">En curso</span>' : n.bloqueado ? '<span class="sim-est lk">' + icon('lock') + 'Bloqueado</span>' : n.aprobado ? '<span class="sim-est ok">' + icon('check') + 'Logrado</span>' : tocaYa ? '<span class="sim-est go">Te toca</span>' : '';
+      let btn;
+      if (n.enCurso) btn = '<button class="btn btn-primary sim-cta" data-nivel="' + esc(n.id) + '">' + icon('play') + 'Continuar intento #' + n.intento + '</button>';
+      else if (n.bloqueado) btn = '<button class="btn btn-secondary sim-cta" disabled>' + icon('lock') + 'Bloqueado</button>';
+      else if (curso) btn = '<button class="btn btn-secondary sim-cta" disabled>Termina primero el nivel en curso</button>';
+      else if (n.ilimitado || n.quedan) btn = '<button class="btn ' + (cls === 'go' ? 'btn-primary' : 'btn-secondary') + ' sim-cta" data-nivel="' + esc(n.id) + '">' + icon(n.usadas ? 'refresh' : 'play') +
+        (n.aprobado ? 'Practicar de nuevo' : n.usadas ? 'Intentar de nuevo · #' + n.intento : 'Empezar') + '</button>';
+      else btn = '<span class="pill pill-ok">' + icon('check') + 'Enviado</span>';
+      const dots = n.usadas ? '<div class="sim-dots">' + Array.from({ length: Math.min(n.usadas, 8) }, (_, i) => '<i class="' + (n.aprobadoEn === i + 1 ? 'w' : 'f') + '"></i>').join('') + (n.usadas > 8 ? '<span>+' + (n.usadas - 8) + '</span>' : '') +
+        '<span>' + n.usadas + (n.usadas === 1 ? ' intento' : ' intentos') + (n.aprobado ? '' : ' · aún no lo logras') + '</span></div>' : (n.bloqueado ? '' : '<div class="sim-dots"><span>' + (n.ilimitado ? 'Intentos sin límite' : n.quedan + ' intentos') + '</span></div>');
+      return '<article class="sim-mc ' + cls + (nuevos.includes(n) ? ' nuevo' : '') + '" style="--i:' + k + '">' + est + '<div class="sim-nodo">' + String(k + 1).padStart(2, '0') + '</div>' +
+        '<h3>' + esc(n.nombre) + '</h3><p class="small muted">' + esc(n.descripcion) + '</p>' +
+        '<div class="sim-meta"><span>' + icon('chat') + n.tickets + ' tickets</span><span>' + icon('timer') + n.minutos + ' min</span></div>' +
+        (n.aprobado ? '<div class="sim-logro">' + icon('award') + 'Lo lograste en el intento #' + n.aprobadoEn + '</div>' : '') + dots + btn + '</article>';
     };
     const ult = r.ultimas[0];
     // Zupper y Ridery van separados: cada grupo tiene sus etapas y una no depende de la otra
     const grupos = (r.grupos || []).filter(g => r.niveles.some(n => n.grupo === g.id));
     if (!grupos.some(g => g.id === S.simGrupo)) S.simGrupo = (curso && curso.grupo) || (grupos[0] || {}).id;
-    const etapaHTML = ruta => { const ns = r.niveles.filter(n => n.ruta === ruta), h = ns[0].herramientasEtapa || [];
-      return '<div class="sim-ruta"><div class="sim-etapa"><h3>' + esc(ns[0].etapa || ns[0].rutaNombre || ruta) + '</h3><div class="sim-herr">' + h.map(x => '<span class="sim-chip">' + esc(x) + '</span>').join('') + '</div></div><div class="sim-niveles">' + ns.map(nivelHTML).join('') + '</div></div>'; };
+    const etapaHTML = ruta => { const ns = r.niveles.filter(n => n.ruta === ruta), h = ns[0].herramientasEtapa || [], ok = ns.filter(n => n.aprobado).length;
+      return '<div class="sim-ruta"><div class="sim-etapa"><h3>' + esc(ns[0].etapa || ns[0].rutaNombre || ruta) + '</h3><div class="sim-herr">' + h.map(x => '<span class="sim-chip">' + esc(x) + '</span>').join('') + '</div>' +
+        '<div class="sim-prog"><span>' + ok + ' de ' + ns.length + ' logrados</span><span class="sim-bar"><i style="--p:' + Math.round(ok / ns.length * 100) + '%"></i></span></div></div>' +
+        '<div class="sim-path">' + ns.map(nivelHTML).join('') + '</div></div>'; };
     const g = grupos.find(x => x.id === S.simGrupo);
     card.innerHTML = '<div class="sim-card-in"><span class="boost-ic">' + icon('chat') + '</span><div class="stack-sm" style="gap:6px;flex:1;min-width:0"><h2>Simulador de tickets</h2>' +
       '<p class="muted small">Una bandeja igual a la que usarás en el trabajo: tickets por WhatsApp con sonido, motivo de contacto y estatus del ticket, junto a las herramientas de cada empresa. Zupper y Ridery van por separado: puedes avanzar en una sin terminar la otra. Usa computadora y activa el sonido.</p></div></div>' +
       (r.activo ? '<div class="sim-grupos" role="tablist" aria-label="Herramientas">' + grupos.map(x => '<button role="tab" aria-selected="' + (x.id === S.simGrupo) + '" class="sim-gtab' + (x.id === S.simGrupo ? ' act' : '') + '" data-grupo="' + esc(x.id) + '">' + esc(x.nombre) +
           (r.niveles.some(n => n.grupo === x.id && n.enCurso) ? ' <span class="pill pill-brand">En curso</span>' : '') + '</button>').join('') + '</div>' +
-        (g ? '<p class="small muted sim-gdesc">' + esc(g.descripcion) + '</p>' + [...new Set(r.niveles.filter(n => n.grupo === g.id).map(n => n.ruta))].map(etapaHTML).join('') : '')
+        (g ? '<div class="sim-gcont"><p class="small muted sim-gdesc">' + esc(g.descripcion) + '</p>' + [...new Set(r.niveles.filter(n => n.grupo === g.id).map(n => n.ruta))].map(etapaHTML).join('') + '</div>' : '')
         : '<span class="pill">No disponible por ahora</span>') +
       (ult ? '<p class="small muted">Último intento (' + esc(ult.nivel) + '): ' + Elx.fechaHora(ult.fecha) + ' · ' + ult.resueltos + '/' + ult.total + ' tickets atendidos. Tu resultado lo revisa el equipo.</p>' : '');
-    card.querySelectorAll('[data-grupo]').forEach(b => b.addEventListener('click', () => { S.simGrupo = b.dataset.grupo; pintarSimulador(card); }));
+    card.querySelectorAll('[data-grupo]').forEach(b => b.addEventListener('click', () => { if (S.simGrupo === b.dataset.grupo) return; S.simGrupo = b.dataset.grupo; pintarSimulador(card); }));
     card.querySelectorAll('[data-nivel]').forEach(go => go.addEventListener('click', async () => {
       const n = r.niveles.find(x => x.id === go.dataset.nivel);
-      if (!n.enCurso && !await confirmar({ titulo: (n.usadas ? '¿Reiniciar' : '¿Empezar') + ' el nivel ' + n.nombre + '?', texto: (n.ilimitado ? 'Este será tu intento #' + n.intento + '. ' : '') + 'El reloj de ' + n.minutos + ' minutos empieza al entrar y no se detiene aunque salgas. Ten el sonido activo.', ok: n.usadas ? 'Reiniciar' : 'Empezar' })) return;
+      if (!n.enCurso && !await briefing(n, r.niveles.filter(x => x.ruta === n.ruta).indexOf(n))) return;
       go.disabled = true;
       try {
+        if (!n.enCurso) await window.ElxSimulador.cuenta(n.nombre, n.intento);
         await window.ElxSimulador.abrir({ call, nivel: n.id, alSalir: e => { if (e && e.status === 401) return manejar(e); if (S.seccion === 'assessment') pintarSimulador(document.getElementById('sim-card')); } });
       } catch (e) { manejar(e); }
       go.disabled = false;
     }));
+  }
+  // Instrucciones antes de empezar: objetivo, herramientas, reloj y cómo se evalúa. Hay que confirmar el sonido.
+  function briefing(n, k) {
+    return new Promise(resolve => {
+      const w = document.createElement('div'); w.className = 'modal-wrap sim-brief-wrap';
+      const herr = (n.herramientasEtapa || []).join(', ');
+      const llegan = n.maxAbiertos === 1 ? 'Te llega un ticket a la vez.' : n.maxAbiertos ? 'Hasta ' + n.maxAbiertos + ' tickets abiertos a la vez.' : 'Los tickets llegan por tiempo, aunque no hayas terminado los anteriores.';
+      const reglas = [(n.admin || n.panel ? 'Revisa ' + (n.panel ? 'la orden en el Panel Zupper' : 'el viaje, usuario o conductor en el Admin') + ' <b>antes</b> de responder.' : 'Lee bien lo que pide el cliente antes de responder.'),
+        'Elige el motivo de contacto correcto' + (n.estados ? ' y el estatus indicado' : '') + ' y envía el ticket.', 'Tus clientes te califican Bien o Mal según cómo les respondes.'];
+      w.innerHTML = '<div class="sim-brief" role="dialog" aria-modal="true" aria-labelledby="sb-t"><div class="sim-brief-top"><div class="sim-brief-lvl">' + String(k + 1).padStart(2, '0') + '</div><div><small>' + esc(n.etapa) + '</small><h2 id="sb-t">Nivel ' + esc(n.nombre) + '</h2></div>' +
+        (n.ilimitado || n.usadas ? '<div class="sim-brief-it">INTENTO<b>#' + n.intento + '</b></div>' : '') + '</div>' +
+        '<div class="sim-brief-b"><div class="sim-tiles"><div class="sim-tile"><span class="sim-tile-ic">' + icon('award') + '</span><b>Tu objetivo</b><span>Resolver ' + n.tickets + ' tickets de clientes. ' + esc(llegan) + '</span></div>' +
+          '<div class="sim-tile"><span class="sim-tile-ic">' + icon('gear') + '</span><b>Herramientas</b><span>' + esc(herr || 'Zendesk') + '. Cámbialas con las pestañas de arriba.</span></div>' +
+          '<div class="sim-tile"><span class="sim-tile-ic">' + icon('timer') + '</span><b>' + n.minutos + ' minutos</b><span>El reloj no se detiene aunque salgas.' + (n.abandono ? ' Si el cliente espera ' + Math.round(n.abandono / 60) + ' min sin respuesta, se va.' : '') + '</span></div></div>' +
+          '<div class="sim-reglas"><h4>CÓMO TE EVALÚAN</h4>' + reglas.map(x => '<div>' + icon('check') + '<span>' + x + '</span></div>').join('') + '</div>' +
+          '<label class="sim-check"><input type="checkbox" id="sb-ok"><span>Tengo el sonido activo y estoy en computadora</span></label></div>' +
+        '<div class="sim-brief-pie"><button class="btn btn-secondary" data-no>Cancelar</button><button class="btn btn-primary" data-si disabled>' + icon('play') + (n.ilimitado || n.usadas ? 'Comenzar intento #' + n.intento : 'Comenzar') + '</button></div></div>';
+      document.body.appendChild(w);
+      const fin = v => { w.classList.add('saliendo'); setTimeout(() => w.remove(), 180); document.removeEventListener('keydown', esc_); resolve(v); };
+      const esc_ = e => { if (e.key === 'Escape') fin(false); };
+      document.addEventListener('keydown', esc_);
+      const si = w.querySelector('[data-si]');
+      w.querySelector('#sb-ok').addEventListener('change', e => { si.disabled = !e.target.checked; if (e.target.checked) si.focus(); });
+      si.addEventListener('click', () => fin(true));
+      w.querySelector('[data-no]').addEventListener('click', () => fin(false));
+      w.addEventListener('click', e => { if (e.target === w) fin(false); });
+      w.querySelector('#sb-ok').focus();
+    });
   }
 
   Elx.barraDemo('admin.html' + (window.ElxDemo && !window.ELX_DEMO ? '?demo=1' : ''), 'Abrir panel admin');

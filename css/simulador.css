@@ -505,3 +505,56 @@ body.zd-abierto { overflow: hidden; }
 .zd.oscuro .zd-intento-fin span { color: #ccc; }
 .zd-fin-acc { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
 .adm-off .adm-g { opacity: .45; cursor: not-allowed; }
+
+/* ===== Cuenta regresiva al abrir ===== */
+.zd-cuenta { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; background: radial-gradient(circle at 50% 45%, #1d2445 0%, #0F111E 70%); color: #fff; animation: zc-in .25s ease both; }
+.zd-cuenta.fuera { opacity: 0; transform: scale(1.04); transition: opacity .25s, transform .25s; }
+@keyframes zc-in { from { opacity: 0; } }
+.zd-cuenta b { font-family: 'Bebas Neue', 'Urbanist', sans-serif; font-size: clamp(120px, 22vw, 240px); line-height: 1; color: #38CEA6; text-shadow: 0 0 60px rgba(56,206,166,.6); animation: zc-num .85s cubic-bezier(.2,1.4,.4,1) both; grid-area: 1 / 1; }
+.zd-cuenta b.ya { font-size: clamp(70px, 12vw, 140px); }
+@keyframes zc-num { 0% { transform: scale(1.7); opacity: 0; } 30% { transform: scale(1); opacity: 1; } 85% { opacity: 1; } 100% { transform: scale(.85); opacity: .2; } }
+.zd-cuenta-onda { grid-area: 1 / 1; width: 280px; height: 280px; border-radius: 50%; border: 3px solid rgba(56,206,166,.5); animation: zc-onda .85s ease-out both; }
+@keyframes zc-onda { from { transform: scale(.6); opacity: 1; } to { transform: scale(1.7); opacity: 0; } }
+.zd-cuenta-l { position: absolute; bottom: 12vh; font-weight: 700; color: #aab3c5; font-size: 16px; text-align: center; padding: 0 16px; }
+
+/* ===== Pantalla final: lo lograste / todavía no ===== */
+.zd-fin { position: relative; overflow: auto; }
+.zd-fin.zf-win { background: linear-gradient(180deg, #e9fbf5 0%, var(--z-bg) 55%); }
+.zd-fin.zf-lose { background: linear-gradient(180deg, #fff6e9 0%, var(--z-bg) 55%); }
+.zd.oscuro .zd-fin.zf-win { background: linear-gradient(180deg, #12302a 0%, var(--z-bg) 55%); }
+.zd.oscuro .zd-fin.zf-lose { background: linear-gradient(180deg, #3a2a16 0%, var(--z-bg) 55%); }
+.zd-fin .zd-fin-c { max-width: 620px; width: 100%; border-radius: 22px; position: relative; z-index: 1; box-shadow: 0 10px 40px rgba(15,17,30,.08); animation: sim-pop2 .5s cubic-bezier(.2,1.2,.4,1) both; }
+.zd.oscuro .zd-fin .zd-fin-c { background: var(--z-white); }
+@keyframes sim-pop2 { from { opacity: 0; transform: translateY(18px) scale(.96); } }
+.zd-fin h1 { font-size: 28px; font-weight: 800; }
+.zf-medalla { width: 112px; height: 112px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #7be3c6, #38CEA6 55%, #1fa684); display: grid; place-items: center; color: #0F111E; box-shadow: 0 14px 40px rgba(56,206,166,.55); position: relative; animation: zf-medalla .9s .15s cubic-bezier(.2,1.5,.4,1) both; }
+.zf-medalla svg { width: 54px; height: 54px; stroke-width: 2.2; }
+.zf-medalla::after { content: ""; position: absolute; inset: -13px; border-radius: 50%; border: 3px dashed rgba(56,206,166,.55); animation: zf-gira 9s linear infinite; }
+@keyframes zf-medalla { from { transform: scale(0) rotate(-35deg); } }
+@keyframes zf-gira { to { transform: rotate(360deg); } }
+.zf-casi { width: 112px; height: 112px; position: relative; animation: zf-sacude .6s .35s both; }
+.zf-casi svg { width: 112px; height: 112px; } .zf-casi .zf-arco { animation: zf-arco 1s .1s ease-out both; }
+@keyframes zf-arco { from { stroke-dasharray: 0 314; } }
+.zf-casi b { position: absolute; inset: 0; display: grid; place-items: center; font-family: 'Bebas Neue', 'Urbanist', sans-serif; font-size: 28px; color: #8F5600; }
+@keyframes zf-sacude { 10%, 90% { transform: translateX(-2px); } 20%, 80% { transform: translateX(4px); } 30%, 50%, 70% { transform: translateX(-8px); } 40%, 60% { transform: translateX(8px); } }
+.zf-neutro { width: 80px; height: 80px; border-radius: 50%; background: var(--z-blue-soft); color: var(--z-blue); display: grid; place-items: center; animation: zf-medalla .6s both; }
+.zf-neutro svg { width: 36px; height: 36px; }
+.zf-pill { background: #0F111E; color: #fff; border-radius: 999px; padding: 7px 16px; font-weight: 700; font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
+.zf-pill b { color: #38CEA6; font-size: 18px; } .zf-pill.lose { background: #5a3a00; } .zf-pill.lose b { color: #f7c26b; } .zf-pill.neutro { background: var(--z-dark); }
+.zf-sub { color: var(--z-muted); font-size: 15px; max-width: 440px; }
+.zf-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%; }
+.zf-kpis div { background: var(--z-bg); border-radius: 12px; padding: 10px 6px; display: flex; flex-direction: column; gap: 2px; }
+.zf-kpis b { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; } .zf-kpis span { font-size: 11.5px; color: var(--z-muted); font-weight: 600; }
+.zf-kpis .g b { color: var(--z-green); } .zf-kpis .r b { color: var(--z-red); }
+.zf-revisar { width: 100%; text-align: left; background: #fffaf2; border: 1px solid #f3dfbf; border-radius: 14px; padding: 13px 15px; display: flex; flex-direction: column; gap: 8px; animation: sim-pop2 .5s .5s both; }
+.zd.oscuro .zf-revisar { background: #2a2116; border-color: #5a4320; }
+.zf-revisar h2 { font-size: 12.5px; letter-spacing: .06em; color: #8F5600; font-weight: 800; }
+.zd.oscuro .zf-revisar h2 { color: #f7c26b; }
+.zf-revisar div { display: flex; gap: 8px; font-size: 13.5px; align-items: flex-start; } .zf-revisar svg { color: var(--z-red); flex: none; margin-top: 2px; }
+.zf-det { width: 100%; text-align: left; } .zf-det summary { cursor: pointer; color: var(--z-blue); font-size: 13.5px; margin-bottom: 8px; }
+.zf-cta { background: #38CEA6 !important; border-color: #38CEA6 !important; color: #0F111E !important; font-weight: 700 !important; box-shadow: 0 6px 18px rgba(56,206,166,.4); }
+.zf-conf { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.zf-conf i { position: absolute; top: -20px; width: 9px; height: 14px; border-radius: 2px; animation: zf-cae 2.6s linear 2 both; }
+@keyframes zf-cae { to { transform: translateY(105vh) rotate(560deg); } }
+@media (max-width: 640px) { .zf-kpis { grid-template-columns: repeat(2, 1fr); } }
+@media (prefers-reduced-motion: reduce) { .zd-cuenta *, .zd-fin *, .zd-fin { animation: none !important; } .zf-conf { display: none; } }

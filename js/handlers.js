@@ -1494,6 +1494,7 @@
       const r = { id: n.id, ruta, rutaNombre: SIM_RUTAS[ruta] || ruta, nombre: n.nombre, descripcion: n.descripcion, minutos: n.minutos, tickets: (n.casos || []).length, panel: hs.includes('zupper'), admin: hs.includes('admin'),
         bloqueado: s.ordenNiveles !== false && !anteriorListo, enCurso: !!curso, usadas, permitidos, ilimitado, quedan: ilimitado ? 1 : Math.max(0, permitidos - usadas), terminado: terminadas.length > 0,
         intento: curso ? hechos : usadas + 1, aprobado: !!aprobadoEn, aprobadoEn,
+        abandono: Number(n.abandono) || 0, maxAbiertos: Number(n.maxAbiertos) || 0, estados: !!n.estados,
         grupo: n.grupo || grupoDeRuta(ruta), etapa: (SIM_ETAPAS[ruta] || {}).titulo || SIM_RUTAS[ruta] || ruta, herramientasEtapa: (SIM_ETAPAS[ruta] || {}).herramientas || [] };
       listo[ruta] = r.terminado;
       return r;
@@ -1729,7 +1730,13 @@
       const nv = nivelesDe(s, sim).find(n => n.id === ses.nivel) || {};
       return { resueltos: r.tickets.resueltos, total: r.tickets.total, primeraPromedio: r.primeraPromedio, acciones: r.ordenes.acciones, siguiente: siguiente ? siguiente.nombre : null, csat: r.csat,
         intento, bien, pendienteCalidad: !!r.pendientes, aprobadoEn: sim.aprobados[ses.nivel] || null, puedeRepetir: !!(nv.ilimitado || nv.quedan),
-        calificaciones: ses.casos.map(c => { const d = s.casos.find(x => x.id === c.id) || {}; return { numero: c.numero, cliente: (d.cliente || {}).nombre || '', asunto: d.asunto || '', calificacion: csatDe(c), humor: humorTxt(c.humor), abandonado: !!c.abandonado }; }) };
+        calificaciones: ses.casos.map(c => { const d = s.casos.find(x => x.id === c.id) || {}; return { numero: c.numero, cliente: (d.cliente || {}).nombre || '', asunto: d.asunto || '', calificacion: csatDe(c), humor: humorTxt(c.humor), abandonado: !!c.abandonado,
+          // Qué revisar (sin revelar puntos): lo que el aspirante puede mejorar en ese ticket
+          revisar: [c.abandonado ? 'El cliente abandonó: tardaste demasiado en responder.' : '', !c.abandonado && !c.respuestas.length ? 'No atendiste este ticket.' : '',
+            c.consulta && c.verifico === false ? 'Respondiste sin revisar ' + (d.consulta && d.consulta.herramienta === 'zupper' ? 'la orden en el Panel Zupper' : 'en el Admin') + ' primero.' : '',
+            c.cerrado && !c.motivoOk ? 'El motivo de contacto no era el correcto.' : '', ses.conEstados && c.cerrado && !c.estadoOk ? 'El estatus con que enviaste el ticket no era el indicado.' : '',
+            !c.abandonado && c.respuestas.length && csatDe(c) === 'Mal' ? 'El cliente quedó ' + humorTxt(c.humor).toLowerCase() + ': revisa el tono y la solución.' : '',
+            c.respuestas.length && !c.cerrado && !c.abandonado ? 'No enviaste el ticket con motivo y estatus.' : ''].filter(Boolean) }; }) };
     }
   };
 

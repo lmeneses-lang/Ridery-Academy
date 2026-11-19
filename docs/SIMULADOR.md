@@ -60,6 +60,12 @@ Con **«Niveles en orden»** encendido (en Configurar), cada nivel se desbloquea
 
 ## Qué vive el aspirante
 
+- **Tarjetas de nivel («ruta como misión»):** cada etapa muestra sus herramientas y una barra «N de 3 logrados». El nivel que le toca se resalta con un brillo verde («Te toca»); los logrados quedan en verde con «Lo lograste en el intento #N» y un punto por intento (rojo si no lo logró, verde en el que lo logró); los bloqueados, en gris con candado. Al desbloquear un nivel aparece un aviso y la tarjeta brilla.
+- **Antes de empezar (briefing):** número del nivel, etapa e intento; tres bloques (objetivo, herramientas, minutos y abandono) y «Cómo te evalúan». Para habilitar «Comenzar» tiene que marcar «Tengo el sonido activo y estoy en computadora».
+- **Cuenta 3, 2, 1** antes de abrir la bandeja (también al reiniciar la prueba).
+- **Al terminar:** si lo logró, medalla, confeti y «¡Nivel superado! Lo lograste en el intento #N»; si no, «Todavía no lo logras» con la lista **Qué revisar** por ticket (abandonó, no lo atendió, respondió sin revisar la herramienta, motivo o estatus incorrecto, cliente que quedó mal). Si tiene respuestas escritas sin revisar, queda «en revisión».
+- Las animaciones duran menos de 1 s y se apagan si la computadora tiene «reducir movimiento».
+
 - **Bandeja tipo Zendesk.**
   - **Inicio:** «Su trabajo › Tickets», con el estatus de cada ticket, cuánto lleva esperando el cliente y estadísticas.
   - **Vistas:** Nuevos | Sin Asignar, Activos | En Gestión, Pendiente | Respuesta Cliente, Pendiente | Área Interna, Resueltos y Abandonados. No tienen la columna de índice de satisfacción, porque en el Zendesk real no la usan.

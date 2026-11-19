@@ -27,7 +27,7 @@
     history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 8v4l3 2"/>', dots: '<circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>',
     list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>', bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
     clip: '<path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/>', mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
-    link: '<path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1"/><path d="M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"/>', refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+    link: '<path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1"/><path d="M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"/>', refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>', trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
     moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>', play: '<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/>', pause: '<path d="M9 6v12M15 6v12"/>',
     phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>', bank: '<path d="M3 10h18L12 4zM5 10v8M9 10v8M15 10v8M19 10v8M3 20h18"/>', card: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h3"/>',
     android: '<path d="M7 9h10v8a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1zM7 8a5 5 0 0 1 10 0zM5 10v5M19 10v5M10 18v3M14 18v3"/>', tagz: '<path d="M3 12V4h8l9 9-8 8z"/><circle cx="7.5" cy="8.5" r="1"/>',
@@ -572,18 +572,29 @@
     Z.root.classList.add('zd-terminada');
     if (Z.app !== 'zendesk') { Z.app = 'zendesk'; mostrarApp(); }
     const main = Z.root.querySelector('#zd-main');
-    main.innerHTML = '<div class="zd-fin"><div class="zd-fin-c"><span class="zd-fin-ic">✓</span><h1>' + (auto ? 'Se acabó el tiempo' : 'Nivel ' + esc(Z.ses.nivelNombre) + ' terminado') + '</h1><p>Gracias. El equipo de Calidad revisa tus respuestas' + (Z.ses.panel ? ' y tus decisiones en el panel' : Z.admin ? ' y qué consultaste en el Admin' : '') + '; tu resultado te lo comparten ellos.</p>' +
-      (r ? '<div class="zd-fin-g"><div><b>' + r.resueltos + '/' + r.total + '</b><span>tickets atendidos</span></div><div><b>' + (r.primeraPromedio != null ? mmss(r.primeraPromedio) : '—') + '</b><span>primera respuesta promedio</span></div><div><b>' + r.acciones + '</b><span>acciones en el panel</span></div></div>' +
-        (r.csat ? '<div class="zd-csat"><h2>Calificación de tus clientes</h2><div class="zd-csat-g"><span class="bien"><b>' + r.csat.bien + '</b>Bien</span><span class="mal"><b>' + r.csat.mal + '</b>Mal</span>' +
-          (r.csat.sinAtender ? '<span><b>' + r.csat.sinAtender + '</b>Sin atender</span>' : '') + '</div>' +
-          '<ul class="zd-csat-l">' + r.calificaciones.map(c => '<li><span class="zd-csat-p ' + (c.calificacion === 'Bien' ? 'bien' : c.calificacion === 'Mal' ? 'mal' : '') + '">' + esc(c.calificacion) + '</span><span><b>#' + c.numero + ' · ' + esc(c.cliente) + '</b><small>' + esc(c.asunto) + ' · ' + (c.abandonado ? 'el cliente abandonó por falta de respuesta' : 'el cliente quedó ' + esc(c.humor.toLowerCase())) + '</small></span></li>').join('') + '</ul>' +
-          '<p class="zd-muted small">Así calificaría el cliente tu atención según cómo le respondiste. Tus respuestas escritas las revisa Calidad aparte.</p></div>' : '') +
-        (r.intento ? '<div class="zd-intento-fin ' + (r.aprobadoEn ? 'bien' : '') + '">' + (r.bien ? '<b>¡Lo hiciste bien en el intento #' + r.intento + '!</b>' + (r.aprobadoEn && r.aprobadoEn < r.intento ? '<span>La primera vez que lo lograste fue en el intento #' + r.aprobadoEn + '.</span>' : '')
-          : r.aprobadoEn ? '<b>Intento #' + r.intento + ' terminado.</b><span>Ya lo habías logrado en el intento #' + r.aprobadoEn + '.</span>'
-          : r.pendienteCalidad ? '<b>Intento #' + r.intento + ' terminado.</b><span>Tienes respuestas escritas que revisa Calidad; cuando las califiquen sabrás si lo lograste.</span>'
-          : '<b>Intento #' + r.intento + ': todavía no lo logras.</b><span>Revisa cómo quedaron tus clientes y vuelve a intentarlo' + (r.puedeRepetir ? ': puedes reiniciar la prueba las veces que quieras.' : '.') + '</span>') + '</div>' : '') +
-        (r.siguiente ? '<p class="zd-muted">Ya puedes entrar al nivel <b>' + esc(r.siguiente) + '</b> desde Assessment.</p>' : '') : '') +
-      '<div class="zd-fin-acc">' + (r && r.puedeRepetir ? '<button class="zd-btn zd-btn-sec" data-otra>Reiniciar prueba</button>' : '') + '<button class="zd-btn" data-volver>Volver a Ridery Academy</button></div></div></div>';
+    // Tres caras: lo lograste (medalla y confeti), todavía no (qué revisar) o en revisión de Calidad
+    const tipo = !r ? 'neutro' : r.bien ? 'win' : r.aprobadoEn ? 'neutro' : r.pendienteCalidad ? 'neutro' : 'lose';
+    const revisar = r ? r.calificaciones.filter(c => (c.revisar || []).length) : [];
+    const medalla = tipo === 'win' ? '<div class="zf-medalla">' + ic('trophy') + '</div>' : tipo === 'lose' ? '<div class="zf-casi"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="none" stroke="#f3e6d2" stroke-width="12"/><circle class="zf-arco" cx="60" cy="60" r="50" fill="none" stroke="#E8A33A" stroke-width="12" stroke-linecap="round" stroke-dasharray="' + Math.max(40, Math.round(314 * (r.csat.bien / Math.max(1, r.total)))) + ' 314" transform="rotate(-90 60 60)"/></svg><b>CASI</b></div>'
+      : '<div class="zf-neutro">' + ic('check') + '</div>';
+    const titulo = !r ? (auto ? 'Se acabó el tiempo' : 'Nivel ' + esc(Z.ses.nivelNombre) + ' terminado') : tipo === 'win' ? '¡Nivel superado!' : tipo === 'lose' ? 'Todavía no lo logras' : r.aprobadoEn ? 'Intento #' + r.intento + ' terminado' : 'Intento #' + r.intento + ' en revisión';
+    const pill = !r || !r.intento ? '' : tipo === 'win' ? '<span class="zf-pill">Lo lograste en el intento <b>#' + r.intento + '</b></span>' : tipo === 'lose' ? '<span class="zf-pill lose">Intento <b>#' + r.intento + '</b> terminado</span>'
+      : r.aprobadoEn ? '<span class="zf-pill">Ya lo habías logrado en el intento <b>#' + r.aprobadoEn + '</b></span>' : '<span class="zf-pill neutro">Intento <b>#' + r.intento + '</b></span>';
+    const sub = !r ? 'El equipo de Calidad revisa tus respuestas.' : tipo === 'win' ? 'Tus clientes quedaron bien atendidos. ' + (r.siguiente ? '¡Sigue con el próximo nivel!' : '¡Terminaste esta etapa!')
+      : tipo === 'lose' ? 'Vas bien. Revisa esto y vuelve a intentarlo' + (r.puedeRepetir ? ': tienes intentos sin límite.' : '.')
+      : r.pendienteCalidad ? 'Escribiste respuestas propias: Calidad las revisa y ahí sabrás si lo lograste.' : 'Puedes seguir practicando cuando quieras.';
+    main.innerHTML = '<div class="zd-fin zf-' + tipo + '">' + (tipo === 'win' ? '<div class="zf-conf" aria-hidden="true"></div>' : '') + '<div class="zd-fin-c">' + medalla +
+      '<h1>' + (auto && tipo !== 'win' ? 'Se acabó el tiempo · ' : '') + titulo + '</h1>' + pill + '<p class="zf-sub">' + sub + '</p>' +
+      (r ? '<div class="zf-kpis"><div class="g"><b>' + r.csat.bien + '</b><span>Clientes Bien</span></div><div class="r"><b>' + r.csat.mal + '</b><span>Clientes Mal</span></div><div><b>' + r.resueltos + '/' + r.total + '</b><span>Tickets atendidos</span></div>' +
+          '<div><b>' + (r.primeraPromedio != null ? mmss(r.primeraPromedio) : '—') + '</b><span>1.ª respuesta</span></div></div>' +
+        (revisar.length && tipo !== 'win' ? '<div class="zf-revisar"><h2>QUÉ REVISAR</h2>' + revisar.map(c => '<div>' + ic('info') + '<span><b>#' + c.numero + ' · ' + esc(c.cliente) + '</b> — ' + c.revisar.map(esc).join(' ') + '</span></div>').join('') + '</div>' : '') +
+        '<details class="zf-det"' + (tipo === 'win' ? '' : '') + '><summary>Cómo te calificó cada cliente</summary><ul class="zd-csat-l">' + r.calificaciones.map(c => '<li><span class="zd-csat-p ' + (c.calificacion === 'Bien' ? 'bien' : c.calificacion === 'Mal' ? 'mal' : '') + '">' + esc(c.calificacion) + '</span><span><b>#' + c.numero + ' · ' + esc(c.cliente) + '</b><small>' + esc(c.asunto) + ' · ' + (c.abandonado ? 'el cliente abandonó por falta de respuesta' : 'el cliente quedó ' + esc(c.humor.toLowerCase())) + '</small></span></li>').join('') + '</ul></details>' : '') +
+      '<div class="zd-fin-acc">' + '<button class="zd-btn zd-btn-sec" data-volver>Volver a Ridery Academy</button>' + (r && r.puedeRepetir ? '<button class="zd-btn ' + (tipo === 'win' ? 'zd-btn-sec' : 'zf-cta') + '" data-otra>' + ic('refresh') + (tipo === 'win' ? 'Practicar de nuevo' : 'Intentar de nuevo · #' + (r.intento + 1)) + '</button>' : '') +
+        (tipo === 'win' && r.siguiente ? '<button class="zd-btn zf-cta" data-volver2>Siguiente: ' + esc(r.siguiente) + ' →</button>' : '') + '</div></div></div>';
+    const conf = main.querySelector('.zf-conf');
+    if (conf) { const col = ['#38CEA6', '#D71D5C', '#272883', '#F5C04A', '#0F111E']; for (let k = 0; k < 60; k++) { const i = document.createElement('i'); i.style.left = (k * 37 % 100) + '%'; i.style.background = col[k % 5]; i.style.animationDelay = (k % 12) * 0.12 + 's'; i.style.animationDuration = (2.2 + (k % 5) * .3) + 's'; conf.appendChild(i); } }
+    if (tipo === 'win') sonar('mensaje');
+    const v2 = main.querySelector('[data-volver2]'); if (v2) v2.addEventListener('click', () => { const cb = Z.alSalir; Z.ses = null; Z.terminando = false; cerrar(); if (cb) cb(); });
     main.querySelector('[data-volver]').addEventListener('click', () => { const cb = Z.alSalir; Z.ses = null; Z.terminando = false; cerrar(); if (cb) cb(); });
     const otra = main.querySelector('[data-otra]'); if (otra) otra.addEventListener('click', () => reiniciarPrueba(false));
   }
@@ -593,7 +604,9 @@
     if (preguntar && !await confirmar({ titulo: '¿Reiniciar la prueba?', texto: 'Este intento se cierra y empiezas el nivel ' + Z.ses.nivelNombre + ' desde cero. Puedes reiniciar las veces que quieras hasta lograrlo.', ok: 'Reiniciar' })) return;
     const nivel = Z.ses.nivel, call = Z.call, alSalir = Z.alSalir;
     if (!Z.root || !Z.root.classList.contains('zd-terminada')) { try { await call('simTerminar', { sesion: Z.ses.id }); } catch (e) { /* si ya terminó, seguimos */ } }
+    const nombre = Z.ses.nivelNombre, sig = (Z.ses.intento || 0) + 1;
     cerrar(); Z.ses = null; Z.terminando = false;
+    await cuenta(nombre, sig);
     try { await abrir({ call, nivel, alSalir }); } catch (e) { toast(e.message || 'No se pudo reiniciar.', 'bad'); if (alSalir) alSalir(); }
   }
   function manejar(e) {
@@ -603,5 +616,22 @@
     toast(e.message || 'Algo falló. Intenta de nuevo.', 'bad');
   }
 
-  window.ElxSimulador = { abrir, cerrar };
+  // Cuenta 3, 2, 1 antes de abrir la bandeja (se salta si la persona prefiere menos movimiento)
+  function cuenta(nivel, intento) {
+    return new Promise(res => {
+      const reducir = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (reducir) return res();
+      const w = document.createElement('div'); w.className = 'zd-cuenta'; w.setAttribute('role', 'status');
+      w.innerHTML = '<span class="zd-cuenta-onda"></span><b data-n>3</b><span class="zd-cuenta-l">Preparando tu bandeja… Nivel ' + esc(nivel || '') + (intento ? ' · Intento #' + intento : '') + '</span>';
+      document.body.appendChild(w);
+      let n = 3; const b = w.querySelector('[data-n]');
+      const t = setInterval(() => {
+        n--;
+        if (n <= 0) { clearInterval(t); b.textContent = '¡Ya!'; b.classList.add('ya'); setTimeout(() => { w.classList.add('fuera'); setTimeout(() => { w.remove(); res(); }, 250); }, 450); return; }
+        b.textContent = n; b.style.animation = 'none'; b.offsetHeight; b.style.animation = '';
+        const o = w.querySelector('.zd-cuenta-onda'); o.style.animation = 'none'; o.offsetHeight; o.style.animation = '';
+      }, 850);
+    });
+  }
+  window.ElxSimulador = { abrir, cerrar, cuenta };
 })();
