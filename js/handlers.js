@@ -114,6 +114,18 @@
   ];
 
   /* ---------- Boost: actividades para mejorar cuellos de botella ---------- */
+  // Actividades de Boost además de Mecanografía (el contenido está en js/boost-contenido.js)
+  const BOOST_ACTIVIDADES = {
+    ruta: { nombre: '¿Dónde lo busco?', categoria: 'Memoria y navegación', descripcion: 'Te damos un caso y eliges la herramienta y la ruta exacta para resolverlo.' },
+    pares: { nombre: 'Pares de memoria', categoria: 'Memoria y navegación', descripcion: 'Voltea tarjetas y une cada término con su significado.' },
+    flash: { nombre: 'Flash de procesos', categoria: 'Memoria y navegación', descripcion: 'Mira un protocolo por 20 segundos y ordénalo de memoria.' },
+    redaccion: { nombre: 'Redacción', categoria: 'Escritura', descripcion: 'Reescribe mensajes mal escritos para que suenen claros y profesionales.' },
+    minuto: { nombre: 'Respuesta en 1 minuto', categoria: 'Escritura', descripcion: 'Contesta un caso contra reloj con saludo, solución y cierre.' },
+    esto: { nombre: '¿Esto o esto?', categoria: 'Empatía y criterio', descripcion: 'Elige la mejor respuesta para cada cliente y descubre por qué.' },
+    frases: { nombre: 'Frases prohibidas', categoria: 'Empatía y criterio', descripcion: 'Marca las frases que un agente de Ridery nunca debe decir.' },
+    triage: { nombre: 'Triage de prioridades', categoria: 'Empatía y criterio', descripcion: 'Llegan varios casos a la vez: ordénalos por prioridad.' },
+    tono: { nombre: 'Tono del cliente', categoria: 'Empatía y criterio', descripcion: 'Lee el mensaje y reconoce cómo se siente el cliente.' }
+  };
   const BOOST_DEFAULT = {
     mecanografia: {
       activa: true,
@@ -149,19 +161,20 @@
     'Orders : Pedido no llegó', 'Orders : Cambio de dirección', 'Orders : Pago no reflejado', 'Orders : Cancelación de orden', 'Orders : Producto agotado',
     'Otro : Fuera de alcance (transferir)'
   ];
-  const op = (v, t, r, h) => ({ v, t, r: [].concat(r || []), h: h || 0 });
+  // op(v, t, r, h, salto): salto = 'idPaso' (la conversación sigue por esa rama) o 'fin' (el cliente se va)
+  const op = (v, t, r, h, salto) => Object.assign({ v, t, r: [].concat(r || []), h: h || 0 }, salto === 'fin' ? { fin: true } : salto ? { ir: salto } : {});
   const SIM_CASOS_DEFAULT = [
-    { id: 'ord-retraso', celula: 'ORDERS', activo: true, llegada: 0, humor: 2, asunto: 'Pedido con más de 1 hora de retraso',
+    { id: 'ord-retraso', celula: 'ORDERS', activo: true, llegada: 0, humor: 2, asunto: 'Pedido con más de 1 hora de retraso', consulta: { herramienta: 'zupper', id: '0BE-0000371' },
       cliente: { nombre: 'Andreína Pérez', telefono: '+584142215870', notas: 'Usuario: 208114 Andreína Pérez' },
       motivo: 'Orders : Retraso en la entrega',
       pasos: [
         { cliente: ['Buenas, mi pedido tiene más de una hora y nada', 'Ya pagué y en la app sigue igual'],
           opciones: [
-            op('buena', '¡Hola, Andreína! Gracias por escribirnos. Lamento la espera con tu pedido #0BE-0000371; ya lo estoy revisando en este momento.', 'Ok, gracias. Es que tengo hambre y ya pagué 😩', 1),
+            op('buena', '¡Hola, Andreína! Gracias por escribirnos y lamento la espera. ¿Me compartes el número de tu orden para revisarla ya mismo?', 'Sí, es la 0BE-0000371. Tengo hambre y ya pagué 😩', 1),
             op('regular', 'Buenas tardes. Indíqueme su número de orden, por favor.', 'Es el 0BE-0000371, sale ahí mismo en la app. Llevo más de una hora esperando', -1),
-            op('mala', 'hola q paso', ['¿En serio? Llevo una hora esperando y me escriben así.', 'Quiero hablar con un supervisor.'], -2)
-          ], otro: ['Ok… ¿y entonces qué pasa con mi pedido?'] },
-        { cliente: [],
+            op('mala', 'hola q paso', ['¿En serio? Llevo una hora esperando y me escriben así.', 'Quiero hablar con un supervisor.'], -2, 'supervisor')
+          ], otro: ['Es la orden 0BE-0000371. ¿Qué pasa con mi pedido?'] },
+        { id: 'revision', verificar: true, cliente: [],
           opciones: [
             op('buena', 'Ya verifiqué: tu pedido sigue en preparación en Sushi Express. Me comuniqué con el local para darle prioridad. ¿Prefieres esperar a que salga o que cancelemos la orden con reembolso total?', 'Si me dicen cuánto falta espero, si no cancélenla', 1),
             op('regular', 'Voy a cancelar la orden y le hago el reembolso.', '¿Y por qué la cancelas sin preguntarme? Yo lo que quería era mi comida', -1),
@@ -173,7 +186,14 @@
             op('buena', 'El local me confirma que sale en 10 minutos y ya tiene repartidor asignado. Además te dejamos un cupón de compensación por la espera. Te aviso apenas el repartidor lo retire.', 'Perfecto, gracias por la ayuda 🙏', 2),
             op('regular', 'Ok, le aviso cuando salga.', 'Bueno…', 0),
             op('mala', 'Ya no podemos hacer nada más, el responsable es el comercio.', 'Pésimo servicio. No vuelvo a pedir.', -2)
-          ], otro: ['Ok, quedo atenta.'] }
+          ], otro: ['Ok, quedo atenta.'] },
+        // Rama: si el saludo fue malo, el cliente pide un supervisor
+        { id: 'supervisor', rama: true, cliente: [],
+          opciones: [
+            op('buena', 'Entiendo tu molestia, Andreína, y te pido disculpas. Soy yo quien te va a ayudar ahora mismo: ¿me compartes el número de tu orden?', 'Ok… es la 0BE-0000371', 1, 'revision'),
+            op('regular', 'Ya le paso su caso a un supervisor.', 'Ok, espero… pero rápido. Es la orden 0BE-0000371', 0, 'revision'),
+            op('mala', 'No hay supervisores disponibles.', 'Entonces no me sirven para nada. Chao.', -2, 'fin')
+          ], otro: ['Es la orden 0BE-0000371'] }
       ] },
     { id: 'ord-incompleto', celula: 'ORDERS', activo: true, llegada: 15, humor: 3, asunto: 'Falta un producto en mi pedido',
       cliente: { nombre: 'Carlos Rivas', telefono: '+584241187733', notas: 'Usuario: 195530 Carlos Rivas' },
@@ -255,7 +275,7 @@
             op('regular', 'Ya, cualquier cosa me escribe otra vez.', 'Ok…', -1)
           ], otro: ['Gracias'] }
       ] },
-    { id: 'ord-no-llego', celula: 'ORDERS', activo: true, llegada: 125, humor: 1, asunto: 'Dice entregado y no me llegó',
+    { id: 'ord-no-llego', celula: 'ORDERS', activo: true, consulta: { herramienta: 'zupper', id: '1D5-0000455' }, llegada: 125, humor: 1, asunto: 'Dice entregado y no me llegó',
       cliente: { nombre: 'Luisa Fernández', telefono: '+584125561047', notas: 'Usuario: 176201 Luisa Fernández' },
       motivo: 'Orders : Pedido no llegó',
       pasos: [
@@ -263,14 +283,19 @@
           opciones: [
             op('buena', 'Hola, Luisa. Entiendo tu molestia. Ya mismo reviso qué pasó con tu pedido #1D5-0000455 y me comunico con el repartidor.', 'Por favor, porque ya pagué y nada', 1),
             op('regular', 'Verifique bien, a veces lo dejan en recepción.', 'Ya bajé a recepción, no hay nada.', -1),
-            op('mala', 'En el sistema sale entregado, así que sí le llegó.', '¿Me estás llamando mentirosa?', -2)
+            op('mala', 'En el sistema sale entregado, así que sí le llegó.', '¿Me estás llamando mentirosa?', -2, 'aclarar')
           ], otro: ['Ajá, ¿y qué van a hacer?'] },
-        { cliente: [],
+        { id: 'repartidor', verificar: true, cliente: [],
           opciones: [
             op('buena', 'Intenté comunicarme dos veces con el repartidor y no responde. Para no hacerte esperar más, ya procesé el reembolso total de tu orden ($14,50) a tu método de pago original. Nosotros nos encargamos internamente con el repartidor.', 'Ok, gracias por resolver rápido', 2),
             op('regular', 'Le doy ZupperCredits por el monto para su próxima compra.', 'Yo no quiero créditos, quiero mi dinero.', -1),
             op('mala', 'Espere un rato más, el repartidor debe estar por llegar.', '¡Dice ENTREGADO! ¿Cómo que por llegar?', -2)
-          ], otro: ['¿Y mi dinero?'] }
+          ], otro: ['¿Y mi dinero?'] },
+        { id: 'aclarar', rama: true, cliente: [],
+          opciones: [
+            op('buena', 'Disculpa, Luisa, no quise decir eso. Ya me comunico con el repartidor para saber qué pasó con tu pedido.', 'Ok, por favor', 1, 'repartidor'),
+            op('mala', 'El sistema no se equivoca, señora.', 'Voy a poner una queja. Chao.', -2, 'fin')
+          ], otro: ['Ok…'] }
       ] },
     { id: 'ord-sin-respuesta', celula: 'ORDERS', activo: true, llegada: 150, humor: 3, asunto: 'Pago no se refleja', estados: ['sin-respuesta'],
       cliente: { nombre: 'Roberto Salas', telefono: '+584147730918', notas: 'Usuario: 219340 Roberto Salas' },
@@ -316,13 +341,22 @@
      maxAbiertos > 0 → los tickets llegan de forma progresiva (nunca más de N abiertos a la vez);
      maxAbiertos = 0 → llegan por tiempo («llegada» de cada caso), como en un pico real. */
   const SIM_NIVELES_DEFAULT = [
-    { id: 'basico', nombre: 'Básico', descripcion: 'Un ticket a la vez para que te adaptes a Zendesk. Sin panel de órdenes.', minutos: 15, maxAbiertos: 1, intervalo: 8, panel: false, estados: false,
+    { id: 'basico', ruta: 'ORDERS', nombre: 'Básico', descripcion: 'Un ticket a la vez para que te adaptes a Zendesk. Sin panel de órdenes.', minutos: 15, maxAbiertos: 1, intervalo: 8, abandono: 240, panel: false, estados: false,
       casos: ['ord-incompleto', 'ord-pago', 'ord-direccion'] },
-    { id: 'intermedio', nombre: 'Intermedio', descripcion: 'Hasta 2 tickets a la vez, Panel de órdenes y estatus del ticket. Aparece un caso que no es de Orders.', minutos: 20, maxAbiertos: 2, intervalo: 10, panel: true, estados: true,
+    { id: 'intermedio', ruta: 'ORDERS', nombre: 'Intermedio', descripcion: 'Hasta 2 tickets a la vez, Panel de órdenes y estatus del ticket. Aparece un caso que no es de Orders.', minutos: 20, maxAbiertos: 2, intervalo: 10, abandono: 180, panel: true, estados: true,
       casos: ['ord-incompleto', 'ord-retraso', 'ord-pago', 'fx-conductor-pago', 'ord-mal-estado', 'ord-sin-respuesta'] },
-    { id: 'avanzado', nombre: 'Realidad', descripcion: 'Como un pico real: los tickets llegan por tiempo aunque no hayas terminado los anteriores, y el panel no se detiene.', minutos: 25, maxAbiertos: 0, intervalo: 0, panel: true, estados: true,
+    { id: 'avanzado', ruta: 'ORDERS', nombre: 'Realidad', descripcion: 'Como un pico real: los tickets llegan por tiempo aunque no hayas terminado los anteriores, y el panel no se detiene.', minutos: 25, maxAbiertos: 0, intervalo: 0, abandono: 120, panel: true, estados: true,
       casos: ['ord-retraso', 'ord-incompleto', 'ord-pago', 'fx-conductor-pago', 'ord-mal-estado', 'ord-direccion', 'fx-viaje-cobro', 'ord-no-llego', 'ord-sin-respuesta'] }
+,
+    { id: 'viajes-basico', ruta: 'VIAJES', nombre: 'Básico', descripcion: 'Un ticket a la vez. Aprende a buscar viajes en el Admin: Waiting, Running y Completed Requests, detalle y mensajes.', minutos: 15, maxAbiertos: 1, intervalo: 8, abandono: 240, herramientas: ['admin'], estados: false,
+      casos: ['via-no-lo-veo', 'via-objeto', 'via-cobro'] },
+    { id: 'viajes-intermedio', ruta: 'VIAJES', nombre: 'Intermedio', descripcion: 'Hasta 2 tickets a la vez y estatus del ticket. Incluye un viaje viejo que solo aparece en «Trip History» y un caso que no es de viajes.', minutos: 20, maxAbiertos: 2, intervalo: 10, abandono: 180, herramientas: ['admin'], estados: true,
+      casos: ['via-cobro', 'via-no-lo-veo', 'via-deuda', 'fx-pedido-zupper', 'via-objeto'] },
+    { id: 'viajes-avanzado', ruta: 'VIAJES', nombre: 'Realidad', descripcion: 'Como un pico real: los tickets llegan por tiempo aunque no hayas terminado los anteriores.', minutos: 20, maxAbiertos: 0, intervalo: 0, abandono: 120, herramientas: ['admin'], estados: true,
+      casos: ['via-cobro', 'via-no-lo-veo', 'via-deuda', 'fx-pedido-zupper', 'via-objeto'] }
   ];
+  const SIM_RUTAS = { ORDERS: 'Orders · Zendesk + Panel Zupper', VIAJES: 'Viajes · Zendesk + Admin' };
+  const herramientasDe = n => n.herramientas || (n.panel ? ['zupper'] : []);
 
   /* Panel de órdenes (igual al Panel Zupper). El reloj va acelerado (velocidad = minutos del panel por minuto real).
      Cada orden:
@@ -386,7 +420,146 @@
       eventos: [ev(-8, 'No iniciada', 'Aceptada'), ev(-6, 'Preparación iniciada', 'Iniciada', 'Fabricio Brito'), ev(7, 'Preparada', 'En comercio', 'Fabricio Brito'), ev(9, 'Preparada', 'En camino', 'Fabricio Brito'), ev(24, 'Preparada', 'Completada', 'Fabricio Brito')], respuestas: {},
       reglas: [rg('cancelar', 0, null, 'mala', 'Canceló una orden que iba en tiempo.')] }
   ];
-  const SIMULADOR_DEFAULT = { activo: true, intentos: 1, velocidad: 10, niveles: SIM_NIVELES_DEFAULT, motivos: SIM_MOTIVOS_DEFAULT, casos: SIM_CASOS_DEFAULT, ordenes: SIM_ORDENES_DEFAULT };
+  /* ---------- Simulador: ruta VIAJES (Admin de Ridery) ----------
+     Tickets de usuarios y conductores que se resuelven buscando el viaje en el Admin
+     (admin.ridery.app): Waiting / Running / Completed Requests, All Trips con «Trip History»,
+     detalle del viaje (View Map) y mensajes entre usuario y conductor.
+     consulta: { herramienta, id } → el aspirante debió abrir ese viaje/orden antes de responder
+     el paso marcado con verificar: true (suma 2 puntos si lo hizo). */
+  SIM_MOTIVOS_DEFAULT.push('Trips : Cobro incorrecto', 'Trips : Conductor no llega', 'Trips : Deuda pendiente', 'Trips : Objeto perdido', 'Otro : Fuera de alcance (transferir a Orders)');
+  SIM_CASOS_DEFAULT.push(
+    { id: 'via-cobro', celula: 'TRIPS', activo: true, llegada: 0, humor: 2, asunto: 'Me cobraron de más un viaje', consulta: { herramienta: 'admin', id: '86165782' },
+      cliente: { nombre: 'Aracelis Pinates', telefono: '+584121187340', notas: 'Usuario: 3560878 Aracelis Pinates' },
+      motivo: 'Trips : Cobro incorrecto',
+      pasos: [
+        { cliente: ['Buenas, hoy tomé un viaje en Valencia y me cobraron 7,38', 'La app me había dicho mucho menos 😡'],
+          opciones: [
+            op('buena', 'Hola, Aracelis. Lamento el inconveniente; ya lo reviso. ¿Me confirmas la hora aproximada y desde dónde hacia dónde fue el viaje?', 'Fue como a las 10:30, desde Netcom Plus (Paseo Las Industrias) hasta Flor Amarillo', 1),
+            op('regular', 'Buenas. Pásame el ID del viaje.', '¿Y eso dónde lo veo? Fue hoy 10:30, de Netcom Plus a Flor Amarillo', -1),
+            op('mala', 'Las tarifas son así, no se puede hacer nada.', 'O sea, ¿ni siquiera lo van a revisar? Fue hoy 10:30, de Netcom Plus a Flor Amarillo', -2)
+          ], otro: ['Fue hoy como a las 10:30, de Netcom Plus a Flor Amarillo'] },
+        { verificar: true, cliente: [],
+          opciones: [
+            op('buena', 'Gracias. Revisé tu viaje #86165782 en Económico: tuvo un multiplicador de demanda (surge) de 1,4 y el recorrido real fue de 7,9 km, por eso el total quedó en $7,38. El cobro está correcto según el viaje que hiciste.', 'Ah ok, no sabía lo de la demanda. Gracias por explicarme', 2),
+            op('mala', 'Ya te reembolso la diferencia a tu wallet.', '¡Gracias!', 1),
+            op('regular', 'Paso tu caso al equipo de pagos para que lo revisen.', '¿Y cuánto tardan? Solo quiero saber por qué me cobraron eso', -1)
+          ], otro: ['Ok, ¿entonces está bien cobrado?'] }
+      ] },
+    { id: 'via-no-lo-veo', celula: 'TRIPS', activo: true, llegada: 20, humor: 2, asunto: 'El conductor dice que llegó y no lo veo', consulta: { herramienta: 'admin', id: '86166402' },
+      cliente: { nombre: 'Manuel Mendoza', telefono: '+584144410982', notas: 'Usuario: 777873 Manuel Juan Mendoza Castellano' },
+      motivo: 'Trips : Conductor no llega',
+      pasos: [
+        { cliente: ['Hola, el conductor me escribió que ya está aquí pero no lo veo por ningún lado', 'Estoy en la Isabélica, Valencia'],
+          opciones: [
+            op('buena', 'Hola, Manuel. Te ayudo ya mismo a ubicarlo; dame un momento mientras reviso tu viaje en curso.', 'Ok, apúrate porque voy tarde', 1),
+            op('regular', 'Cancela el viaje y pide otro.', '¿Y si me cobran la cancelación?', -1),
+            op('mala', 'Llama tú al conductor, nosotros no podemos hacer nada.', 'Para eso les escribo… qué mal servicio', -2)
+          ], otro: ['Ok, espero'] },
+        { verificar: true, cliente: [],
+          opciones: [
+            op('buena', 'Revisé tu viaje en curso: tu conductor, Ángel Alberto Morales, te escribió que está frente al Automercado Catania La Isabélica, en la Avenida 73. Si te acercas ahí lo vas a ver; él ya está esperándote.', '¡Ah, ya lo vi! Gracias 🙏', 2),
+            op('mala', 'Tu conductor está en camino, llega en 10 minutos.', 'Pero él me dijo que ya llegó… ¿quién tiene razón?', -2),
+            op('regular', 'Escríbele por el chat de la app para que te diga dónde está.', 'Ya le escribí y no entiendo dónde es', -1)
+          ], otro: ['¿Y dónde está?'] }
+      ] },
+    { id: 'via-deuda', celula: 'TRIPS', activo: true, llegada: 45, humor: 3, asunto: 'Tengo una deuda de un viaje cancelado', consulta: { herramienta: 'admin', id: '254552' },
+      cliente: { nombre: 'Silmar Ramones', telefono: '+584247705512', notas: 'Usuario: 99644 Silmar Ramones' },
+      motivo: 'Trips : Deuda pendiente',
+      pasos: [
+        { cliente: ['Hola, la app no me deja pedir viajes porque dice que tengo una deuda', 'Es de un viaje del 2021 que me cancelaron, el 254552'],
+          opciones: [
+            op('buena', 'Hola, Silmar. Gracias por el número del viaje; déjame revisarlo en el historial para ver qué pasó.', 'Dale, gracias', 1),
+            op('regular', 'Eso es muy viejo, no aparece en el sistema.', '¿Cómo que no aparece si me lo están cobrando?', -2),
+            op('mala', 'Tienes que pagar la deuda para seguir usando la app.', '¿Pagar un viaje que me cancelaron? No.', -2)
+          ], otro: ['Ok'] },
+        { verificar: true, cliente: [],
+          opciones: [
+            op('buena', 'Ubiqué el viaje #254552 del 22 de junio de 2021: aparece cancelado, con pago en efectivo pendiente por $3,90. Como el viaje no se realizó, ya lo paso al equipo de pagos para que anulen esa deuda y te aviso por aquí cuando esté listo.', 'Perfecto, gracias por revisarlo', 2),
+            op('mala', 'Ya te borré la deuda, puedes pedir viajes.', '¡Gracias! … espera, todavía me sale', -1),
+            op('regular', 'Envíanos un correo a soporte con tu caso.', '¿Otra vez explicar todo por correo?', -1)
+          ], otro: ['¿Y entonces?'] }
+      ] },
+    { id: 'via-objeto', celula: 'TRIPS', activo: true, llegada: 75, humor: 2, asunto: 'Dejé mi teléfono en el carro', consulta: { herramienta: 'admin', id: '86165566' },
+      cliente: { nombre: 'Benjamín Aguilar', telefono: '+584125541276', notas: 'Usuario: 270084 Benjamín Aguilar Pérez Rafael' },
+      motivo: 'Trips : Objeto perdido',
+      pasos: [
+        { cliente: ['Por favor ayúdenme, dejé mi teléfono en la moto del viaje de hoy', 'Les escribo desde el de mi hermana'],
+          opciones: [
+            op('buena', 'Hola, Benjamín. Tranquilo, te vamos a ayudar. Voy a ubicar tu viaje de hoy para contactar al conductor.', 'Gracias, fue como a las 10:30 en Valencia', 1),
+            op('mala', 'Nosotros no nos hacemos responsables por objetos olvidados.', '¿Ni siquiera me van a ayudar a contactarlo?', -2),
+            op('regular', 'Llama a tu teléfono a ver si alguien contesta.', 'Ya llamé y nadie contesta…', -1)
+          ], otro: ['Fue hoy como a las 10:30 en Valencia'] },
+        { verificar: true, cliente: [],
+          opciones: [
+            op('buena', 'Ubiqué tu viaje #86165566 con el conductor Isaac Josué Núñez (Moto Baratica). Ya le escribí para coordinar la devolución de tu teléfono; te aviso por aquí en cuanto responda.', 'Muchas gracias de verdad', 2),
+            op('mala', 'Te paso el número personal del conductor para que lo llames.', 'Ok… gracias', 0),
+            op('regular', 'Cuando el conductor lo encuentre, seguro lo reporta.', '¿Y si no lo reporta?', -1)
+          ], otro: ['¿Y entonces?'] }
+      ] },
+    { id: 'fx-pedido-zupper', celula: 'TRIPS', activo: true, llegada: 100, humor: 2, asunto: 'Mi pedido de comida no ha llegado', estados: ['abierto'], fueraDeAlcance: true,
+      cliente: { nombre: 'Oriana Castillo', telefono: '+584143329014', notas: 'Usuario: 512210 Oriana Castillo' },
+      motivo: 'Otro : Fuera de alcance (transferir a Orders)',
+      pasos: [
+        { cliente: ['Hola, pedí comida por Zupper hace una hora y no ha llegado nada'],
+          opciones: [
+            op('buena', 'Hola, Oriana. Lamento la espera. Este canal atiende viajes, así que ya transfiero tu caso al equipo de Orders de Zupper para que revisen tu pedido de inmediato.', 'Ok, gracias', 1),
+            op('mala', 'Seguro el conductor ya va en camino, espera un poco.', '¿Qué conductor? Es un pedido de comida…', -2),
+            op('mala', 'Te reembolso el viaje.', 'No fue un viaje, fue un pedido 🙄', -2)
+          ], otro: ['Ok'] }
+      ] }
+  );
+
+  /* Viajes del Admin. min = minuto del panel (reloj acelerado) en que se pidió; fecha = viaje viejo (solo en «Trip History»).
+     eventos: [{ min, st }] → Waiting, Accepted, Arrived, Started, Completed, Cancelled. */
+  const vj = (o) => Object.assign({ thirdParty: '', whoIsPaying: '', promo: 'No', tip: 0, creadoPor: 'User', fijo: true, revision: 'No', mensajes: [], reglas: [] }, o);
+  const SIM_VIAJES_DEFAULT = [
+    vj({ id: '86165782', userId: '3560878', user: 'Aracelis Pinates', email: 'aracelis.pinates@gmail.com', tel: '+58 4121187340', providerId: '3186', provider: 'Raymond Jose Salas Acosta',
+      servicio: 'Económico', tarifa: 'Económico / 0.35 per KM / 0.16 per minute.', ciudad: 'Valencia, Carabobo', pickup: 'Netcom Plus Oficina Paseo Las Industrias', destino: 'Flor Amarillo',
+      providerAddr: '5278+53G, Valencia 2003, Carabobo, Venezuela', min: -12, estimado: 4.10, monto: 7.38, km: 7.89, realTime: 11.41, surge: 1.4, pago: 'Pay By Coporate', pagoEstado: 'Paid', creadoPor: 'Driver',
+      eventos: [{ min: -12, st: 'Accepted' }, { min: -11, st: 'Started' }, { min: -1, st: 'Completed' }] }),
+    vj({ id: '86166402', userId: '777873', user: 'Manuel Juan Mendoza Castellano', email: 'manuelmendoza@gmail.com', tel: '+58 4144410982', providerId: '430563', provider: 'Ángel Alberto Morales Flores',
+      servicio: 'Moto', tarifa: 'Moto / 0.21 per KM / 0.17 per minute.', ciudad: 'Valencia, Carabobo', pickup: 'Avenida 73, Valencia 2003, Carabobo', destino: 'Complejo De Piscinas La Isabelica',
+      providerAddr: '528Q+37R, Av. Henry Ford, Valencia 2003, Carabobo', min: -9, estimado: 1.43, monto: 1.43, km: 1.02, realTime: 1.96, surge: 1, pago: 'Pay By Wallet', pagoEstado: 'Pending',
+      eventos: [{ min: -9, st: 'Waiting' }, { min: -8, st: 'Accepted' }, { min: -1, st: 'Arrived' }],
+      mensajes: [{ de: 'provider', min: -7, t: 'Hola, voy en camino' }, { de: 'user', min: -5, t: 'Ok, aquí te espero' }, { de: 'provider', min: -1, t: 'Estoy frente a catania' }],
+      reglas: [{ accion: 'cancelar-viaje', desde: 0, hasta: 9999, v: 'mala', nota: 'Canceló el viaje: el conductor ya estaba en el punto de recogida.' }] }),
+    vj({ id: '254552', userId: '99644', user: 'Silmar Ramones', email: 'silmar.ramones@hotmail.com', tel: '+58 4247705512', providerId: '2894', provider: 'Aaron Arias', servicio: 'Estándar',
+      tarifa: 'Estándar / 0.30 per KM / 0.12 per minute.', ciudad: 'Maracaibo, Zulia', pickup: 'C.C. Lago Mall, Maracaibo', destino: 'Av. 5 de Julio, Maracaibo', providerAddr: 'Av. 5 de Julio, Maracaibo',
+      fecha: '2021-06-22T12:38:00', estimado: 3.90, monto: 3.90, km: 0, realTime: 0, surge: 1, pago: 'Pay By Cash', pagoEstado: 'Pending', eventos: [{ min: 0, st: 'Cancelled' }] }),
+    vj({ id: '86165566', userId: '270084', user: 'Benjamin Aguilar Perez Rafael', email: 'benjaminaguilar@gmail.com', tel: '+58 4125541276', providerId: '254216', provider: 'Isaac Josué Núñez Gil',
+      servicio: 'Moto Baratica', tarifa: 'Moto Baratica / 0.18 per KM / 0.10 per minute.', ciudad: 'Valencia, Carabobo', pickup: 'Av. Bolívar Norte, Valencia', destino: 'C.C. Sambil Valencia',
+      providerAddr: 'Av. Bolívar Norte, Valencia', min: -16, estimado: 1.00, monto: 1.00, km: 0.94, realTime: 7.2, surge: 1, pago: 'Pay By Wallet', pagoEstado: 'Paid',
+      eventos: [{ min: -16, st: 'Accepted' }, { min: -15, st: 'Started' }, { min: -8, st: 'Completed' }],
+      mensajes: [{ de: 'user', min: -16, t: 'Estoy en la entrada principal' }, { de: 'provider', min: -16, t: 'Ok, ya llego' }] })
+  ];
+  // Viajes de relleno para que las listas se vean como un día normal (siempre los mismos)
+  (function rellenarViajes() {
+    const users = [['2193049', 'sebastian gamarra'], ['2190400', 'Nazaret Viccely Gonzalez Sanchez'], ['779747', 'Reynaldo Alexander Ledezma Sanchez'], ['3119154', 'Dinorah Alejandra Valero Romano'],
+      ['729481', 'Issam Khatib'], ['622731', 'David Victor Leon Lira'], ['2781272', 'Esneydi Rsteile'], ['662255', 'Daniel Lopez'], ['3508623', 'Jesus Manuel Tortolero Ramirez'],
+      ['1401336', 'Lina Rosa Maldonado Roa'], ['2437016', 'Yonaibeth Mejia'], ['663329', 'Mireangel Coromoto Acosta Avola'], ['1086245', 'Ricardo Daniel Hubber Guzman'], ['220425', 'Ivonne Josefina Duran Pacheco'],
+      ['1502910', 'Coromoto Solsiret Hernandez Palma'], ['1059438', 'Alejandra García'], ['1865030', 'Arelis Carolina Gomez Mindiola'], ['344957', 'Pedro Olmos'], ['2529410', 'Audrey Rondón'], ['3071883', 'Hazael Avril Maturet Puertas']];
+    const provs = [['62893', 'Ricardo José Márquez Vicuña'], ['274540', 'Alexander Sánchez'], ['5628', 'Juan de Dios Rodriguez Garces'], ['46255', 'Victor Hugo Diaz Baque'], ['64366', 'Jonathan Eduardo Durán Fernández'],
+      ['347409', 'jose Hernández'], ['313603', 'Jeferson Jesús Medina romero'], ['439118', 'Luis Jose Caicedo Duran'], ['447478', 'Dubalier Jose Cedeño Pericana'], ['228495', 'Jesús Fernando Becerra Torres']];
+    const lugares = [['Valencia, Carabobo', 'Universidad Alejandro De Humboldt', 'Bonaventure Home, Naguanagua'], ['Maracay, Aragua', 'La Nisperera - Torre A Y Torre B', 'Centro Comercial Global, Cc Global'],
+      ['Caracas, Capital District', 'Residencias Unión', 'Edificio. La Llovizna'], ['Caracas, Capital District', 'Caurimare Tepuy', 'Cordero Restaurante'], ['Maturín, Monagas', 'Inspección Vehículos Policía Municipal', 'Clínica Santa Sofía, Calle 6'],
+      ['Mérida, Mérida', 'Domisalud C.A', 'Facultad De Humanidades Y Educación'], ['Maracaibo, Zulia', 'Calle 69A & Avenida 13', 'Costashrimp'], ['Puerto La Cruz, Anzoátegui', 'Av. Municipal', 'C.C. Plaza Mayor'],
+      ['Barquisimeto, Lara', 'Av. Lara, Barquisimeto', 'C.C. Sambil Barquisimeto']];
+    const servicios = [['Moto Baratica', 0.18], ['Económico', 0.35], ['Moto', 0.21], ['Baratica', 0.25], ['Ridery Premium', 0.6], ['Carro', 0.4], ['Moto a mi precio', 0.2]];
+    const pagos = ['Pay By Pago Móvil Auto', 'Pay By Wallet', 'Pay By Debito Inmediato', 'Pay By Pago Móvil Auto', 'Pay By Promo $0.91', 'Pay By Paga al subir', 'Pay by Prepaid Cash Bs', 'Pay By Pago Móvil Auto'];
+    const flujo = [[], ['Accepted'], ['Accepted', 'Started'], ['Accepted', 'Started', 'Completed'], ['Accepted', 'Started', 'Completed'], ['Cancelled'], ['Accepted', 'Started', 'Completed']];
+    for (let k = 0; k < 26; k++) {
+      const u = users[k % users.length], p = provs[(k * 3) % provs.length], l = lugares[(k * 5) % lugares.length], sv = servicios[(k * 7) % servicios.length], f = flujo[k % flujo.length];
+      const min = -40 + k * 2.5, km = Math.round(((k * 37) % 90) / 10 * 100) / 100 + 0.6, monto = Math.round((1 + km * sv[1] * 3) * 100) / 100;
+      const eventos = [{ min, st: 'Waiting' }].concat(f.map((st, i) => ({ min: min + 2 + i * 6, st })));
+      SIM_VIAJES_DEFAULT.push(vj({ id: String(86164760 + k * 23), userId: u[0], user: u[1], email: u[1].split(' ')[0].toLowerCase() + (k * 7 % 90) + '@gmail.com', tel: '+58 41' + (24000000 + k * 371733).toString().slice(0, 8),
+        providerId: f.length && f[0] !== 'Cancelled' ? p[0] : '', provider: f.length && f[0] !== 'Cancelled' ? p[1] : '', servicio: sv[0], tarifa: sv[0] + ' / ' + sv[1] + ' per KM / 0.12 per minute.', ciudad: l[0], pickup: l[1], destino: l[2],
+        providerAddr: l[1], min, estimado: monto, monto, km, realTime: Math.round(km * 4 * 10) / 10, surge: k % 4 === 0 ? 1.2 : 1, pago: pagos[k % pagos.length], pagoEstado: f.includes('Completed') ? 'Paid' : 'Pending',
+        promo: pagos[k % pagos.length].includes('Promo') ? 'Yes' : 'No', creadoPor: k % 6 === 0 ? 'Driver' : 'User', eventos,
+        reglas: [{ accion: 'cancelar-viaje', desde: 0, hasta: 9999, v: 'mala', nota: 'Canceló un viaje sin que nadie lo pidiera.' }] }));
+    }
+  })();
+
+  const SIMULADOR_DEFAULT = { activo: true, ordenNiveles: true, intentos: 1, velocidad: 10, niveles: SIM_NIVELES_DEFAULT, motivos: SIM_MOTIVOS_DEFAULT, casos: SIM_CASOS_DEFAULT, ordenes: SIM_ORDENES_DEFAULT, viajes: SIM_VIAJES_DEFAULT };
 
   /* Revisión básica de ortografía para las respuestas escritas («Otro»): la ve Calidad al calificar. */
   const SIN_TILDE = { tambien: 'también', ademas: 'además', despues: 'después', informacion: 'información', direccion: 'dirección', numero: 'número', gestion: 'gestión', solucion: 'solución',
@@ -438,6 +611,7 @@
     cfg.reglas = Object.assign({}, REGLAS_DEFAULT, cfg.reglas || {});
     cfg.boost = cfg.boost || {};
     cfg.boost.mecanografia = Object.assign({}, BOOST_DEFAULT.mecanografia, cfg.boost.mecanografia || {});
+    cfg.boost.extra = Object.assign(Object.fromEntries(Object.keys(BOOST_ACTIVIDADES).map(k => [k, true])), cfg.boost.extra || {});
     return cfg;
   }
 
@@ -821,6 +995,13 @@
     s.motivos = (s.motivos && s.motivos.length) ? s.motivos : SIM_MOTIVOS_DEFAULT;
     s.casos = s.casos || []; s.ordenes = s.ordenes || [];
     s.niveles = (s.niveles && s.niveles.length) ? s.niveles : SIM_NIVELES_DEFAULT;
+    s.viajes = (s.viajes && s.viajes.length) ? s.viajes : SIM_VIAJES_DEFAULT;
+    // Configuraciones guardadas antes de la ruta VIAJES: se agregan sus niveles y casos de ejemplo
+    if (!s.niveles.some(n => n.ruta === 'VIAJES')) {
+      s.niveles = s.niveles.map(n => Object.assign({ ruta: 'ORDERS' }, n)).concat(SIM_NIVELES_DEFAULT.filter(n => n.ruta === 'VIAJES'));
+      SIM_CASOS_DEFAULT.filter(c => c.celula === 'TRIPS' && !s.casos.some(x => x.id === c.id)).forEach(c => s.casos.push(c));
+      SIM_MOTIVOS_DEFAULT.filter(m => !s.motivos.includes(m)).forEach(m => s.motivos.push(m));
+    }
     return s;
   }
   const humorTxt = h => SIM_HUMOR[Math.max(0, Math.min(4, h))];
@@ -829,6 +1010,34 @@
   const minutoSim = ses => Math.round(segSes(ses) / 60 * (ses.velocidad || 10) * 10) / 10;
   const vencida = ses => ses.estado === 'en-curso' && segSes(ses) > (ses.minutos || 20) * 60 + 5;
   const llego = (ses, c) => c.llegada != null && c.llegada <= segSes(ses) + 2;
+  // Tiempo que tarda el cliente en «escribir» sus mensajes (el navegador usa la misma cuenta)
+  const tipeo = ms => ms.length ? 0.9 + ms.reduce((t, m) => t + 1 + Math.min(2.6, String(m).length * 0.035), 0) : 0;
+  // Pasos de la línea principal (sin ramas): base del puntaje máximo
+  const pasosBase = d => d.pasos.filter(p => !p.rama).length;
+  // Siguiente paso según la opción elegida: salto a una rama, fin, o el que sigue (las ramas no se recorren solas)
+  function siguientePaso(d, actual, o) {
+    if (o && o.fin) return -1;
+    if (o && o.ir) { const k = d.pasos.findIndex(p => p.id === o.ir); return k; }
+    const k = actual + 1, sig = d.pasos[k];
+    if (!sig || (sig.rama && !d.pasos[actual].rama)) return -1;
+    return k;
+  }
+  // Abandono: si el cliente espera respuesta más de «abandono» segundos, se va y el ticket se cierra
+  function revisarAbandono(ses) {
+    if (!ses.abandono || ses.estado !== 'en-curso') return false;
+    const ahoraS = segSes(ses); let hubo = false;
+    for (const c of ses.casos) {
+      if (c.cerrado || c.llegada == null || c.esperaCliente === false) continue;
+      const desde = c.ultimoCliente != null ? c.ultimoCliente : c.llegada;
+      if (ahoraS - desde > ses.abandono) {
+        c.cerrado = true; c.abandonado = true; c.estadoTicket = 'abandonado'; c.humor = Math.min(c.humor, 1); c.cerradoF = ahora();
+        c.chat.push({ de: 'sistema', t: 'El cliente abandonó la conversación por falta de respuesta.' });
+        hubo = true;
+      }
+    }
+    if (hubo) liberarTickets(ses);
+    return hubo;
+  }
 
   // Llegada progresiva: nunca más de maxAbiertos tickets abiertos a la vez
   function liberarTickets(ses) {
@@ -838,7 +1047,7 @@
     let libres = ses.maxAbiertos - abiertos, k = 0;
     for (const c of ses.casos) {
       if (libres <= 0) break;
-      if (c.llegada == null) { c.llegada = Math.round(t + (ses.intervalo || 8) * (1 + k)); k++; libres--; }
+      if (c.llegada == null) { c.llegada = Math.round(t + (ses.intervalo || 8) * (1 + k)); c.ultimoCliente = c.llegada; k++; libres--; }
     }
   }
 
@@ -858,20 +1067,29 @@
     }
     return r;
   }
+  // Estatus de un viaje del Admin en el minuto `min` (o el que fijó el aspirante al cancelarlo)
+  function estadoViaje(v, min, acciones) {
+    const canc = (acciones || []).find(a => a.herramienta === 'admin' && a.orden === v.id && a.st);
+    if (canc && canc.min <= min) return canc.st;
+    let st = '';
+    for (const e of (v.eventos || [])) if (e.min <= min) st = e.st;
+    return st;
+  }
   const ordenCerrada = st => st.c === 'Cancelada' || ['Cancelada', 'Completada'].includes(st.e);
 
   // Calificación del cliente (como la encuesta de satisfacción de Zendesk): sale del humor final del cliente
-  const csatDe = c => !c.respuestas.length ? 'Sin atender' : c.humor >= 3 ? 'Bien' : 'Mal';
+  const csatDe = c => c.abandonado ? 'Mal' : !c.respuestas.length ? 'Sin atender' : c.humor >= 3 ? 'Bien' : 'Mal';
   function puntosSim(ses, s) {
     let tp = 0, tmax = 0, pendientes = 0, resueltos = 0, ortografia = 0; const prim = [];
     for (const c of ses.casos) {
-      tmax += (c.pasos || 0) * 2 + 2 + (ses.conEstados ? 2 : 0);
+      tmax += Math.max(c.pasos || 0, c.respuestas.length) * 2 + 2 + (ses.conEstados ? 2 : 0);
       for (const r of c.respuestas) {
         if (r.v === 'pendiente') pendientes++; else tp += SIM_PUNTOS[r.v] || 0;
         if (r.ortografia && r.ortografia.length) ortografia++;
       }
       if (c.motivoOk) tp += 2;
       if (ses.conEstados && c.estadoOk) tp += 2;
+      if (c.consulta) { tmax += 2; if (c.verifico) tp += 2; }
       if (c.cerrado) resueltos++;
       if (c.primera != null) prim.push(c.primera);
     }
@@ -883,6 +1101,7 @@
       }
       const vistos = new Set();
       for (const a of ses.acciones) {
+        if (a.herramienta === 'admin') continue;
         const k = a.orden + '|' + a.accion;
         if (vistos.has(k) || a.v == null) continue; vistos.add(k);
         op += SIM_PUNTOS[a.v] || 0;
@@ -891,11 +1110,14 @@
     }
     const max = tmax + omax, pts = tp + op;
     const csat = { bien: ses.casos.filter(c => csatDe(c) === 'Bien').length, mal: ses.casos.filter(c => csatDe(c) === 'Mal').length, sinAtender: ses.casos.filter(c => csatDe(c) === 'Sin atender').length };
-    return { nota: max ? Math.round(pts / max * 100) : 0, pts, max, pendientes, ortografia, csat, tickets: { pts: tp, max: tmax, resueltos, total: ses.casos.length },
+    const conConsulta = ses.casos.filter(c => c.consulta && c.verifico != null);
+    const verificacion = { hechas: conConsulta.filter(c => c.verifico).length, total: ses.casos.filter(c => c.consulta).length };
+    return { nota: max ? Math.round(pts / max * 100) : 0, pts, max, pendientes, ortografia, csat, verificacion, tickets: { pts: tp, max: tmax, resueltos, total: ses.casos.length },
       ordenes: { pts: op, max: omax, acciones: ses.acciones.length, malas: ses.acciones.filter(a => a.v === 'mala').length, sinGestion },
       primeraPromedio: prim.length ? Math.round(prim.reduce((x, y) => x + y, 0) / prim.length) : null };
   }
   function terminarSim(ses, s) {
+    revisarAbandono(ses);
     if (ses.estado !== 'terminada') { ses.estado = 'terminada'; ses.fin = ahora(); }
     ses.resumen = puntosSim(ses, s);
   }
@@ -906,16 +1128,18 @@
     const nivel = s.niveles.find(n => n.id === ses.nivel) || {};
     return {
       id: ses.id, nivel: ses.nivel, nivelNombre: nivel.nombre || ses.nivel, inicio: ses.inicio, ahora: ahora(), estado: ses.estado, velocidad: ses.velocidad, minutos: ses.minutos,
-      panel: !!ses.panel, conEstados: !!ses.conEstados, estadosTicket: SIM_ESTADOS_TICKET, motivos: s.motivos, acciones: SIM_ACCIONES,
+      panel: !!ses.panel, herramientas: ses.herramientas || (ses.panel ? ['zupper'] : []), conEstados: !!ses.conEstados, abandono: ses.abandono || 0, estadosTicket: SIM_ESTADOS_TICKET, motivos: s.motivos, acciones: SIM_ACCIONES,
       tickets: ses.casos.map(c => {
         const d = def(c.id), paso = d.pasos[c.paso];
         return { id: c.id, numero: c.numero, llegada: c.llegada, asunto: d.asunto || '', canal: 'WhatsApp', cliente: d.cliente || {}, humor: humorTxt(c.humor), nivel: c.humor,
-          chat: c.chat, cerrado: !!c.cerrado, motivo: c.motivo || '', estadoTicket: c.estadoTicket || 'nuevo', listo: !paso,
+          chat: c.chat, cerrado: !!c.cerrado, abandonado: !!c.abandonado, motivo: c.motivo || '', estadoTicket: c.estadoTicket || 'nuevo', listo: !paso,
+          ultimoCliente: c.ultimoCliente != null ? c.ultimoCliente : c.llegada, esperaCliente: c.esperaCliente !== false && !!paso,
           opciones: (!c.cerrado && paso) ? barajar(paso.opciones.map((o, i) => ({ i, t: o.t }))) : [] };
       }),
       ordenes: ses.panel ? s.ordenes.map(o => ({ id: o.id, comercio: o.comercio, cliente: o.cliente, total: o.total || '', metodo: o.metodo || 'movil', pago: o.pago || 'Pagada', items: o.items || [],
         eventos: (o.eventos || []).map(e => ({ min: e.min, c: e.c || '', e: e.e || '', rep: e.rep || '', rol: e.rep ? (e.rol || 'Repartidor') : '' })) })) : [],
-      hechas: ses.acciones.map(a => ({ orden: a.orden, accion: a.accion, min: a.min, texto: a.texto, c: a.c || '', e: a.e || '', rep: a.rep || '', rol: a.rol || '' }))
+      viajes: (ses.herramientas || []).includes('admin') ? s.viajes.map(v => { const x = Object.assign({}, v); delete x.reglas; return x; }) : [],
+      hechas: ses.acciones.map(a => ({ herramienta: a.herramienta || 'zupper', orden: a.orden, accion: a.accion, min: a.min, texto: a.texto, c: a.c || '', e: a.e || '', rep: a.rep || '', rol: a.rol || '', st: a.st || '' }))
     };
   }
   // Cambios de llegada para que el navegador los conozca (llegada progresiva)
@@ -930,20 +1154,23 @@
     if (!ses) throw err(404, 'Simulación no encontrada.');
     if (vencida(ses)) { terminarSim(ses, s); asp.simulador = sim; await store.put('aspirantes', asp); throw err(409, 'Se acabó el tiempo de la simulación.'); }
     if (ses.estado !== 'en-curso') throw err(409, 'Esta simulación ya terminó.');
+    if (revisarAbandono(ses)) { asp.simulador = sim; await store.put('aspirantes', asp); }
     return { cfg, s, asp, sim, ses };
   }
   // Niveles con su estado para este aspirante: bloqueado / disponible / agotado
   function nivelesDe(s, sim) {
-    let anteriorListo = true;
+    const listo = {};
     return s.niveles.map(n => {
+      const ruta = n.ruta || 'ORDERS', anteriorListo = listo[ruta] !== false;
       const ses = sim.sesiones.filter(x => (x.nivel || 'avanzado') === n.id);
       const terminadas = ses.filter(x => x.estado === 'terminada' || vencida(x));
       const curso = ses.find(x => x.estado === 'en-curso' && !vencida(x));
       const permitidos = (Number(s.intentos) || 1) + ((sim.extra && sim.extra[n.id]) || 0);
       const usadas = ses.length - (curso ? 1 : 0);
-      const r = { id: n.id, nombre: n.nombre, descripcion: n.descripcion, minutos: n.minutos, tickets: (n.casos || []).length, panel: !!n.panel,
-        bloqueado: !anteriorListo, enCurso: !!curso, usadas, permitidos, quedan: Math.max(0, permitidos - usadas), terminado: terminadas.length > 0 };
-      anteriorListo = r.terminado;
+      const hs = herramientasDe(n);
+      const r = { id: n.id, ruta, rutaNombre: SIM_RUTAS[ruta] || ruta, nombre: n.nombre, descripcion: n.descripcion, minutos: n.minutos, tickets: (n.casos || []).length, panel: hs.includes('zupper'), admin: hs.includes('admin'),
+        bloqueado: s.ordenNiveles !== false && !anteriorListo, enCurso: !!curso, usadas, permitidos, quedan: Math.max(0, permitidos - usadas), terminado: terminadas.length > 0 };
+      listo[ruta] = r.terminado;
       return r;
     });
   }
@@ -970,7 +1197,7 @@
         const nv = nivelesDe(s, sim).find(n => n.id === body.nivel);
         const n = s.niveles.find(x => x.id === body.nivel);
         if (!nv || !n) throw err(400, 'Elige un nivel.');
-        if (nv.bloqueado) throw err(403, 'Primero termina el nivel anterior.');
+        if (nv.bloqueado) throw err(403, 'Primero termina el nivel anterior.');   // solo si «Niveles en orden» está encendido
         if (!nv.quedan) throw err(403, 'Ya usaste tus intentos de este nivel. Si necesitas otro, escríbele al equipo.');
         const casos = (n.casos || []).map(id => s.casos.find(c => c.id === id && c.activo !== false)).filter(Boolean);
         if (!casos.length) throw err(403, 'Este nivel todavía no tiene casos.');
@@ -978,10 +1205,11 @@
         if (!progresivo) casos.sort((a, b) => (a.llegada || 0) - (b.llegada || 0));
         let numero = 2988100 + Math.floor(Math.random() * 800);
         ses = { id: nuevoId('sim'), nivel: n.id, inicio: ahora(), fin: null, estado: 'en-curso', velocidad: Number(s.velocidad) || 10, minutos: Number(n.minutos) || 20,
-          panel: !!n.panel, conEstados: !!n.estados, maxAbiertos: progresivo ? Number(n.maxAbiertos) : 0, intervalo: Number(n.intervalo) || 8,
-          casos: casos.map((c, k) => ({ id: c.id, numero: numero += 1 + Math.floor(Math.random() * 9), llegada: progresivo ? (k < n.maxAbiertos ? k * (Number(n.intervalo) || 8) : null) : (Number(c.llegada) || 0),
-            humor: c.humor == null ? 3 : c.humor, paso: 0, pasos: c.pasos.length, chat: c.pasos[0].cliente.map(t => ({ de: 'cliente', t })), respuestas: [],
-            motivo: '', motivoOk: false, estadoTicket: 'nuevo', estadoOk: false, cerrado: false, primera: null })),
+          herramientas: herramientasDe(n), panel: herramientasDe(n).includes('zupper'), vistas: [], conEstados: !!n.estados, abandono: Number(n.abandono) || 0, maxAbiertos: progresivo ? Number(n.maxAbiertos) : 0, intervalo: Number(n.intervalo) || 8,
+          casos: casos.map((c, k) => ({ id: c.id, numero: numero += 1 + Math.floor(Math.random() * 9), llegada: progresivo ? (k < n.maxAbiertos ? k * (Number(n.intervalo) || 8) : null) : (Number(c.llegada) || 0), ultimoCliente: null,
+            humor: c.humor == null ? 3 : c.humor, paso: 0, pasos: pasosBase(c), chat: c.pasos[0].cliente.map(t => ({ de: 'cliente', t })), respuestas: [],
+            motivo: '', motivoOk: false, estadoTicket: 'nuevo', estadoOk: false, cerrado: false, primera: null,
+            consulta: !!(c.consulta && herramientasDe(n).includes(c.consulta.herramienta)), verifico: null })),
           acciones: [], resumen: null };
         sim.sesiones.push(ses);
         sim.sesiones = sim.sesiones.slice(-10);
@@ -995,33 +1223,40 @@
       const c = ses.casos.find(x => x.id === body.ticket);
       const d = s.casos.find(x => x.id === body.ticket);
       if (!c || !d) throw err(404, 'Ticket no encontrado.');
+      if (c.abandonado) throw err(409, 'El cliente abandonó la conversación por falta de respuesta.');
       if (c.cerrado) throw err(409, 'Este ticket ya no está en tu bandeja.');
       if (!llego(ses, c)) throw err(409, 'Este ticket todavía no ha llegado.');
       const paso = d.pasos[c.paso];
       if (!paso) throw err(409, 'El cliente ya no está esperando respuesta. Elige el motivo de contacto y cambia el estatus del ticket.');
       const llegado = segSes(ses) - c.llegada;
-      let t, v, r, h = 0, i = null, notas = null;
+      let t, v, r, h = 0, i = null, notas = null, o = null;
       const otro = limpiar(body.otro, 1000);
       if (otro) { t = otro; v = 'pendiente'; r = paso.otro || []; notas = revisarOrtografia(otro); }
       else {
         i = Number(body.opcion);
-        const o = paso.opciones[i];
+        o = paso.opciones[i];
         if (!o) throw err(400, 'Elige o escribe una respuesta.');
         t = o.t; v = o.v; r = o.r || []; h = Number(o.h) || 0;
       }
       if (c.primera == null) c.primera = Math.max(0, Math.round(llegado));
+      // ¿Buscó la orden/viaje antes de dar la respuesta que lo requería?
+      if (paso.verificar && c.consulta && c.verifico == null) c.verifico = (ses.vistas || []).some(x => x.h === d.consulta.herramienta && x.id === d.consulta.id);
       c.respuestas.push(Object.assign({ paso: c.paso, i, t, v, otro: !!otro, f: ahora(), seg: Math.max(0, Math.round(llegado)) }, notas ? { ortografia: notas } : {}));
       c.chat.push({ de: 'agente', t });
       if (c.estadoTicket === 'nuevo') c.estadoTicket = 'abierto';
       c.aparcado = false;
       c.humor = Math.max(0, Math.min(4, c.humor + h));
-      c.paso += 1;
+      const k = siguientePaso(d, c.paso, o);
+      c.paso = k < 0 ? d.pasos.length : k;
       const sig = d.pasos[c.paso];
       const nuevos = r.concat(sig ? sig.cliente : []).map(x => ({ de: 'cliente', t: x }));
       c.chat.push(...nuevos);
+      c.ultimoCliente = Math.round(segSes(ses) + tipeo(nuevos.map(m => m.t)));
+      c.esperaCliente = !!sig && nuevos.length > 0;   // si el cliente no contesta, no corre el abandono
+      if (o && o.fin) c.chat.push({ de: 'sistema', t: 'El cliente cerró la conversación.' });
       asp.simulador = sim;
       await store.put('aspirantes', asp);
-      return { mensajes: nuevos, humor: humorTxt(c.humor), nivel: c.humor, listo: !sig, opciones: sig ? barajar(sig.opciones.map((o, k) => ({ i: k, t: o.t }))) : [] };
+      return { mensajes: nuevos, fin: !!(o && o.fin), ultimoCliente: c.ultimoCliente, esperaCliente: c.esperaCliente, humor: humorTxt(c.humor), nivel: c.humor, listo: !sig, opciones: sig ? barajar(sig.opciones.map((o, k) => ({ i: k, t: o.t }))) : [] };
     },
     // «Enviar como…»: guarda motivo y estatus. Abierto deja el ticket en la bandeja; los demás lo sacan.
     async simResolver({ store, user, body }) {
@@ -1042,6 +1277,36 @@
       asp.simulador = sim;
       await store.put('aspirantes', asp);
       return { ok: true, cerrado: c.cerrado, pendientes: ses.casos.filter(x => !x.cerrado).length, llegadas: llegadas(ses) };
+    },
+    // Registra lo que el aspirante consultó (detalle, mensajes o búsqueda) en el Admin o en el Panel Zupper
+    async simVer({ store, user, body }) {
+      const { asp, sim, ses } = await sesionSim(store, user, body);
+      const h = body.herramienta === 'admin' ? 'admin' : 'zupper';
+      const ids = [].concat(body.ids || []).map(x => limpiar(x, 30)).filter(Boolean).slice(0, 40);
+      ses.vistas = ses.vistas || [];
+      const seg = Math.round(segSes(ses));
+      ids.forEach(id => { if (!ses.vistas.some(x => x.h === h && x.id === id)) ses.vistas.push({ h, id, vista: limpiar(body.vista, 20), seg }); });
+      ses.vistas = ses.vistas.slice(-300);
+      asp.simulador = sim;
+      await store.put('aspirantes', asp);
+      return { ok: true };
+    },
+    async simAccionViaje({ store, user, body }) {
+      const { s, asp, sim, ses } = await sesionSim(store, user, body);
+      if (!(ses.herramientas || []).includes('admin')) throw err(403, 'Este nivel no tiene Admin.');
+      const v = s.viajes.find(x => x.id === body.viaje);
+      if (!v) throw err(404, 'Viaje no encontrado.');
+      if (body.que !== 'cancelar-viaje') throw err(400, 'Acción desconocida.');
+      const min = minutoSim(ses);
+      const st = estadoViaje(v, min, ses.acciones);
+      if (!['Waiting', 'Accepted', 'Arrived', 'Started'].includes(st)) throw err(409, 'Solo se pueden cancelar viajes en espera o en curso.');
+      const regla = (v.reglas || []).find(x => x.accion === 'cancelar-viaje' && min >= x.desde && min < x.hasta);
+      const a = { herramienta: 'admin', orden: v.id, accion: 'cancelar-viaje', min, f: ahora(), texto: 'Viaje #' + v.id + ' cancelado desde el Admin.', st: 'Cancelled',
+        v: regla ? regla.v : 'mala', nota: regla ? regla.nota : 'Canceló un viaje sin motivo.' };
+      ses.acciones.push(a);
+      asp.simulador = sim;
+      await store.put('aspirantes', asp);
+      return { hecha: { herramienta: 'admin', orden: v.id, accion: a.accion, min, texto: a.texto, st: 'Cancelled' } };
     },
     async simAccion({ store, user, body }) {
       const { s, asp, sim, ses } = await sesionSim(store, user, body);
@@ -1064,6 +1329,14 @@
       await store.put('aspirantes', asp);
       return { hecha: { orden: a.orden, accion, min, texto, c: a.c, e: a.e, rep: a.rep, rol: a.rol } };
     },
+    // El navegador consulta cada tanto: abandonos y tickets nuevos (llegada progresiva)
+    async simSync({ store, user, body }) {
+      const { asp, sim, ses } = await sesionSim(store, user, body);
+      liberarTickets(ses);
+      asp.simulador = sim;
+      await store.put('aspirantes', asp);
+      return { llegadas: llegadas(ses), abandonados: ses.casos.filter(c => c.abandonado).map(c => c.id) };
+    },
     async simTerminar({ store, user, body }) {
       const cfg = await cargarConfig(store);
       const s = configSim(cfg);
@@ -1077,7 +1350,7 @@
       const r = ses.resumen;    // el aspirante no ve su nota: la revisa el equipo
       const siguiente = s.niveles[s.niveles.findIndex(n => n.id === ses.nivel) + 1];
       return { resueltos: r.tickets.resueltos, total: r.tickets.total, primeraPromedio: r.primeraPromedio, acciones: r.ordenes.acciones, siguiente: siguiente ? siguiente.nombre : null, csat: r.csat,
-        calificaciones: ses.casos.map(c => { const d = s.casos.find(x => x.id === c.id) || {}; return { numero: c.numero, cliente: (d.cliente || {}).nombre || '', asunto: d.asunto || '', calificacion: csatDe(c), humor: humorTxt(c.humor) }; }) };
+        calificaciones: ses.casos.map(c => { const d = s.casos.find(x => x.id === c.id) || {}; return { numero: c.numero, cliente: (d.cliente || {}).nombre || '', asunto: d.asunto || '', calificacion: csatDe(c), humor: humorTxt(c.humor), abandonado: !!c.abandonado }; }) };
     }
   };
 
@@ -1090,12 +1363,12 @@
       for (const a of asps) for (const x of a.simulador.sesiones) {
         if (vencida(x)) terminarSim(x, s);
         const r = x.resumen || puntosSim(x, s);
-        filas.push({ id: a._id, nombre: a.nombre, celula: a.celula, sesion: x.id, nivel: (s.niveles.find(n => n.id === x.nivel) || {}).nombre || 'Realidad', inicio: x.inicio, fin: x.fin, estado: x.estado,
+        filas.push({ id: a._id, nombre: a.nombre, celula: a.celula, sesion: x.id, nivel: ((n => n ? (n.ruta === 'VIAJES' ? 'Viajes · ' : 'Orders · ') + n.nombre : 'Realidad')(s.niveles.find(n => n.id === x.nivel))), inicio: x.inicio, fin: x.fin, estado: x.estado,
           nota: r.nota, pendientes: r.pendientes, ortografia: r.ortografia || 0, resueltos: r.tickets.resueltos, total: r.tickets.total, primeraPromedio: r.primeraPromedio,
           panel: !!x.panel, csat: r.csat || null, malas: r.ordenes.malas, sinGestion: r.ordenes.sinGestion.length });
       }
       filas.sort((x, y) => String(y.inicio).localeCompare(String(x.inicio)));
-      return { filas, config: { activo: s.activo !== false, intentos: s.intentos, velocidad: s.velocidad, tickets: s.casos.length, ordenes: s.ordenes.length,
+      return { filas, config: { activo: s.activo !== false, ordenNiveles: s.ordenNiveles !== false, intentos: s.intentos, velocidad: s.velocidad, tickets: s.casos.length, ordenes: s.ordenes.length,
         niveles: s.niveles.map(n => ({ nombre: n.nombre, minutos: n.minutos, tickets: (n.casos || []).length })) } };
     },
     async simDetalle({ store, body }) {
@@ -1110,11 +1383,12 @@
         tickets: x.casos.map(c => {
           const d = s.casos.find(y => y.id === c.id) || { pasos: [], cliente: {} };
           return { id: c.id, numero: c.numero, asunto: d.asunto || c.id, cliente: (d.cliente || {}).nombre || '', fueraDeAlcance: !!d.fueraDeAlcance, llego: c.llegada != null && c.llegada <= ((Date.parse(x.fin || ahora()) - Date.parse(x.inicio)) / 1000),
-            motivoCorrecto: d.motivo || '', motivo: c.motivo, motivoOk: c.motivoOk, calificacion: csatDe(c), estadoTicket: SIM_ESTADOS_TICKET[c.estadoTicket] || 'Nuevo', estadoOk: c.estadoOk,
-            estadosCorrectos: (d.estados && d.estados.length ? d.estados : ['resuelto']).map(e => SIM_ESTADOS_TICKET[e]), cerrado: c.cerrado, primera: c.primera, humor: humorTxt(c.humor), chat: c.chat,
+            motivoCorrecto: d.motivo || '', motivo: c.motivo, motivoOk: c.motivoOk, calificacion: csatDe(c), estadoTicket: c.abandonado ? 'Abandonado por el cliente' : (SIM_ESTADOS_TICKET[c.estadoTicket] || 'Nuevo'), abandonado: !!c.abandonado, estadoOk: c.estadoOk,
+            estadosCorrectos: (d.estados && d.estados.length ? d.estados : ['resuelto']).map(e => SIM_ESTADOS_TICKET[e]), consulta: c.consulta ? { id: d.consulta.id, herramienta: d.consulta.herramienta === 'admin' ? 'Admin' : 'Panel Zupper', verifico: c.verifico } : null, cerrado: c.cerrado, primera: c.primera, humor: humorTxt(c.humor), chat: c.chat,
             respuestas: c.respuestas.map((r, k) => ({ k, paso: r.paso, t: r.t, v: r.v, otro: r.otro, seg: r.seg, ortografia: r.ortografia || [],
               opciones: ((d.pasos[r.paso] || {}).opciones || []).map(o => ({ t: o.t, v: o.v })) })) };
         }),
+        viajesAcciones: x.acciones.filter(a => a.herramienta === 'admin').map(a => ({ viaje: a.orden, min: a.min, v: a.v, nota: a.nota })),
         ordenes: !x.panel ? [] : s.ordenes.filter(o => (o.reglas || []).length || x.acciones.some(y => y.orden === o.id)).map(o => ({ id: o.id, comercio: o.comercio,
           acciones: x.acciones.filter(y => y.orden === o.id).map(y => ({ accion: SIM_ACCIONES[y.accion] || y.accion, min: y.min, v: y.v, nota: y.nota })),
           esperadas: (o.reglas || []).filter(r => r.esperada).map(r => ({ accion: SIM_ACCIONES[r.accion] || r.accion, nota: r.nota, hecha: x.acciones.some(y => y.orden === o.id && y.accion === r.accion && y.v === 'buena') })) })) };
@@ -1150,15 +1424,15 @@
     async simConfig({ store }) {
       const cfg = await cargarConfig(store);
       const s = configSim(cfg);
-      return { simulador: { formato: SIM_FORMATO, activo: s.activo !== false, intentos: s.intentos, velocidad: s.velocidad, niveles: s.niveles, motivos: s.motivos, casos: s.casos, ordenes: s.ordenes },
+      return { simulador: { formato: SIM_FORMATO, activo: s.activo !== false, ordenNiveles: s.ordenNiveles !== false, intentos: s.intentos, velocidad: s.velocidad, niveles: s.niveles, motivos: s.motivos, casos: s.casos, ordenes: s.ordenes, viajes: s.viajes },
         acciones: SIM_ACCIONES, estadosTicket: SIM_ESTADOS_TICKET, estComercio: SIM_EST_COMERCIO, estEntrega: SIM_EST_ENTREGA };
     },
     async simGuardarConfig({ store, body }) {
       const cfg = await cargarConfig(store);
       const s = configSim(cfg);
       const n = (v, min, max, def) => { const x = Math.round(Number(v)); return x >= min && x <= max ? x : def; };
-      const nuevo = { activo: body.activo !== false, intentos: n(body.intentos, 1, 10, s.intentos), velocidad: n(body.velocidad, 1, 30, s.velocidad),
-        niveles: s.niveles, motivos: s.motivos, casos: s.casos, ordenes: s.ordenes };
+      const nuevo = { activo: body.activo !== false, ordenNiveles: body.ordenNiveles !== false, intentos: n(body.intentos, 1, 10, s.intentos), velocidad: n(body.velocidad, 1, 30, s.velocidad),
+        niveles: s.niveles, motivos: s.motivos, casos: s.casos, ordenes: s.ordenes, viajes: s.viajes };
       if (body.archivo) {   // archivo .json exportado desde el panel y editado
         const f = body.archivo;
         if (f.formato !== SIM_FORMATO) throw err(400, 'El archivo no es del simulador de Ridery Academy.');
@@ -1182,7 +1456,8 @@
           const cs = (x.casos || []).filter(id => ids.has(id));
           if (!x.id || !cs.length) throw err(400, 'Nivel ' + (k + 1) + ': necesita id y al menos un caso que exista.');
           return { id: limpiar(x.id, 30), nombre: limpiar(x.nombre, 40) || x.id, descripcion: limpiar(x.descripcion, 300), minutos: n(x.minutos, 3, 120, 20), maxAbiertos: n(x.maxAbiertos, 0, 20, 0),
-            intervalo: n(x.intervalo, 0, 300, 8), panel: !!x.panel, estados: !!x.estados, casos: cs };
+            intervalo: n(x.intervalo, 0, 300, 8), abandono: n(x.abandono, 0, 3600, 180), ruta: x.ruta === 'VIAJES' ? 'VIAJES' : 'ORDERS',
+            herramientas: [].concat(x.herramientas || (x.panel ? ['zupper'] : [])).filter(h => h === 'zupper' || h === 'admin'), estados: !!x.estados, casos: cs };
         });
         if (!niveles.length) throw err(400, 'El archivo no trae niveles.');
         const ordenes = (f.ordenes || []).map((o, k) => {
@@ -1195,7 +1470,8 @@
           return { id: limpiar(o.id, 30), comercio: limpiar(o.comercio, 120), cliente: limpiar(o.cliente, 80), total: limpiar(o.total, 20), metodo: limpiar(o.metodo, 20) || 'movil', pago: o.pago === 'No pagada' ? 'No pagada' : 'Pagada',
             items: (o.items || []).map(t => limpiar(t, 120)), eventos: (o.eventos || []).map(e => Object.assign({ min: Number(e.min) || 0 }, est(e))), respuestas, reglas };
         });
-        Object.assign(nuevo, { motivos, casos, ordenes, niveles });
+        const viajes = Array.isArray(f.viajes) && f.viajes.length ? JSON.parse(JSON.stringify(f.viajes)).filter(v => v && v.id).slice(0, 300) : s.viajes;
+        Object.assign(nuevo, { motivos, casos, ordenes, niveles, viajes });
       }
       cfg.simulador = nuevo;
       await store.put('config', cfg);
@@ -1209,7 +1485,26 @@
       const asp = await requerirAspirante(store, user);
       const m = cfg.boost.mecanografia;
       return { mecanografia: { activa: m.activa, meta: m.meta, precisionMin: m.precisionMin, duraciones: m.duraciones, textos: m.textos,
-        resultados: (asp.boost && asp.boost.mecanografia) || { mejor: null, intentos: 0, historial: [] } } };
+        resultados: (asp.boost && asp.boost.mecanografia) || { mejor: null, intentos: 0, historial: [] } },
+        actividades: Object.entries(BOOST_ACTIVIDADES).filter(([k]) => cfg.boost.extra[k] !== false).map(([k, a]) => Object.assign({ id: k, resultados: (asp.boost && asp.boost[k]) || { mejor: null, intentos: 0, historial: [] } }, a)) };
+    },
+    // Resultado de una actividad de Boost (memoria, escritura, empatía): puntaje 0-100
+    async boostActividad({ store, user, body }) {
+      const cfg = await cargarConfig(store);
+      const asp = await requerirAspirante(store, user);
+      const id = String(body.actividad || '');
+      if (!BOOST_ACTIVIDADES[id] || cfg.boost.extra[id] === false) throw err(400, 'Actividad desconocida.');
+      const n = (v, max) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
+      const r = { fecha: ahora(), puntaje: n(body.puntaje, 100), aciertos: n(body.aciertos, 500), total: n(body.total, 500), segundos: n(body.segundos, 3600) };
+      asp.boost = asp.boost || {};
+      const b = asp.boost[id] || { mejor: null, intentos: 0, historial: [] };
+      b.intentos += 1;
+      const record = b.mejor == null || r.puntaje > b.mejor;
+      if (record) { b.mejor = r.puntaje; b.mejorFecha = r.fecha; }
+      b.historial = [r].concat(b.historial || []).slice(0, 10);
+      asp.boost[id] = b;
+      await store.put('aspirantes', asp);
+      return { resultados: b, record };
     },
     async boostGuardar({ store, user, body }) {
       await cargarConfig(store);
@@ -1247,7 +1542,7 @@
       const modulos = await store.find('modulos', {});
       const ruta = construirRuta(modulos, asp, cfg.reglas);
       const conv = await store.get('conversaciones', asp._id);
-      return { aspirante: vistaAspirante(asp), reglas: cfg.reglas, celulas: cfg.celulas, ruta, noLeidos: (conv && conv.noLeidosAsp) || 0, boostActivo: cfg.boost.mecanografia.activa };
+      return { aspirante: vistaAspirante(asp), reglas: cfg.reglas, celulas: cfg.celulas, ruta, noLeidos: (conv && conv.noLeidosAsp) || 0, boostActivo: cfg.boost.mecanografia.activa || Object.values(cfg.boost.extra).some(Boolean) };
     },
     async progreso({ store, user, body }) {
       const cfg = await cargarConfig(store);
@@ -1634,7 +1929,7 @@
     /* ----- Boost ----- */
     async boostConfig({ store }) {
       const cfg = await cargarConfig(store);
-      return { boost: cfg.boost };
+      return { boost: cfg.boost, actividades: BOOST_ACTIVIDADES };
     },
     async guardarBoost({ store, body }) {
       const cfg = await cargarConfig(store);
@@ -1645,6 +1940,7 @@
       if (!dur.length) throw err(400, 'Elige al menos una duración.');
       cfg.boost.mecanografia = { activa: m.activa !== false, meta: Math.max(5, Math.min(150, Math.round(Number(m.meta) || 40))),
         precisionMin: Math.max(50, Math.min(100, Math.round(Number(m.precisionMin) || 95))), duraciones: dur.sort((a, b) => a - b), textos };
+      if (body.extra && typeof body.extra === 'object') Object.keys(BOOST_ACTIVIDADES).forEach(k => { cfg.boost.extra[k] = body.extra[k] !== false; });
       await store.put('config', cfg);
       return { boost: cfg.boost };
     },
@@ -1748,6 +2044,6 @@
     return tabla[accion](ctx);
   }
 
-  const H = { EVAL_CAP_DEFAULT, preguntasCapacitacion, normalizarPreguntasCap, respuestasCapacitacion, COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, TIPOS, FORMATO_ARCHIVO, elegidas, seccionesVisibles, cumpleCondicion, ordenarPreguntas, evaluarPostulacion, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, iniciarSesion, vistaAspirante, estadoDe, PERFILES, ejecutar, SIM_ACCIONES, SIM_FORMATO, revisarOrtografia };
+  const H = { EVAL_CAP_DEFAULT, preguntasCapacitacion, normalizarPreguntasCap, respuestasCapacitacion, COMUN, CELULAS_DEFAULT, REGLAS_DEFAULT, TIPOS, FORMATO_ARCHIVO, elegidas, seccionesVisibles, cumpleCondicion, ordenarPreguntas, evaluarPostulacion, err, nuevoId, cargarConfig, calcularCelula, construirRuta, calificar, loginAspirante, loginAdmin, iniciarSesion, vistaAspirante, estadoDe, PERFILES, ejecutar, BOOST_ACTIVIDADES, SIM_ACCIONES, SIM_FORMATO, revisarOrtografia };
   if (typeof module !== 'undefined' && module.exports) module.exports = H; else root.ElxHandlers = H;
 })(typeof window !== 'undefined' ? window : globalThis);

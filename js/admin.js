@@ -72,6 +72,7 @@
       if (!TABS_ROL[A.yo.perfil].includes(A.tab)) A.tab = TABS_ROL[A.yo.perfil][0];
       shell(); abrir(A.tab);
       call('chats').then(x => pintarBadge(x.noLeidos), () => {});
+      A.boostNombres = { ruta: '¿Dónde lo busco?', pares: 'Pares de memoria', flash: 'Flash de procesos', redaccion: 'Redacción', minuto: 'Respuesta en 1 minuto', esto: '¿Esto o esto?', frases: 'Frases prohibidas', triage: 'Triage de prioridades', tono: 'Tono del cliente' };
     } catch (e) { manejar(e); }
   }
 
@@ -301,7 +302,8 @@
       (r.estado === 'aprobado' ? '<hr class="divider"><div class="stack-sm"><div class="row-between"><h3>Boost · Mecanografía</h3><button class="btn btn-secondary btn-sm" id="d-chat">' + icon('chat') + 'Abrir chat</button></div>' +
         (a.boost && a.boost.mecanografia && a.boost.mecanografia.intentos
           ? (() => { const b = a.boost.mecanografia, u = b.historial[0] || {}; return '<div class="cert-grid small"><div><span class="muted">Mejor marca</span><b class="num">' + b.mejor + ' PPM</b></div><div><span class="muted">Último intento</span><b class="num">' + u.ppm + ' PPM · ' + u.precision + '%</b></div><div><span class="muted">Intentos</span><b class="num">' + b.intentos + '</b></div><div><span class="muted">Última práctica</span><b>' + fecha(u.fecha) + '</b></div></div>'; })()
-          : '<p class="small muted">Todavía no ha practicado.</p>') + '</div>' : '') +
+          : '<p class="small muted">Todavía no ha practicado.</p>') +
+        (a.boost ? (() => { const otros = Object.entries(a.boost).filter(([k, v]) => k !== 'mecanografia' && v && v.intentos); return otros.length ? '<h3>Boost · Otras actividades</h3><div class="table-wrap"><table><thead><tr><th>Actividad</th><th>Mejor</th><th>Último</th><th>Intentos</th></tr></thead><tbody>' + otros.map(([k, v]) => '<tr><td>' + esc((A.boostNombres || {})[k] || k) + '</td><td class="num"><b>' + v.mejor + '%</b></td><td class="num">' + ((v.historial || [])[0] || {}).puntaje + '%</td><td class="num">' + v.intentos + '</td></tr>').join('') + '</tbody></table></div>' : ''; })() : '') + '</div>' : '') +
       (a.origen === 'manual' ? '<p class="small muted">Agregado a mano desde el panel' + (a.nota ? ': ' + esc(a.nota) : '') + '</p>' : '') +
       '<div class="modal-actions" style="justify-content:space-between">' + (puede('admin') ? '<button class="btn btn-danger btn-sm" id="d-del">' + icon('trash') + 'Eliminar registro</button>' : '<span></span>') + '<button class="btn btn-secondary" data-x>Cerrar</button></div></div>';
     const cerrar = () => { w.remove(); document.removeEventListener('keydown', k); };
@@ -897,7 +899,8 @@
   /* ============ Boost (configuración) ============ */
   async function tabBoost() {
     let b;
-    try { b = (await call('boostConfig')).boost; } catch (e) { return manejar(e); }
+    let acts = {};
+    try { const x = await call('boostConfig'); b = x.boost; acts = x.actividades || {}; } catch (e) { return manejar(e); }
     if (A.tab !== 'boost') return;   // el usuario ya cambió de sección
     const m = b.mecanografia;
     const DUR = [[30, '30 s'], [60, '1 min'], [120, '2 min'], [180, '3 min'], [300, '5 min']];
@@ -910,7 +913,9 @@
       '<div class="field"><label for="bo-txt">Textos de práctica</label><textarea class="textarea" id="bo-txt" style="min-height:260px">' + esc(m.textos.join('\n\n')) + '</textarea>' +
       '<span class="hint">Separa cada texto con una línea en blanco. Se mezclan al azar en cada intento. Usa frases reales de atención (sin datos de clientes).</span></div>' +
       '<div class="row"><button class="btn btn-primary" id="bo-save">Guardar</button><span class="small muted" id="bo-count"></span></div></div>' +
-      '<div class="notice info">Los resultados de cada aspirante (mejor marca, último intento e intentos) aparecen en su ficha, en Postulaciones → Aspirantes.</div>';
+      '<div class="card stack"><div class="stack-sm"><h2>Otras actividades</h2><span class="small muted">Memoria y navegación, escritura, empatía y criterio. El contenido de cada ejercicio está en js/boost-contenido.js. Se guardan con el botón Guardar de arriba.</span></div>' +
+      [...new Set(Object.values(acts).map(a => a.categoria))].map(cat => '<div class="stack-sm"><span class="label">' + esc(cat) + '</span><div class="row">' + Object.entries(acts).filter(([, a]) => a.categoria === cat).map(([k, a]) => '<label class="switch"><input type="checkbox" data-extra="' + k + '"' + ((b.extra || {})[k] !== false ? ' checked' : '') + '>' + esc(a.nombre) + '</label>').join('') + '</div></div>').join('') + '</div>' +
+      '<div class="notice info">Los resultados de cada aspirante (mejor marca e intentos de cada actividad) aparecen en su ficha, en Postulaciones → Aspirantes.</div>';
     const txt = main.querySelector('#bo-txt'), cnt = main.querySelector('#bo-count');
     const textos = () => txt.value.split(/\n\s*\n/).map(t => t.trim()).filter(Boolean);
     const contar = () => { cnt.textContent = textos().length + ' textos'; };
@@ -918,7 +923,8 @@
     main.querySelector('#bo-save').addEventListener('click', async () => {
       try {
         await call('guardarBoost', { mecanografia: { activa: main.querySelector('#bo-act').checked, meta: main.querySelector('#bo-meta').value, precisionMin: main.querySelector('#bo-prec').value,
-          duraciones: [...main.querySelectorAll('[data-dur]:checked')].map(x => Number(x.dataset.dur)), textos: textos() } });
+          duraciones: [...main.querySelectorAll('[data-dur]:checked')].map(x => Number(x.dataset.dur)), textos: textos() },
+          extra: Object.fromEntries([...main.querySelectorAll('[data-extra]')].map(x => [x.dataset.extra, x.checked])) });
         toast('Boost guardado');
       } catch (e) { manejar(e); }
     });
@@ -938,6 +944,7 @@
       '<div class="stats sim-stats"><div class="stat"><span class="small muted">Simulaciones</span><b>' + r.filas.length + '</b></div><div class="stat"><span class="small muted">Respuestas por revisar</span><b>' + porRevisar + '</b></div>' +
       '<div class="stat"><span class="small muted">Tickets · órdenes</span><b>' + c.tickets + ' · ' + c.ordenes + '</b></div><div class="stat"><span class="small muted">Niveles · intentos</span><b>' + c.niveles.length + ' · ' + c.intentos + '</b></div></div>' +
       (c.activo ? '' : '<div class="notice">El simulador está desactivado: los aspirantes no lo ven.</div>') +
+      '<p class="small muted">' + (c.ordenNiveles ? 'Niveles en orden: cada nivel se desbloquea al terminar el anterior.' : 'Niveles libres: el aspirante elige el nivel que quiera.') + '</p>' +
       (r.filas.length ? '<div class="table-wrap"><table><thead><tr><th>Aspirante</th><th>Nivel</th><th>Fecha</th><th>Nota</th><th>Clientes</th><th>Tickets</th><th>1.ª respuesta</th><th>Panel</th><th>Escritas</th></tr></thead><tbody>' +
         r.filas.map(f => '<tr class="clickable" data-id="' + esc(f.id) + '" data-s="' + esc(f.sesion) + '" tabindex="0"><td><b>' + esc(f.nombre) + '</b><div class="small muted">' + esc(nombreCel(f.celula)) + '</div></td><td class="small">' + fechaHora(f.inicio) + '</td>' +
           '<td>' + esc(f.nivel) + (f.estado === 'terminada' ? '' : ' <span class="pill pill-brand">En curso</span>') + '</td><td class="num"><b>' + f.nota + '%</b>' + (f.pendientes ? '<div class="small muted">provisional</div>' : '') + '</td>' +
@@ -966,13 +973,15 @@
       '<details><summary class="small">Ver las opciones de este turno</summary><ul class="sim-ops">' + r.opciones.map(o => '<li>' + (V_PILL[o.v] || '') + ' ' + esc(o.t) + '</li>').join('') + '</ul></details></div>';
     w.innerHTML = '<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="sm-t"><div class="row-between"><div><h2 id="sm-t">' + esc(d.aspirante.nombre) + '</h2><span class="small muted">Nivel ' + esc(s.nivel) + ' · ' + esc(nombreCel(d.aspirante.celula)) + ' · ' + fechaHora(s.inicio) + (s.estado === 'terminada' ? '' : ' · en curso') + '</span></div><button class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
       '<div class="cert-grid small"><div><span class="muted">Nota' + (rs.pendientes ? ' (provisional)' : '') + '</span><b class="num">' + rs.nota + '%</b></div><div><span class="muted">Tickets</span><b class="num">' + rs.tickets.pts + '/' + rs.tickets.max + ' pts · ' + rs.tickets.resueltos + '/' + rs.tickets.total + ' resueltos</b></div>' +
-      '<div><span class="muted">Clientes</span><b class="num">' + (rs.csat ? rs.csat.bien + ' bien · ' + rs.csat.mal + ' mal' : '—') + '</b></div>' + (s.panel ? '<div><span class="muted">Panel de órdenes</span><b class="num">' + rs.ordenes.pts + '/' + rs.ordenes.max + ' pts</b></div>' : '') + '<div><span class="muted">1.ª respuesta promedio</span><b class="num">' + mmss(rs.primeraPromedio) + '</b></div></div>' +
+      (rs.verificacion && rs.verificacion.total ? '<div><span class="muted">Revisó antes de responder</span><b class="num">' + rs.verificacion.hechas + '/' + rs.verificacion.total + ' casos</b></div>' : '') + '<div><span class="muted">Clientes</span><b class="num">' + (rs.csat ? rs.csat.bien + ' bien · ' + rs.csat.mal + ' mal' : '—') + '</b></div>' + (s.panel ? '<div><span class="muted">Panel de órdenes</span><b class="num">' + rs.ordenes.pts + '/' + rs.ordenes.max + ' pts</b></div>' : '') + '<div><span class="muted">1.ª respuesta promedio</span><b class="num">' + mmss(rs.primeraPromedio) + '</b></div></div>' +
       '<h3>Tickets</h3>' + d.tickets.map(t => '<details class="sim-ticket"' + (t.respuestas.some(r => r.v === 'pendiente') ? ' open' : '') + '><summary><span><b>#' + t.numero + ' · ' + esc(t.asunto) + '</b><span class="small muted"> — ' + esc(t.cliente) + '</span></span>' +
         '<span class="row" style="gap:6px">' + (t.fueraDeAlcance ? '<span class="pill">No es de Orders</span>' : '') + (t.calificacion === 'Bien' ? '<span class="pill pill-ok">Cliente: Bien</span>' : t.calificacion === 'Mal' ? '<span class="pill pill-bad">Cliente: Mal</span>' : '<span class="pill">Sin atender</span>') +
         (t.motivo ? (t.motivoOk ? '<span class="pill pill-ok">Motivo correcto</span>' : '<span class="pill pill-bad">Motivo errado</span>') : '') + '</span></summary>' +
         '<div class="stack-sm" style="padding:10px 0"><p class="small">Motivo elegido: <b>' + esc(t.motivo || '—') + '</b> · correcto: <b>' + esc(t.motivoCorrecto) + '</b> · estatus: <b>' + esc(t.estadoTicket) + '</b>' + (s.conEstados ? ' (correcto: ' + esc(t.estadosCorrectos.join(' o ')) + ')' : '') + ' · 1.ª respuesta: <b>' + mmss(t.primera) + '</b> · humor final del cliente: <b>' + esc(t.humor) + '</b></p>' +
+        (t.consulta ? '<p class="small">' + (t.consulta.verifico ? '✅ Revisó' : t.consulta.verifico === false ? '❌ No revisó' : '— No llegó a revisar') + ' ' + (t.consulta.herramienta === 'Admin' ? 'el viaje' : 'la orden') + ' <b>' + esc(t.consulta.id) + '</b> en el ' + esc(t.consulta.herramienta) + ' antes de responder.</p>' : '') +
         (t.respuestas.length ? t.respuestas.map(r => turno(t, r)).join('') : '<p class="small muted">No respondió este ticket.</p>') +
         '<details><summary class="small">Ver la conversación completa</summary><div class="sim-chat">' + t.chat.map(m => '<div class="' + (m.de === 'cliente' ? 'c' : 'a') + '"><b>' + (m.de === 'cliente' ? esc(t.cliente.split(' ')[0]) : 'Aspirante') + ':</b> ' + esc(m.t) + '</div>').join('') + '</div></details></div></details>').join('') +
+      (d.viajesAcciones && d.viajesAcciones.length ? '<h3>Acciones en el Admin</h3><ul class="small">' + d.viajesAcciones.map(x => '<li>' + (x.v ? V_PILL[x.v] : '') + ' Canceló el viaje <b>' + esc(x.viaje) + '</b> · ' + esc(x.nota || '') + '</li>').join('') + '</ul>' : '') +
       (!s.panel ? '' : '<h3>Panel de órdenes</h3>' + (d.ordenes.length ? '<div class="table-wrap"><table><thead><tr><th>Orden</th><th>Lo que hizo</th><th>Lo esperado</th></tr></thead><tbody>' + d.ordenes.map(o => '<tr><td><b class="num">' + esc(o.id) + '</b><div class="small muted">' + esc(o.comercio) + '</div></td>' +
         '<td class="small">' + (o.acciones.length ? o.acciones.map(a => '<div>' + (a.v ? V_PILL[a.v] : '<span class="pill">Sin puntaje</span>') + ' ' + esc(a.accion) + ' <span class="muted">· min ' + Math.round(a.min) + '</span><div class="muted">' + esc(a.nota || '') + '</div></div>').join('') : '<span class="muted">Nada</span>') + '</td>' +
         '<td class="small">' + (o.esperadas.length ? o.esperadas.map(x => '<div>' + (x.hecha ? '✅' : '❌') + ' ' + esc(x.accion) + '<div class="muted">' + esc(x.nota) + '</div></div>').join('') : '<span class="muted">Ninguna (orden de ticket o en tiempo)</span>') + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="small muted">Sin órdenes con reglas.</p>') +
@@ -1004,7 +1013,8 @@
     w.innerHTML = '<form class="modal" role="dialog" aria-modal="true" novalidate><div class="row-between"><h2>Configurar simulador</h2><button type="button" class="icon-btn" data-x aria-label="Cerrar">' + icon('x') + '</button></div>' +
       '<div class="form-error" role="alert" hidden></div>' +
       '<label class="switch"><input type="checkbox" id="sc-act"' + (c.activo ? ' checked' : '') + '>Visible para los aspirantes</label>' +
-      '<div class="field"><label for="sc-int">Intentos por nivel</label><input class="input num" type="number" id="sc-int" value="' + c.intentos + '"></div>' +
+      '<div class="field"><label class="switch"><input type="checkbox" id="sc-orden"' + (c.ordenNiveles ? ' checked' : '') + '>Niveles en orden</label><span class="hint">Encendido: cada nivel se desbloquea al terminar el anterior. Apagado: el aspirante elige el nivel que quiera desde el principio.</span></div>' +
+      '<div class="field"><label for="sc-int">Intentos por nivel</label><input class="input num" type="number" id="sc-int" value="' + c.intentos + '"><span class="hint">Veces que cada aspirante puede hacer cada nivel. Para darle uno extra a una sola persona, usa «Darle otro intento» en su resultado.</span></div>' +
       '<div class="field"><span class="label">Niveles</span><ul class="small muted" style="margin:0;padding-left:18px">' + c.niveles.map(n => '<li><b>' + esc(n.nombre) + '</b>: ' + n.casos.length + ' tickets, ' + n.minutos + ' min' + (n.maxAbiertos ? ', máx. ' + n.maxAbiertos + ' a la vez' : ', llegan por tiempo') + (n.panel ? ', con panel' : '') + (n.estados ? ', con estatus' : '') + '</li>').join('') + '</ul><span class="hint">Se editan en el archivo de casos (niveles).</span></div>' +
       '<div class="field"><label for="sc-vel">Velocidad del reloj del panel</label><input class="input num" type="number" id="sc-vel" value="' + c.velocidad + '"><span class="hint">Minutos del panel por cada minuto real. Con 10, los «10 minutos sin iniciar» pasan en 1 minuto real.</span></div>' +
       '<div class="field"><span class="label">Casos y órdenes</span><p class="small muted">' + c.casos.length + ' tickets · ' + c.ordenes.length + ' órdenes · ' + c.niveles.length + ' niveles · ' + c.motivos.length + ' motivos de contacto. Para editarlos, exporta el archivo, cámbialo y vuelve a importarlo.</p>' +
@@ -1029,7 +1039,7 @@
       e.preventDefault();
       const er = w.querySelector('.form-error');
       try {
-        const x = await call('simGuardarConfig', { activo: w.querySelector('#sc-act').checked, intentos: w.querySelector('#sc-int').value, velocidad: w.querySelector('#sc-vel').value, archivo });
+        const x = await call('simGuardarConfig', { activo: w.querySelector('#sc-act').checked, ordenNiveles: w.querySelector('#sc-orden').checked, intentos: w.querySelector('#sc-int').value, velocidad: w.querySelector('#sc-vel').value, archivo });
         toast('Simulador guardado: ' + x.tickets + ' tickets, ' + x.ordenes + ' órdenes y ' + x.niveles + ' niveles'); cerrar(); tabSimulador();
       } catch (x) { er.hidden = false; er.textContent = x.message; }
     });

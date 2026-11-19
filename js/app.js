@@ -741,14 +741,25 @@
     try { d = await call('boost'); } catch (e) { return manejar(e); }
     S.boost = d;
     const m = d.mecanografia, r = m.resultados || {};
-    el.innerHTML = '<div class="stack-sm"><span class="eyebrow">Boost</span><h1>Entrena tus habilidades</h1><p class="muted" style="max-width:62ch">Actividades cortas para mejorar lo que más usa un agente de CX en su día a día. Practica cuando quieras: no afecta tu ruta de formación, pero tu equipo ve tu mejor resultado.</p></div>' +
-      (m.activa ? '<div class="boost-grid"><article class="boost-card"><div class="row-between"><span class="boost-ic">' + icon('keyboard') + '</span>' +
+    const meca = '<article class="boost-card"><div class="row-between"><span class="boost-ic">' + icon('keyboard') + '</span>' +
         (r.mejor != null ? (r.mejor >= m.meta ? '<span class="pill pill-ok">' + icon('check') + 'Meta alcanzada</span>' : '<span class="pill pill-warn">Meta: ' + m.meta + ' PPM</span>') : '<span class="pill">Sin intentos</span>') + '</div>' +
         '<div class="stack-sm" style="gap:4px"><h2>Mecanografía</h2><p class="muted small">Escribe respuestas reales de atención al cliente contra el reloj. Mide tu velocidad (palabras por minuto) y tu precisión.</p></div>' +
         '<div class="boost-stats"><div><span class="small muted">Mejor</span><b class="num">' + (r.mejor != null ? r.mejor : '—') + '</b><span class="small muted">PPM</span></div><div><span class="small muted">Meta</span><b class="num">' + m.meta + '</b><span class="small muted">PPM</span></div><div><span class="small muted">Intentos</span><b class="num">' + (r.intentos || 0) + '</b></div></div>' +
-        '<button class="btn btn-primary" id="b-meca">' + icon('timer') + 'Practicar</button></article></div>'
-        : '<div class="card empty">' + icon('bolt') + '<p>Todavía no hay actividades activas. Vuelve pronto.</p></div>');
+        '<button class="btn btn-primary" id="b-meca">' + icon('timer') + 'Practicar</button></article>';
+    el.innerHTML = '<div class="stack-sm"><span class="eyebrow">Boost</span><h1>Entrena tus habilidades</h1><p class="muted" style="max-width:62ch">Actividades cortas para mejorar lo que más usa un agente de CX en su día a día. Practica cuando quieras: no afecta tu ruta de formación, pero tu equipo ve tu mejor resultado.</p></div>' +
+      (m.activa && !(d.actividades || []).some(x => x.categoria === 'Escritura') ? '<div class="boost-grid">' + meca + '</div>' : '') +
+      (window.ElxBoost && d.actividades && d.actividades.length ? [...new Set(d.actividades.map(x => x.categoria))].map(cat => '<section class="stack-sm"><h2>' + esc(cat) + '</h2><div class="boost-grid">' +
+        (cat === 'Escritura' && m.activa ? meca : '') + d.actividades.filter(x => x.categoria === cat).map(window.ElxBoost.tarjeta).join('') + '</div></section>').join('') : '') +
+      (!m.activa && !(d.actividades || []).length ? '<div class="card empty">' + icon('bolt') + '<p>Todavía no hay actividades activas. Vuelve pronto.</p></div>' : '');
     const b = el.querySelector('#b-meca'); if (b) b.addEventListener('click', () => verMecanografia());
+    el.querySelectorAll('[data-boost]').forEach(x => x.addEventListener('click', () => {
+      const act = d.actividades.find(a => a.id === x.dataset.boost);
+      limpiar(); S.seccion = 'boost';
+      const cont = pagina('');
+      limpiezas.push(window.ElxBoost.salir);
+      window.ElxBoost.jugar(act, { el: cont, call, volver: verBoost });
+      window.scrollTo(0, 0);
+    }));
   }
 
   function textoPractica(textos, segundos) {
@@ -919,7 +930,7 @@
     try { r = await call('simEstado'); } catch (e) { card.hidden = true; return; }
     if (!card.isConnected) return;
     const curso = r.niveles.find(n => n.enCurso);
-    const nivelHTML = (n, k) => {
+    const nivelHTML = (n) => { const k = r.niveles.filter(x => x.ruta === n.ruta).indexOf(n);
       let pie;
       if (n.enCurso) pie = '<button class="btn btn-primary btn-sm" data-nivel="' + esc(n.id) + '">' + icon('play') + 'Continuar</button>';
       else if (n.bloqueado) pie = '<span class="pill">' + icon('lock') + 'Termina el nivel anterior</span>';
@@ -927,12 +938,12 @@
       else if (n.quedan) pie = '<button class="btn ' + (n.terminado ? 'btn-secondary' : 'btn-primary') + ' btn-sm" data-nivel="' + esc(n.id) + '">' + icon('play') + (n.terminado ? 'Repetir' : 'Empezar') + '</button><span class="small muted">' + (n.quedan === 1 ? '1 intento' : n.quedan + ' intentos') + '</span>';
       else pie = '<span class="pill pill-ok">' + icon('check') + 'Enviado</span>';
       return '<article class="sim-nivel' + (n.bloqueado ? ' bloqueado' : '') + '"><div class="row-between"><span class="eyebrow">Nivel ' + (k + 1) + '</span>' + (n.terminado ? '<span class="pill pill-ok">' + icon('check') + 'Hecho</span>' : '') + '</div>' +
-        '<h3>' + esc(n.nombre) + '</h3><p class="small muted">' + esc(n.descripcion) + '</p><p class="small"><b>' + n.tickets + '</b> tickets · <b>' + n.minutos + '</b> min' + (n.panel ? ' · Panel de órdenes' : '') + '</p><div class="sim-nivel-pie">' + pie + '</div></article>';
+        '<h3>' + esc(n.nombre) + '</h3><p class="small muted">' + esc(n.descripcion) + '</p><p class="small"><b>' + n.tickets + '</b> tickets · <b>' + n.minutos + '</b> min' + (n.panel ? ' · Panel Zupper' : '') + (n.admin ? ' · Admin' : '') + '</p><div class="sim-nivel-pie">' + pie + '</div></article>';
     };
     const ult = r.ultimas[0];
     card.innerHTML = '<div class="sim-card-in"><span class="boost-ic">' + icon('chat') + '</span><div class="stack-sm" style="gap:6px;flex:1;min-width:0"><h2>Simulador de tickets</h2>' +
-      '<p class="muted small">Una bandeja igual a la que usarás en el trabajo: tickets por WhatsApp con sonido, motivo de contacto, estatus del ticket y el Panel Zupper. Avanza por niveles. Usa computadora y activa el sonido.</p></div></div>' +
-      (r.activo ? '<div class="sim-niveles">' + r.niveles.map(nivelHTML).join('') + '</div>' : '<span class="pill">No disponible por ahora</span>') +
+      '<p class="muted small">Una bandeja igual a la que usarás en el trabajo: tickets por WhatsApp con sonido, motivo de contacto y estatus del ticket, junto al Panel Zupper (Orders) o al Admin (Viajes). Cada ruta avanza por niveles. Usa computadora y activa el sonido.</p></div></div>' +
+      (r.activo ? [...new Set(r.niveles.map(n => n.ruta))].map(ruta => { const ns = r.niveles.filter(n => n.ruta === ruta); return '<div class="sim-ruta"><h3>' + esc(ns[0].rutaNombre || ruta) + '</h3><div class="sim-niveles">' + ns.map(nivelHTML).join('') + '</div></div>'; }).join('') : '<span class="pill">No disponible por ahora</span>') +
       (ult ? '<p class="small muted">Último intento (' + esc(ult.nivel) + '): ' + Elx.fechaHora(ult.fecha) + ' · ' + ult.resueltos + '/' + ult.total + ' tickets atendidos. Tu resultado lo revisa el equipo.</p>' : '');
     card.querySelectorAll('[data-nivel]').forEach(go => go.addEventListener('click', async () => {
       const n = r.niveles.find(x => x.id === go.dataset.nivel);

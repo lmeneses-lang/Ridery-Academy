@@ -519,6 +519,39 @@ tr.clickable:hover { background: var(--surface-2); }
 .sim-nivel.bloqueado { opacity: .6; }
 .sim-nivel-pie { margin-top: auto; padding-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .sim-orto { margin: 0; padding-left: 18px; color: var(--warn); font-size: .85rem; }
+.sim-ruta { display: flex; flex-direction: column; gap: 10px; } .sim-ruta > h3 { font-size: 1rem; }
+
+/* ---------- Boost: memoria, escritura y empatía (js/boost.js) ---------- */
+.bx { gap: 14px; }
+.bx-q p, .bx-cli { font-size: 1.05rem; }
+.bx-cli { background: var(--surface-2); border-left: 4px solid var(--brand); padding: 10px 14px; border-radius: var(--r-sm); }
+.bx-ops { display: grid; gap: 8px; }
+.bx-op { text-align: left; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); color: var(--fg); font: 500 .95rem var(--font-body); cursor: pointer; }
+.bx-op:hover:not(:disabled) { border-color: var(--brand); background: var(--brand-soft); }
+.bx-op.bien { border-color: var(--ok); background: var(--ok-soft); } .bx-op.mal { border-color: var(--bad); background: var(--bad-soft); }
+.bx-por { background: var(--surface-2); border-radius: var(--r-sm); padding: 12px 14px; font-size: .92rem; }
+.bx-por ul { margin: 6px 0 0; padding-left: 18px; }
+.bx-fin { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0; }
+.bx-fin b { font: 400 3rem/1 var(--font-num); color: var(--brand-text); }
+.bx-mem { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.bx-carta { aspect-ratio: 4 / 3; border: 0; border-radius: var(--r-sm); background: var(--navy); color: transparent; cursor: pointer; padding: 8px; font: 600 .82rem/1.25 var(--font-body); transition: background .2s; }
+.bx-carta::before { content: '?'; color: var(--verde); font-size: 1.6rem; }
+.bx-carta span { display: none; }
+.bx-carta.abierta { background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); }
+.bx-carta.abierta::before { content: none; } .bx-carta.abierta span { display: block; }
+.bx-carta.hecha { background: var(--ok-soft); border-color: var(--ok); cursor: default; }
+.bx-orden, .bx-sol { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.bx-orden button { width: 100%; text-align: left; padding: 9px 12px; border: 1px solid var(--brand); background: var(--brand-soft); border-radius: var(--r-sm); color: var(--fg); font: 500 .92rem var(--font-body); cursor: pointer; }
+.bx-sol li { padding: 6px 10px; border-radius: 6px; } .bx-sol li.bien { background: var(--ok-soft); } .bx-sol li.mal { background: var(--bad-soft); }
+.bx-mal { background: var(--bad-soft); color: var(--fg); padding: 10px 14px; border-radius: var(--r-sm); font-family: var(--font-body); white-space: pre-wrap; }
+.bx-caso { background: var(--info-soft); padding: 12px 14px; border-radius: var(--r-sm); }
+.bx-check { list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.bx-check li { padding: 4px 10px; border-radius: 999px; font-size: .85rem; } .bx-check li.bien { background: var(--ok-soft); color: var(--ok); } .bx-check li.mal { background: var(--bad-soft); color: var(--bad); }
+.bx-check li.bien::before { content: '✓ '; } .bx-check li.mal::before { content: '✗ '; }
+.bx-frases { display: flex; flex-wrap: wrap; gap: 8px; }
+.bx-frase { padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--fg); font: 500 .9rem var(--font-body); cursor: pointer; }
+.bx-frase.marcada { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+span.bx-frase { cursor: default; } span.bx-frase.bien { background: var(--ok-soft); border-color: var(--ok); } span.bx-frase.mal { background: var(--bad-soft); border-color: var(--bad); }
 
 /* ---------- Panel dentro de AdminCX (admin.html?embebido=1) ----------
    AdminCX ya tiene su barra arriba: aquí se esconde la propia. */

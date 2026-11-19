@@ -31,6 +31,7 @@
     moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>', play: '<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/>', pause: '<path d="M9 6v12M15 6v12"/>',
     phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>', bank: '<path d="M3 10h18L12 4zM5 10v8M9 10v8M15 10v8M19 10v8M3 20h18"/>', card: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h3"/>',
     android: '<path d="M7 9h10v8a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1zM7 8a5 5 0 0 1 10 0zM5 10v5M19 10v5M10 18v3M14 18v3"/>', tagz: '<path d="M3 12V4h8l9 9-8 8z"/><circle cx="7.5" cy="8.5" r="1"/>',
+    car: '<path d="M5 13l1.5-5h11L19 13M4 13h16v5H4zM7 18v2M17 18v2"/>',
     img: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>'
   };
   const ic = (n, c) => '<svg class="zi ' + (c || '') + '" viewBox="0 0 24 24" aria-hidden="true">' + (P[n] || '') + '</svg>';
@@ -87,8 +88,10 @@
   const ticket = id => Z.ses.tickets.find(t => t.id === id);
   const orden = id => Z.ses.ordenes.find(o => o.id === id);
   const visibles = () => Z.ses.tickets.filter(t => Z.llegados.has(t.id));
-  const ESTADO_COLOR = { nuevo: 'naranja', abierto: 'rojo', pendiente: 'azul', 'sin-respuesta': 'azul', resuelto: 'gris' };
-  const estadoTxt = t => t.estadoTicket === 'nuevo' ? 'Nuevo' : (Z.ses.estadosTicket[t.estadoTicket] || 'Abierto');
+  const ESTADO_COLOR = { nuevo: 'naranja', abierto: 'rojo', pendiente: 'azul', 'sin-respuesta': 'azul', resuelto: 'gris', abandonado: 'gris' };
+  const estadoTxt = t => t.estadoTicket === 'nuevo' ? 'Nuevo' : t.estadoTicket === 'abandonado' ? 'Abandonado' : (Z.ses.estadosTicket[t.estadoTicket] || 'Abierto');
+  // Segundos que le quedan al cliente antes de abandonar (null si no está esperando respuesta)
+  const restanteAbandono = t => (!Z.ses.abandono || t.cerrado || Z.escribiendo[t.id] || !t.esperaCliente || !Z.llegados.has(t.id)) ? null : Z.ses.abandono - (segSesion() - (t.ultimoCliente != null ? t.ultimoCliente : t.llegada));
 
   function estadoOrden(o, min) {
     const r = { c: 'No iniciada', e: 'Aceptada', rep: '', rol: '' };
@@ -114,6 +117,8 @@
     Z.call = opts.call; Z.alSalir = opts.alSalir;
     const r = await Z.call('simIniciar', { nivel: opts.nivel });
     Z.ses = r.sesion; Z.delta = Date.parse(Z.ses.ahora) - Date.now();
+    if (window.ElxSimAdmin) window.ElxSimAdmin.reiniciar();
+    Z.admin = (Z.ses.herramientas || []).includes('admin'); Z.app = 'zendesk';
     Object.assign(Z, { tab: 'home', abiertos: [], borrador: {}, seleccion: {}, motivo: {}, estadoSel: {}, escribiendo: {}, nudge: {}, orden: null, menu: null, esperaDesde: {}, terminando: false, vista: 'nuevos' });
     try { Z.oscuro = localStorage.getItem('elx_zd_oscuro') === '1'; } catch (e) {}
     Z.llegados = new Set(Z.ses.tickets.filter(t => t.llegada != null && t.llegada <= segSesion()).map(t => t.id));
@@ -151,16 +156,44 @@
         if (Z.tab === t.id) pintarCuerpo(); else pintarTabs();
       }
     });
+    let abandono = false;
+    Z.ses.tickets.forEach(t => {
+      const q = restanteAbandono(t);
+      if (q != null && q < -1) {
+        t.cerrado = true; t.abandonado = true; t.estadoTicket = 'abandonado'; t.opciones = []; t.nivel = Math.min(t.nivel, 1); t.humor = t.nivel ? 'Muy negativo' : 'Crítico';
+        t.chat.push({ de: 'sistema', t: 'El cliente abandonó la conversación por falta de respuesta.' });
+        abandono = true; sonar('mensaje'); toast(t.cliente.nombre + ' abandonó la conversación por falta de respuesta', 'bad');
+        if (Z.tab === t.id) pintarCuerpo();
+      }
+    });
+    if (abandono) { pintarTabs(); if (Z.tab === 'home' || Z.tab === 'vistas') pintarCuerpo(); }
+    if (abandono || (Math.floor(s) % 15 === 0)) sincronizar();
     const rest = Z.ses.minutos * 60 - s;
     const rel = Z.root.querySelector('[data-reloj]');
     if (rel) { rel.textContent = mmss(rest); rel.parentElement.classList.toggle('poco', rest < 120); }
     if (rest <= 0) return terminar(true);
-    if (Z.tab === 'panel') actualizarPanel();
+    if (Z.app === 'zupper') actualizarPanel();
+    if (Math.floor(s) % 3 === 0) pintarNavegador();
+    if (Z.app === 'admin' && Math.floor(s) % 10 === 0 && !Z.root.querySelector('.adm :focus, .amenu') && !Z.root.querySelector('.adm-volver')) pintarApp();
+    const ah = Z.root.querySelector('.adm-hora'); if (ah) ah.textContent = horaPanel(minPanel());
     else actualizarEspera();
   }
   function avisarTitulo() {
     clearInterval(Z.flash); let on = false, n = 0;
     Z.flash = setInterval(() => { document.title = (on = !on) ? '(1) Nuevo ticket' : Z.titulo; if (++n > 9 || !document.hidden) { clearInterval(Z.flash); document.title = Z.titulo; } }, 900);
+  }
+
+  async function sincronizar() {
+    if (!Z.ses || Z.terminando || Z.sincronizando) return;
+    Z.sincronizando = true;
+    try {
+      const r = await Z.call('simSync', { sesion: Z.ses.id });
+      Object.entries(r.llegadas || {}).forEach(([id, ll]) => { const x = ticket(id); if (x && x.llegada == null && ll != null) { x.llegada = ll; x.ultimoCliente = ll; } });
+      let cambio = false;
+      (r.abandonados || []).forEach(id => { const x = ticket(id); if (x && !x.abandonado) { x.cerrado = true; x.abandonado = true; x.estadoTicket = 'abandonado'; x.opciones = []; x.nivel = Math.min(x.nivel, 1); x.humor = x.nivel ? 'Muy negativo' : 'Crítico'; x.chat.push({ de: 'sistema', t: 'El cliente abandonó la conversación por falta de respuesta.' }); cambio = true; } });
+      if (cambio && Z.root) { pintarTabs(); pintarCuerpo(); }
+    } catch (e) { if (e.status === 409 && /tiempo/.test(e.message)) terminar(true); }
+    Z.sincronizando = false;
   }
 
   /* ---------- Pintado general ---------- */
@@ -170,14 +203,14 @@
       '<span class="zd-reloj">' + ic('clock') + 'Tiempo restante <b data-reloj>' + mmss(Z.ses.minutos * 60 - segSesion()) + '</b></span>' +
       '<button class="zd-link" data-salir title="El tiempo sigue corriendo">Salir</button><button class="zd-link" data-sonido>' + (Z.silencio ? 'Activar sonido' : 'Silenciar') + '</button>' +
       '<button class="zd-btn zd-btn-sm" data-terminar>Terminar simulación</button></div>' +
+      '<div class="cr" id="cr"></div><div class="zd-zen" id="zd-zen">' +
       '<header class="zd-top"><span class="zd-logo" aria-hidden="true">RA</span><button class="zd-workspace">Soporte ' + ic('chev') + '</button><nav class="zd-tabs" id="zd-tabs" aria-label="Pestañas"></nav>' +
       '<div class="zd-top-ic">' + ic('search') + '<span class="zd-sep"></span>' + ic('bell') + '<span class="zd-sep"></span>' + ic('grid') +
       '<button class="zd-icbtn" data-tema title="Tema oscuro o claro" aria-label="Cambiar tema">' + ic('moon') + '</button><span class="zd-avatar">' + ic('user') + '</span></div></header>' +
       '<div class="zd-wrap"><nav class="zd-rail" aria-label="Navegación"><button data-ir="home" title="Inicio">' + ic('home') + '</button><button data-ir="vistas" title="Vistas">' + ic('inbox') + '</button>' +
       '<button title="Clientes" disabled>' + ic('users') + '</button><button title="Organizaciones" disabled>' + ic('org') + '</button>' +
-      (Z.ses.panel ? '<button data-ir="panel" title="Panel Zupper">' + ic('store') + '</button>' : '') +
       '<button title="Reportes" disabled>' + ic('chart') + '</button><span class="zd-rail-sep"></span><button title="Base de conocimientos" disabled>' + ic('book') + '</button></nav>' +
-      '<main class="zd-main" id="zd-main"></main></div>';
+      '<main class="zd-main" id="zd-main"></main></div></div><div class="zd-app" id="zd-app" hidden></div>';
     Z.root.querySelector('[data-terminar]').addEventListener('click', () => terminar(false));
     Z.root.querySelector('[data-salir]').addEventListener('click', async () => {
       if (!await confirmar({ titulo: '¿Salir del simulador?', texto: 'El tiempo sigue corriendo. Puedes volver a entrar desde Assessment para continuar donde quedaste.', ok: 'Salir', cancelar: 'Seguir' })) return;
@@ -186,17 +219,16 @@
     Z.root.querySelector('[data-sonido]').addEventListener('click', e => { Z.silencio = !Z.silencio; e.target.textContent = Z.silencio ? 'Activar sonido' : 'Silenciar'; });
     Z.root.querySelector('[data-tema]').addEventListener('click', () => { Z.oscuro = !Z.oscuro; Z.root.classList.toggle('oscuro', Z.oscuro); try { localStorage.setItem('elx_zd_oscuro', Z.oscuro ? '1' : '0'); } catch (e) {} });
     Z.root.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => ir(b.dataset.ir)));
-    pintarTabs(); pintarCuerpo();
+    pintarTabs(); pintarCuerpo(); pintarNavegador();
   }
-  function ir(tab) { Z.tab = tab; Z.menu = null; pintarTabs(); pintarCuerpo(); }
+  function ir(tab) { Z.tab = tab; Z.menu = null; pintarTabs(); pintarCuerpo(); pintarNavegador(); }
   const pendienteDe = t => !t.cerrado && t.chat.length && t.chat[t.chat.length - 1].de === 'cliente';
   function pintarTabs() {
     const nav = Z.root.querySelector('#zd-tabs');
     const tab = (id, html, act, cerrable, alerta) => '<div class="zd-tab' + (act ? ' act' : '') + '" data-tab="' + esc(id) + '" role="tab" tabindex="0" aria-selected="' + act + '">' + html +
       (alerta ? '<span class="zd-tab-alerta" aria-label="Mensaje sin responder">!</span>' : '') +
       (cerrable ? '<button class="zd-tab-x" data-cerrar="' + esc(id) + '" aria-label="Cerrar pestaña">' + ic('x') + '</button>' : '') + '</div>';
-    nav.innerHTML = (Z.ses.panel ? tab('panel', ic('store') + '<span class="zd-tab-t"><b>PANEL ZUPPER</b><small>Órdenes · ' + horaPanel(minPanel()) + '</small></span>', Z.tab === 'panel') : '') +
-      Z.abiertos.map(id => { const t = ticket(id); return tab(id, '<span class="zd-tab-ic">' + ic('wa') + '</span><span class="zd-tab-t"><b>' + esc(t.cliente.nombre.split(' ')[0]) + '</b><small>' + esc((t.chat.filter(m => m.de === 'cliente').slice(-1)[0] || {}).t || t.asunto).replace(/^\[foto\].*/, '📷 Foto') + '</small></span>', Z.tab === id, true, Z.tab !== id && pendienteDe(t)); }).join('') +
+    nav.innerHTML = Z.abiertos.map(id => { const t = ticket(id); return tab(id, '<span class="zd-tab-ic">' + ic('wa') + '</span><span class="zd-tab-t"><b>' + esc(t.cliente.nombre.split(' ')[0]) + '</b><small>' + esc((t.chat.filter(m => m.de === 'cliente').slice(-1)[0] || {}).t || t.asunto).replace(/^\[foto\].*/, '📷 Foto') + '</small></span>', Z.tab === id, true, Z.tab !== id && pendienteDe(t)); }).join('') +
       '<button class="zd-tab-mas" aria-label="Nueva pestaña" disabled>' + ic('plus') + '</button>';
     nav.querySelectorAll('[data-tab]').forEach(b => {
       b.addEventListener('click', e => { if (!e.target.closest('[data-cerrar]')) ir(b.dataset.tab); });
@@ -215,7 +247,6 @@
     Z.root.querySelectorAll('.zd-rail [data-ir]').forEach(b => b.classList.toggle('act', b.dataset.ir === Z.tab));
     if (Z.tab === 'home') return vistaInicio(main);
     if (Z.tab === 'vistas') return vistaVistas(main);
-    if (Z.tab === 'panel') return vistaPanel(main);
     const t = ticket(Z.tab); if (!t) return ir('home');
     vistaTicket(main, t);
   }
@@ -249,20 +280,25 @@
   /* ---------- Vistas (Nuevos | Sin Asignar, Activos | En Gestión…) ---------- */
   const VISTAS = [['nuevos', 'Nuevos | Sin Asignar', t => t.estadoTicket === 'nuevo'], ['activos', 'Activos | En Gestión', t => t.estadoTicket === 'abierto'],
     ['resp-cliente', 'Pendiente | Respuesta Cliente', t => t.estadoTicket === 'sin-respuesta'], ['area-interna', 'Pendiente | Área Interna', t => t.estadoTicket === 'pendiente'],
-    ['resueltos', 'Resueltos', t => t.estadoTicket === 'resuelto']];
+    ['resueltos', 'Resueltos', t => t.estadoTicket === 'resuelto'], ['abandonados', 'Abandonados', t => t.estadoTicket === 'abandonado']];
   function vistaVistas(main) {
     const ts = visibles(), v = VISTAS.find(x => x[0] === Z.vista) || VISTAS[0], lista = ts.filter(v[2]), s = segSesion();
     main.innerHTML = '<div class="zd-vista"><div class="zd-vista-side"><div class="row-between"><h2>Vistas</h2>' + ic('refresh') + '</div><span class="zd-in-gr">CX | ORDERS</span>' +
       VISTAS.map(x => '<button data-v="' + x[0] + '" class="' + (x[0] === v[0] ? 'act' : '') + '"><span>' + esc(x[1]) + '</span><b>' + ts.filter(x[2]).length + '</b></button>').join('') + '</div>' +
       '<div class="zd-vista-main"><h1>' + esc(v[1]) + '</h1><p class="zd-muted small">' + lista.length + ' tickets · Última actualización: hace 1 s</p>' +
-      '<table class="zd-tabla"><thead><tr><th>Estado del ticket</th><th>Índice de satisfacción</th><th>Asunto</th><th>Solicitante</th><th>Solicitado</th><th>Agente asignado</th><th>Grupo</th></tr></thead><tbody>' +
-      (lista.length ? lista.map(t => '<tr data-abrir="' + esc(t.id) + '" tabindex="0"><td><span class="zd-estado ' + ESTADO_COLOR[t.estadoTicket] + '">' + esc(estadoTxt(t)) + '</span></td><td>No ofrecida</td>' +
+      '<table class="zd-tabla"><thead><tr><th>Estado del ticket</th><th>Asunto</th><th>Solicitante</th><th>Solicitado</th><th>Agente asignado</th><th>Grupo</th></tr></thead><tbody>' +
+      (lista.length ? lista.map(t => '<tr data-abrir="' + esc(t.id) + '" tabindex="0"><td><span class="zd-estado ' + ESTADO_COLOR[t.estadoTicket] + '">' + esc(estadoTxt(t)) + '</span></td>' +
         '<td>Conversación con ' + esc(t.cliente.nombre) + '</td><td>' + esc(t.cliente.nombre) + '</td><td>' + hace(s - t.llegada) + '</td><td>' + (t.estadoTicket === 'nuevo' ? '-' : 'Tú') + '</td><td>CX - ORDERS</td></tr>').join('')
-        : '<tr><td colspan="7" class="zd-vacio">No hay tickets en esta vista</td></tr>') + '</tbody></table></div></div>';
+        : '<tr><td colspan="6" class="zd-vacio">No hay tickets en esta vista</td></tr>') + '</tbody></table></div></div>';
     main.querySelectorAll('[data-v]').forEach(b => b.addEventListener('click', () => { Z.vista = b.dataset.v; vistaVistas(main); }));
     main.querySelectorAll('[data-abrir]').forEach(r => { r.addEventListener('click', () => abrirTicket(r.dataset.abrir)); r.addEventListener('keydown', e => { if (e.key === 'Enter') abrirTicket(r.dataset.abrir); }); });
   }
   function actualizarEspera() {
+    Z.root.querySelectorAll('[data-abandono]').forEach(el => {
+      const t = ticket(el.dataset.abandono), q = t ? restanteAbandono(t) : null;
+      el.hidden = q == null || q > 45;
+      if (!el.hidden) el.textContent = 'El cliente abandona en ' + mmss(Math.max(0, q));
+    });
     Z.root.querySelectorAll('[data-espera]').forEach(el => {
       const t = ticket(el.dataset.espera);
       if (!t || t.cerrado || !pendienteDe(t)) { el.textContent = ''; return; }
@@ -274,6 +310,7 @@
 
   /* ---------- Ticket ---------- */
   function burbuja(m, t) {
+    if (m.de === 'sistema') return '<div class="zd-sis">' + esc(m.t) + '</div>';
     const cli = m.de === 'cliente';
     let cuerpo = esc(m.t).replace(/\n/g, '<br>');
     if (/^\[foto\]/.test(m.t)) { const d = m.t.replace(/^\[foto\]\s*/, ''); cuerpo = '<button class="zd-foto" data-foto="' + esc(d) + '"><img src="' + fotoSVG(d) + '" alt="Foto enviada por el cliente: ' + esc(d) + '"><span>IMG_' + t.numero + '.jpg<small>JPEG · clic para ver</small></span></button>'; }
@@ -282,21 +319,21 @@
   }
   function vistaTicket(main, t) {
     const nombre = t.cliente.nombre.split(' ')[0];
-    const tags = ['whatsapp', 'orders', 'sentiment__' + (t.nivel >= 3 ? 'neutral' : 'negative'), 'sentiment_confidence__high', 'language_es'];
+    const tags = ['whatsapp', Z.admin ? 'trips' : 'orders', 'sentiment__' + (t.nivel >= 3 ? 'neutral' : 'negative'), 'sentiment_confidence__high', 'language_es'];
     if (!Z.estadoSel[t.id]) Z.estadoSel[t.id] = Z.ses.conEstados ? (t.estadoTicket === 'nuevo' ? 'abierto' : t.estadoTicket) : 'resuelto';
     main.innerHTML = '<div class="zd-ticket">' +
       '<div class="zd-sub"><span class="zd-crumb">Organización (crear)</span><span class="zd-crumb">' + esc(nombre) + '</span><span class="zd-crumb act"><span class="zd-estado ' + ESTADO_COLOR[t.estadoTicket] + '">' + esc(estadoTxt(t)) + '</span> Ticket #' + t.numero + '</span></div>' +
       '<div class="zd-cols">' +
       '<aside class="zd-campos"><div class="zd-aviso">' + ic('info') + '<span>Ticket actualizado</span></div>' +
       '<div class="zd-campo"><label>Etiquetas</label><div class="zd-tags">' + tags.map(x => '<span>' + esc(x) + ' ×</span>').join('') + '</div></div>' +
-      '<div class="zd-campo"><label for="zd-motivo">Motivo de Contacto | Orders</label><select id="zd-motivo"' + (t.cerrado ? ' disabled' : '') + '><option value="">-</option>' +
+      '<div class="zd-campo"><label for="zd-motivo">Motivo de Contacto | ' + (Z.admin ? 'Trips' : 'Orders') + '</label><select id="zd-motivo"' + (t.cerrado ? ' disabled' : '') + '><option value="">-</option>' +
         Z.ses.motivos.map(m => '<option' + ((Z.motivo[t.id] || '') === m ? ' selected' : '') + '>' + esc(m) + '</option>').join('') + '</select></div>' +
       '<div class="zd-campo"><label>Calificación</label><input disabled></div>' +
       '<label class="zd-check"><input type="checkbox" disabled> Cerrar el Ticket</label>' +
       '<div class="zd-campo"><label>Grupo de canales</label><select disabled><option>Digital</option></select></div></aside>' +
       '<section class="zd-conv"><div class="zd-conv-h"><div><h2>Conversación con ' + esc(nombre) + '</h2>' +
         '<div class="zd-meta"><span class="zd-espera" data-espera="' + esc(t.id) + '"></span><span>A través de<br>WhatsApp</span><span class="zd-activa">' + (t.cerrado ? '● Cerrada' : '● Activa') + '</span>' +
-        '<span>Tema <a>' + esc(t.asunto) + '</a></span><span class="zd-humor h' + t.nivel + '">' + ic('smile') + esc(t.humor) + '</span></div>' +
+        '<span>Tema <a>' + esc(t.asunto) + '</a></span><span class="zd-humor h' + t.nivel + '">' + ic('smile') + esc(t.humor) + '</span><span class="zd-abandono" data-abandono="' + esc(t.id) + '" hidden></span></div>' +
         '<a class="zd-resumen">' + ic('list') + ' Ver resumen del ticket</a></div>' +
         '<div class="zd-conv-ic">' + ic('list') + ic('filter') + ic('history') + ic('dots') + '</div></div>' +
       '<div class="zd-chat" id="zd-chat" aria-live="polite">' + t.chat.map(m => burbuja(m, t)).join('') + (Z.escribiendo[t.id] ? '<div class="zd-typing"><span></span><span></span><span></span> ' + esc(nombre) + ' está escribiendo</div>' : '') + '</div>' +
@@ -306,6 +343,7 @@
         '<dt>Hora local</dt><dd>' + new Date(ahora()).toLocaleString('es-VE', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ' GMT-4</dd><dt>Notas</dt><dd><div class="zd-notas">' + esc(t.cliente.notas || '') + '</div></dd></dl>' +
         '<div class="zd-ctx-b"><h3>Historial de interacción</h3><div class="zd-hist act"><span class="zd-sq ' + ESTADO_COLOR[t.estadoTicket] + '"></span><div><b>Conversación con ' + esc(nombre) + '</b><small>Ahora · Estado ' + esc(estadoTxt(t)) + '</small></div></div>' +
         '<div class="zd-hist"><span class="zd-sq gris"></span><div><b>Conversación con ' + esc(nombre) + '</b><small>21 oct. 18:38 · Estado Resuelto</small></div></div></div>' +
+        (Z.admin ? '<div class="zd-ctx-b"><h3>¿Es por un viaje?</h3><p class="zd-muted">Búscalo en el Admin: Waiting, Running o Completed Requests, o en All Trips (usa «Trip History» para viajes viejos).</p><button class="zd-btn zd-btn-sec zd-btn-sm" data-ir4>' + ic('car') + 'Abrir Admin</button></div>' : '') +
         (Z.ses.panel ? '<div class="zd-ctx-b"><h3>¿Es por una orden?</h3><p class="zd-muted">Búscala en el Panel Zupper por número de orden o por el nombre del cliente.</p><button class="zd-btn zd-btn-sec zd-btn-sm" data-ir3>' + ic('store') + 'Abrir Panel Zupper</button></div>' : '') + '</aside>' +
       '</div>' +
       '<footer class="zd-pie"><div class="zd-macro">' + ic('bolt') + '<select disabled><option>Aplicar macro</option></select></div><div class="grow"></div>' +
@@ -314,7 +352,8 @@
     chat.querySelectorAll('[data-foto]').forEach(b => b.addEventListener('click', () => lightbox(fotoSVG(b.dataset.foto))));
     main.querySelector('#zd-motivo').addEventListener('change', e => { Z.motivo[t.id] = e.target.value; });
     main.querySelector('[data-cerrar-tab]').addEventListener('click', () => cerrarTab(t.id));
-    const p3 = main.querySelector('[data-ir3]'); if (p3) p3.addEventListener('click', () => ir('panel'));
+    const p3 = main.querySelector('[data-ir3]'); if (p3) p3.addEventListener('click', () => cambiarApp('zupper'));
+    const p4 = main.querySelector('[data-ir4]'); if (p4) p4.addEventListener('click', () => cambiarApp('admin'));
     enlazarEnviar(main, t);
     enlazarCompositor(main, t);
     actualizarEspera();
@@ -336,6 +375,7 @@
     }
   }
   function compositor(t) {
+    if (t.abandonado) return '<div class="zd-comp zd-comp-fin zd-comp-mal">El cliente abandonó la conversación porque tardaste demasiado en responder. Ya no puedes escribirle.</div>';
     if (t.cerrado) return '<div class="zd-comp zd-comp-fin">Ticket enviado como <b>' + esc(estadoTxt(t)) + '</b> · Motivo: <b>' + esc(t.motivo || Z.motivo[t.id] || '—') + '</b></div>';
     if (Z.escribiendo[t.id]) return '<div class="zd-comp zd-comp-fin">Esperando la respuesta del cliente…</div>';
     if (t.listo) return '<div class="zd-comp zd-comp-fin">' + ic('info') + ' El cliente no ha vuelto a escribir. Elige el <b>Motivo de contacto</b> y envía el ticket con el estatus que corresponda.</div>';
@@ -374,7 +414,7 @@
       Z.esperaDesde[t.id] = null;
       delete Z.seleccion[t.id]; delete Z.borrador[t.id];
       t.opciones = []; Z.escribiendo[t.id] = !!r.mensajes.length;
-      const fin = () => { Z.escribiendo[t.id] = false; t.opciones = r.opciones; t.listo = r.listo; t.humor = r.humor; t.nivel = r.nivel; Z.esperaDesde[t.id] = segSesion(); };
+      const fin = () => { Z.escribiendo[t.id] = false; t.opciones = r.opciones; t.listo = r.listo; t.humor = r.humor; t.nivel = r.nivel; Z.esperaDesde[t.id] = segSesion(); t.ultimoCliente = Math.max(r.ultimoCliente, segSesion()); t.esperaCliente = r.esperaCliente; if (r.fin) t.chat.push({ de: 'sistema', t: 'El cliente cerró la conversación.' }); };
       if (!r.mensajes.length) fin();
       if (Z.tab === t.id) pintarCuerpo();
       let espera = 900;
@@ -403,9 +443,51 @@
       toast('Ticket #' + t.numero + ' enviado como ' + Z.ses.estadosTicket[estado]);
       if (t.cerrado) cerrarTab(t.id); else { pintarTabs(); pintarCuerpo(); }
       if (!r.pendientes) {
-        if (await confirmar({ titulo: '¡No te quedan tickets!', texto: 'Puedes seguir revisando ' + (Z.ses.panel ? 'el Panel Zupper' : 'tus vistas') + ' o terminar la simulación ahora.', ok: 'Terminar simulación', cancelar: 'Seguir' })) terminar(true);
+        if (await confirmar({ titulo: '¡No te quedan tickets!', texto: 'Puedes seguir revisando ' + (Z.ses.panel ? 'el Panel Zupper' : Z.admin ? 'el Admin' : 'tus vistas') + ' o terminar la simulación ahora.', ok: 'Terminar simulación', cancelar: 'Seguir' })) terminar(true);
       }
     } catch (e) { manejar(e); }
+  }
+
+  /* ---------- Navegador: pestañas tipo Chrome (Zendesk · Admin · Panel Zupper) ---------- */
+  const APPS = () => [['zendesk', 'Zendesk', 'zd']].concat(Z.admin ? [['admin', 'RIDERY', 'ad']] : []).concat(Z.ses.panel ? [['zupper', 'Panel Zupper', 'zp']] : []);
+  function urlDe(app) {
+    if (app === 'admin') return 'https://admin.ridery.app/' + ((window.ElxSimAdmin && window.ElxSimAdmin.ruta()) || 'requests');
+    if (app === 'zupper') return 'https://panel.zupper.io/orders';
+    const t = ticket(Z.tab);
+    return 'https://ridery9824.zendesk.com/agent/' + (t ? 'tickets/' + t.numero : Z.tab === 'vistas' ? 'filters/33232744497939' : 'home');
+  }
+  function tituloZendesk() {
+    const t = ticket(Z.tab);
+    return t ? 'Conversación con ' + t.cliente.nombre.split(' ')[0] + ' – Ridery' : Z.tab === 'vistas' ? 'Vista: Tickets nuevos – Ridery' : 'Inicio – Ridery';
+  }
+  function pintarNavegador() {
+    const cr = Z.root && Z.root.querySelector('#cr'); if (!cr) return;
+    const pend = visibles().some(t => !t.cerrado && pendienteDe(t));
+    cr.innerHTML = '<div class="cr-tabs"><span class="cr-menu">' + ic('chev') + '</span>' + APPS().map(([id, nombre, fav]) =>
+      '<button class="cr-tab' + (Z.app === id ? ' act' : '') + '" data-app="' + id + '"><span class="cr-fav f-' + fav + '">' + (fav === 'zd' ? 'z' : fav === 'ad' ? 'R' : 'Z') + '</span><span class="cr-t">' + esc(id === 'zendesk' ? tituloZendesk() : nombre) + '</span>' +
+      (id === 'zendesk' && pend && Z.app !== 'zendesk' ? '<i class="cr-not" aria-label="Tickets esperando respuesta"></i>' : '') + '<span class="cr-x">' + ic('x') + '</span></button>').join('') +
+      '<span class="cr-mas">' + ic('plus') + '</span></div><div class="cr-bar"><span class="cr-nav">←</span><span class="cr-nav">→</span><span class="cr-nav">⟳</span><div class="cr-url">🔒 ' + esc(urlDe(Z.app)) + '</div></div>';
+    cr.querySelectorAll('[data-app]').forEach(b => b.addEventListener('click', () => cambiarApp(b.dataset.app)));
+  }
+  function mostrarApp() {
+    const zen = Z.root.querySelector('#zd-zen'), app = Z.root.querySelector('#zd-app');
+    zen.hidden = Z.app !== 'zendesk'; app.hidden = Z.app === 'zendesk';
+  }
+  function pintarApp() {
+    const app = Z.root.querySelector('#zd-app'); if (!app || Z.app === 'zendesk') return;
+    if (Z.app === 'admin') window.ElxSimAdmin.pintar(app, ctxAdmin()); else vistaPanel(app);
+  }
+  function cambiarApp(app) {
+    Z.app = app; Z.menu = null;
+    mostrarApp(); if (app === 'zendesk') { pintarTabs(); pintarCuerpo(); } else pintarApp();
+    pintarNavegador();
+  }
+
+  /* ---------- Admin Ridery (js/simulador-admin.js) ---------- */
+  function registrar(herramienta, ids, vista) { if (Z.ses && ids.length) Z.call('simVer', { sesion: Z.ses.id, herramienta, ids, vista }).catch(() => {}); }
+  function ctxAdmin() {
+    return { ses: Z.ses, call: Z.call, minPanel, horaPanel, fecha: min => min == null ? null : fechaPanel(min), manejar,
+      registrar: (ids, vista) => registrar('admin', ids, vista), repintar: () => { if (Z.app === 'admin') pintarApp(); pintarNavegador(); } };
   }
 
   /* ---------- Panel Zupper ---------- */
@@ -426,7 +508,7 @@
     actualizarPanel(true);
   }
   function actualizarPanel(forzar) {
-    const main = Z.root.querySelector('#zd-main'); if (!main || !main.querySelector('#zp-body')) return;
+    const main = Z.root.querySelector('#zd-app'); if (!main || !main.querySelector('#zp-body')) return;
     const min = minPanel();
     const h = main.querySelector('[data-hora]'); if (h) h.textContent = horaPanel(min);
     const f = Z.filtros, has = (a, b) => !b || String(a).toLowerCase().includes(b.trim().toLowerCase());
@@ -445,7 +527,7 @@
     const body = main.querySelector('#zp-body');
     if (forzar || body.dataset.h !== html) {
       body.innerHTML = html; body.dataset.h = html;
-      body.querySelectorAll('[data-ver]').forEach(b => b.addEventListener('click', () => { Z.orden = b.dataset.ver; Z.menu = null; actualizarPanel(true); }));
+      body.querySelectorAll('[data-ver]').forEach(b => b.addEventListener('click', () => { Z.orden = b.dataset.ver; Z.menu = null; registrar('zupper', [Z.orden], 'detalle'); actualizarPanel(true); }));
       body.querySelectorAll('[data-menu]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); Z.menu = Z.menu === b.dataset.menu ? null : b.dataset.menu; actualizarPanel(true); }));
       body.querySelectorAll('[data-acc]').forEach(b => b.addEventListener('click', () => { Z.menu = null; accion(orden(b.dataset.o), b.dataset.acc); }));
       body.querySelectorAll('[data-acc-dir]').forEach(b => b.addEventListener('click', () => accion(orden(b.dataset.o), b.dataset.accDir)));
@@ -471,7 +553,7 @@
     if (acc === 'cancelar' && !await confirmar({ titulo: '¿Cancelar la orden ' + o.id + '?', texto: 'Se le hace el reembolso al cliente. No se puede deshacer.', ok: 'Cancelar orden', cancelar: 'Volver', peligro: true })) return;
     try {
       const r = await Z.call('simAccion', { sesion: Z.ses.id, orden: o.id, que: acc });
-      Z.ses.hechas.push(r.hecha); Z.orden = o.id;
+      Z.ses.hechas.push(r.hecha); Z.orden = o.id; registrar('zupper', [o.id], 'accion');
       toast(r.hecha.texto);
       actualizarPanel(true);
     } catch (e) { manejar(e); }
@@ -487,12 +569,13 @@
     try { r = await Z.call('simTerminar', { sesion: Z.ses.id }); } catch (e) { toast(e.message, 'bad'); }
     Z.timers.forEach(clearInterval); Z.timers = [];
     Z.root.classList.add('zd-terminada');
+    if (Z.app !== 'zendesk') { Z.app = 'zendesk'; mostrarApp(); }
     const main = Z.root.querySelector('#zd-main');
-    main.innerHTML = '<div class="zd-fin"><div class="zd-fin-c"><span class="zd-fin-ic">✓</span><h1>' + (auto ? 'Se acabó el tiempo' : 'Nivel ' + esc(Z.ses.nivelNombre) + ' terminado') + '</h1><p>Gracias. El equipo de Calidad revisa tus respuestas' + (Z.ses.panel ? ' y tus decisiones en el panel' : '') + '; tu resultado te lo comparten ellos.</p>' +
+    main.innerHTML = '<div class="zd-fin"><div class="zd-fin-c"><span class="zd-fin-ic">✓</span><h1>' + (auto ? 'Se acabó el tiempo' : 'Nivel ' + esc(Z.ses.nivelNombre) + ' terminado') + '</h1><p>Gracias. El equipo de Calidad revisa tus respuestas' + (Z.ses.panel ? ' y tus decisiones en el panel' : Z.admin ? ' y qué consultaste en el Admin' : '') + '; tu resultado te lo comparten ellos.</p>' +
       (r ? '<div class="zd-fin-g"><div><b>' + r.resueltos + '/' + r.total + '</b><span>tickets atendidos</span></div><div><b>' + (r.primeraPromedio != null ? mmss(r.primeraPromedio) : '—') + '</b><span>primera respuesta promedio</span></div><div><b>' + r.acciones + '</b><span>acciones en el panel</span></div></div>' +
         (r.csat ? '<div class="zd-csat"><h2>Calificación de tus clientes</h2><div class="zd-csat-g"><span class="bien"><b>' + r.csat.bien + '</b>Bien</span><span class="mal"><b>' + r.csat.mal + '</b>Mal</span>' +
           (r.csat.sinAtender ? '<span><b>' + r.csat.sinAtender + '</b>Sin atender</span>' : '') + '</div>' +
-          '<ul class="zd-csat-l">' + r.calificaciones.map(c => '<li><span class="zd-csat-p ' + (c.calificacion === 'Bien' ? 'bien' : c.calificacion === 'Mal' ? 'mal' : '') + '">' + esc(c.calificacion) + '</span><span><b>#' + c.numero + ' · ' + esc(c.cliente) + '</b><small>' + esc(c.asunto) + ' · el cliente quedó ' + esc(c.humor.toLowerCase()) + '</small></span></li>').join('') + '</ul>' +
+          '<ul class="zd-csat-l">' + r.calificaciones.map(c => '<li><span class="zd-csat-p ' + (c.calificacion === 'Bien' ? 'bien' : c.calificacion === 'Mal' ? 'mal' : '') + '">' + esc(c.calificacion) + '</span><span><b>#' + c.numero + ' · ' + esc(c.cliente) + '</b><small>' + esc(c.asunto) + ' · ' + (c.abandonado ? 'el cliente abandonó por falta de respuesta' : 'el cliente quedó ' + esc(c.humor.toLowerCase())) + '</small></span></li>').join('') + '</ul>' +
           '<p class="zd-muted small">Así calificaría el cliente tu atención según cómo le respondiste. Tus respuestas escritas las revisa Calidad aparte.</p></div>' : '') +
         (r.siguiente ? '<p class="zd-muted">Ya puedes entrar al nivel <b>' + esc(r.siguiente) + '</b> desde Assessment.</p>' : '') : '') +
       '<button class="zd-btn" data-volver>Volver a Ridery Academy</button></div></div>';
@@ -500,6 +583,7 @@
   }
   function manejar(e) {
     if (e.status === 409 && /tiempo/.test(e.message)) return terminar(true);
+    if (e.status === 409 && /abandonó/.test(e.message)) sincronizar();
     if (e.status === 401) { cerrar(); if (Z.alSalir) Z.alSalir(e); return; }
     toast(e.message || 'Algo falló. Intenta de nuevo.', 'bad');
   }
