@@ -71,6 +71,7 @@ Con **«Niveles en orden»** encendido (en Configurar), cada nivel se desbloquea
   - **Vistas:** Nuevos | Sin Asignar, Activos | En Gestión, Pendiente | Respuesta Cliente, Pendiente | Área Interna, Resueltos y Abandonados. No tienen la columna de índice de satisfacción, porque en el Zendesk real no la usan.
   - **Pestañas:** una por ticket. Llegan con sonido y con aviso «!» cuando el cliente escribe.
   - **Tema:** claro u oscuro.
+- **Regla de la última palabra:** no se puede enviar un ticket (a ningún estatus) si el último mensaje es del cliente; el simulador lo bloquea y avisa «Respóndele antes de enviar el ticket». Si la conversación guionada ya terminó pero el cliente escribió de último (por ejemplo, dio las gracias o hizo otra pregunta), se abre la caja para escribir la **respuesta final**; esa respuesta la revisa Calidad. Solo los tickets abandonados se pueden enviar sin responder.
 - **Responder.** El aspirante elige una sugerencia o escribe directamente en el chat. Si edita una sugerencia, cuenta como respuesta propia. Las respuestas propias las revisa Calidad, con una revisión automática de ortografía: minúscula inicial, falta de punto final, «¿/¡», abreviaturas como «q» o «k», tildes comunes, letras repetidas y mayúsculas.
 - **Cliente que reacciona.**
   - Su humor cambia según cada respuesta, y **cada respuesta lo lleva por un camino distinto**. Por ejemplo, si el saludo es malo, pide un supervisor, y si el agente no lo maneja bien, se va.

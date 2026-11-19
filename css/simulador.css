@@ -558,3 +558,6 @@ body.zd-abierto { overflow: hidden; }
 @keyframes zf-cae { to { transform: translateY(105vh) rotate(560deg); } }
 @media (max-width: 640px) { .zf-kpis { grid-template-columns: repeat(2, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .zd-cuenta *, .zd-fin *, .zd-fin { animation: none !important; } .zf-conf { display: none; } }
+.zd-cierre { display: flex; gap: 8px; align-items: flex-start; background: var(--z-yellow-soft); color: var(--z-fg); border: 1px solid #f3cf9c; border-radius: 6px; padding: 8px 10px; font-size: 13px; margin-bottom: 8px; }
+.zd-cierre svg { color: var(--z-yellow); flex: none; margin-top: 1px; }
+.zd-sacude { animation: zf-sacude .5s both; border-color: var(--z-red) !important; }

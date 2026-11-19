@@ -375,13 +375,16 @@
       Z.root.addEventListener('click', function cerrarMenu(e) { if (!e.target.closest('.zd-split')) { menu.hidden = true; Z.root && Z.root.removeEventListener('click', cerrarMenu); } });
     }
   }
+  // ¿La última palabra (sin contar avisos del sistema) es del cliente?
+  function ultimoCliente(t) { const m = t.chat.filter(x => x.de !== 'sistema'); return !!m.length && m[m.length - 1].de === 'cliente'; }
   function compositor(t) {
     if (t.abandonado) return '<div class="zd-comp zd-comp-fin zd-comp-mal">El cliente abandonó la conversación porque tardaste demasiado en responder. Ya no puedes escribirle.</div>';
     if (t.cerrado) return '<div class="zd-comp zd-comp-fin">Ticket enviado como <b>' + esc(estadoTxt(t)) + '</b> · Motivo: <b>' + esc(t.motivo || Z.motivo[t.id] || '—') + '</b></div>';
     if (Z.escribiendo[t.id]) return '<div class="zd-comp zd-comp-fin">Esperando la respuesta del cliente…</div>';
-    if (t.listo) return '<div class="zd-comp zd-comp-fin">' + ic('info') + ' El cliente no ha vuelto a escribir. Elige el <b>Motivo de contacto</b> y envía el ticket con el estatus que corresponda.</div>';
+    if (t.listo && !t.cierre && !ultimoCliente(t)) return '<div class="zd-comp zd-comp-fin">' + ic('info') + ' El cliente no ha vuelto a escribir. Elige el <b>Motivo de contacto</b> y envía el ticket con el estatus que corresponda.</div>';
     const sel = Z.seleccion[t.id], texto = Z.borrador[t.id] != null ? Z.borrador[t.id] : '';
     return '<div class="zd-comp"><div class="zd-comp-h">' + ic('wa') + ' WhatsApp ' + ic('chev') + '<span class="grow"></span><span class="zd-muted">Sugerencias · o escribe tu propia respuesta</span></div>' +
+      (t.listo ? '<div class="zd-cierre">' + ic('info') + '<span>El cliente escribió de último. <b>Dale tu respuesta final</b> antes de enviar el ticket: nunca se envía un ticket con la última palabra del cliente.</span></div>' : '') +
       '<div class="zd-sug" role="listbox" aria-label="Respuestas sugeridas">' + t.opciones.map(o => '<button role="option" aria-selected="' + (sel === o.i) + '" class="' + (sel === o.i ? 'act' : '') + '" data-op="' + o.i + '">' + esc(o.t) + '</button>').join('') + '</div>' +
       '<textarea id="zd-txt" rows="3" placeholder="Escribe tu respuesta o elige una sugerencia" maxlength="1000" spellcheck="false">' + esc(texto) + '</textarea>' +
       '<div class="zd-comp-f">' + ic('smile') + ic('clip') + ic('link') + ic('mic') + '<span class="grow"></span><span class="zd-muted small" data-modo>' + (sel != null ? 'Respuesta sugerida' : texto.trim() ? 'Tu respuesta' : '') + '</span><button class="zd-link fuerte" data-enviar' + (texto.trim() ? '' : ' disabled') + '>Enviar</button></div></div>';
@@ -415,7 +418,7 @@
       Z.esperaDesde[t.id] = null;
       delete Z.seleccion[t.id]; delete Z.borrador[t.id];
       t.opciones = []; Z.escribiendo[t.id] = !!r.mensajes.length;
-      const fin = () => { Z.escribiendo[t.id] = false; t.opciones = r.opciones; t.listo = r.listo; t.humor = r.humor; t.nivel = r.nivel; Z.esperaDesde[t.id] = segSesion(); t.ultimoCliente = Math.max(r.ultimoCliente, segSesion()); t.esperaCliente = r.esperaCliente; if (r.fin) t.chat.push({ de: 'sistema', t: 'El cliente cerró la conversación.' }); };
+      const fin = () => { Z.escribiendo[t.id] = false; t.opciones = r.opciones; t.listo = r.listo; t.cierre = !!r.cierre; t.humor = r.humor; t.nivel = r.nivel; Z.esperaDesde[t.id] = segSesion(); t.ultimoCliente = Math.max(r.ultimoCliente, segSesion()); t.esperaCliente = r.esperaCliente; if (r.fin) t.chat.push({ de: 'sistema', t: 'El cliente cerró la conversación.' }); };
       if (!r.mensajes.length) fin();
       if (Z.tab === t.id) pintarCuerpo();
       let espera = 900;
@@ -436,6 +439,11 @@
     const motivo = Z.motivo[t.id], estado = Z.estadoSel[t.id] || 'resuelto';
     if (!motivo) { toast('Elige el Motivo de contacto antes de enviar el ticket.', 'bad'); const s = Z.root.querySelector('#zd-motivo'); if (s) s.focus(); return; }
     if (!t.chat.some(m => m.de === 'agente')) return toast('Responde al cliente antes de cambiar el estatus.', 'bad');
+    if (!t.abandonado && (ultimoCliente(t) || Z.escribiendo[t.id])) {
+      toast('El último mensaje es del cliente. Respóndele antes de enviar el ticket.', 'bad');
+      const ta = Z.root.querySelector('#zd-txt'); if (ta) { ta.focus(); ta.closest('.zd-comp').classList.remove('zd-sacude'); void ta.offsetWidth; ta.closest('.zd-comp').classList.add('zd-sacude'); }
+      return;
+    }
     if (estado === 'resuelto' && !t.listo && !await confirmar({ titulo: '¿Resolver sin terminar la conversación?', texto: 'El cliente todavía espera tu respuesta. Si lo resuelves ahora, el ticket se cierra así.', ok: 'Resolver igual' })) return;
     try {
       const r = await Z.call('simResolver', { sesion: Z.ses.id, ticket: t.id, motivo, estado });

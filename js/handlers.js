@@ -1311,6 +1311,9 @@
     s.aprobacion = Number(s.aprobacion) || 80;
     return s;
   }
+  // Regla de CX: no se envía un ticket (a ningún estatus) si la última palabra es del cliente
+  const ultimoEsCliente = c => { const m = (c.chat || []).filter(x => x.de !== 'sistema'); return !!m.length && m[m.length - 1].de === 'cliente'; };
+  const AVISO_ULTIMO = 'El último mensaje es del cliente. Respóndele antes de enviar el ticket: nunca se envía un ticket con la última palabra del cliente.';
   const humorTxt = h => SIM_HUMOR[Math.max(0, Math.min(4, h))];
   const segDesde = iso => (Date.now() - Date.parse(iso)) / 1000;
   const segSes = ses => segDesde(ses.inicio);
@@ -1449,7 +1452,7 @@
       tickets: ses.casos.map(c => {
         const d = def(c.id), paso = d.pasos[c.paso];
         return { id: c.id, numero: c.numero, llegada: c.llegada, asunto: d.asunto || '', canal: 'WhatsApp', cliente: d.cliente || {}, humor: humorTxt(c.humor), nivel: c.humor,
-          chat: c.chat, cerrado: !!c.cerrado, abandonado: !!c.abandonado, motivo: c.motivo || '', estadoTicket: c.estadoTicket || 'nuevo', listo: !paso,
+          chat: c.chat, cerrado: !!c.cerrado, abandonado: !!c.abandonado, motivo: c.motivo || '', estadoTicket: c.estadoTicket || 'nuevo', listo: !paso, cierre: !paso && !c.abandonado && ultimoEsCliente(c),
           ultimoCliente: c.ultimoCliente != null ? c.ultimoCliente : c.llegada, esperaCliente: c.esperaCliente !== false && !!paso,
           opciones: (!c.cerrado && paso) ? barajar(paso.opciones.map((o, i) => ({ i, t: o.t }))) : [] };
       }),
@@ -1556,8 +1559,20 @@
       if (c.cerrado) throw err(409, 'Este ticket ya no está en tu bandeja.');
       if (!llego(ses, c)) throw err(409, 'Este ticket todavía no ha llegado.');
       const paso = d.pasos[c.paso];
-      if (!paso) throw err(409, 'El cliente ya no está esperando respuesta. Elige el motivo de contacto y cambia el estatus del ticket.');
       const llegado = segSes(ses) - c.llegada;
+      if (!paso) {
+        // Cierre: la conversación guionada terminó pero el cliente escribió de último → el agente da la respuesta final (la revisa Calidad)
+        const otro = limpiar(body.otro, 1000);
+        if (!ultimoEsCliente(c)) throw err(409, 'El cliente ya no está esperando respuesta. Elige el motivo de contacto y cambia el estatus del ticket.');
+        if (!otro) throw err(400, 'Escribe tu respuesta final para el cliente.');
+        const notas = revisarOrtografia(otro);
+        c.respuestas.push(Object.assign({ paso: d.pasos.length, i: null, t: otro, v: 'pendiente', otro: true, cierre: true, f: ahora(), seg: Math.max(0, Math.round(llegado)) }, notas ? { ortografia: notas } : {}));
+        c.chat.push({ de: 'agente', t: otro });
+        c.esperaCliente = false; c.aparcado = false;
+        asp.simulador = sim;
+        await store.put('aspirantes', asp);
+        return { mensajes: [], fin: false, ultimoCliente: c.ultimoCliente || 0, esperaCliente: false, humor: humorTxt(c.humor), nivel: c.humor, listo: true, cierre: false, opciones: [] };
+      }
       let t, v, r, h = 0, i = null, notas = null, o = null;
       const otro = limpiar(body.otro, 1000);
       if (otro) { t = otro; v = 'pendiente'; r = paso.otro || []; notas = revisarOrtografia(otro); }
@@ -1585,7 +1600,7 @@
       if (o && o.fin) c.chat.push({ de: 'sistema', t: 'El cliente cerró la conversación.' });
       asp.simulador = sim;
       await store.put('aspirantes', asp);
-      return { mensajes: nuevos, fin: !!(o && o.fin), ultimoCliente: c.ultimoCliente, esperaCliente: c.esperaCliente, humor: humorTxt(c.humor), nivel: c.humor, listo: !sig, opciones: sig ? barajar(sig.opciones.map((o, k) => ({ i: k, t: o.t }))) : [] };
+      return { mensajes: nuevos, fin: !!(o && o.fin), ultimoCliente: c.ultimoCliente, esperaCliente: c.esperaCliente, humor: humorTxt(c.humor), nivel: c.humor, listo: !sig, cierre: !sig && ultimoEsCliente(c), opciones: sig ? barajar(sig.opciones.map((o, k) => ({ i: k, t: o.t }))) : [] };
     },
     // «Enviar como…»: guarda motivo y estatus. Abierto deja el ticket en la bandeja; los demás lo sacan.
     async simResolver({ store, user, body }) {
@@ -1599,6 +1614,7 @@
       const motivo = limpiar(body.motivo, 120);
       if (!motivo || !s.motivos.includes(motivo)) throw err(400, 'Elige el motivo de contacto antes de enviar el ticket.');
       if (!c.respuestas.length) throw err(400, 'Responde al cliente antes de cambiar el estatus.');
+      if (!c.abandonado && ultimoEsCliente(c)) throw err(409, AVISO_ULTIMO);
       c.motivo = motivo; c.motivoOk = motivo === d.motivo;
       c.estadoTicket = estado; c.estadoOk = (d.estados && d.estados.length ? d.estados : ['resuelto']).includes(estado);
       if (estado !== 'abierto') { c.cerrado = true; c.cerradoF = ahora(); } else c.aparcado = true;
